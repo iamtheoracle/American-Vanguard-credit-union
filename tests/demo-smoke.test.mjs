@@ -33,7 +33,9 @@ test('all promised demo journeys have their controls and handlers', () => {
   assert.match(js, /if \(state\.frozen\)/);
   assert.match(js, /state\.frozen = next/);
   assert.match(js, /localStorage\.setItem\(STORAGE_KEY/);
-  assert.match(js, /Math\\.abs\\(amount \\* 100 - Math\\.round\\(amount \\* 100\\)\\) < 1e-7/);\n  assert.match(js, /amount > 10000/);\n});
+  assert.ok(js.includes('Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-7'));
+  assert.ok(js.includes('amount > 10000'));
+});
 
 test('member-facing navigation supports desktop and mobile layouts', () => {
   for (const view of ['home', 'move', 'deposit', 'card', 'more']) {
