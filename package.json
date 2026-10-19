@@ -1,12 +1,22 @@
 {
-  "name": "american-vanguard-credit-union-demo",
-  "version": "0.1.0",
+  "name": "american-vanguard-credit-union",
+  "version": "0.2.0",
   "private": true,
-  "description": "Local-only fictional member banking demo",
+  "type": "module",
+  "description": "AVCU full-stack digital banking platform (development)",
   "scripts": {
-    "check": "node --check app.js && node --test tests/*.test.mjs"
+    "start": "node server/index.js",
+    "migrate": "node server/migrate.js",
+    "seed": "node server/seed.js",
+    "check": "node --check app.js && node --check operator.js && node --check login.js && node --check chat.js && node --check server/index.js",
+    "test": "node --test \"tests/**/*.test.mjs\""
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
   }
 }
