@@ -1,0 +1,12 @@
+{
+  "name": "american-vanguard-credit-union-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-only fictional member banking demo",
+  "scripts": {
+    "check": "node --check app.js && node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
