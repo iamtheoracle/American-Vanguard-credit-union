@@ -27,7 +27,7 @@
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const cents = value => Math.round(Number(value) * 100);
   const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value / 100);
-  const safeMoneyInput = value => Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 1000000 && Math.round(Number(value) * 100) > 0;
+  const safeMoneyInput = value => { const amount = Number(value); return Number.isFinite(amount) && amount > 0 && amount <= 1000000 && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-7 && Number.isSafeInteger(Math.round(amount * 100)); };
   const total = () => Object.values(state.balances).reduce((sum, value) => sum + value, 0);
   const createId = () => (window.crypto && typeof window.crypto.randomUUID === 'function') ? window.crypto.randomUUID() : `demo-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -351,7 +351,7 @@
     const merchant = String($('#purchase-merchant').value || '').trim();
     const result = $('#purchase-result');
     result.classList.remove('hidden', 'approved', 'declined');
-    if (!safeMoneyInput(amount) || !Number.isSafeInteger(cents(amount)) || !merchant || merchant.length > 80) {
+    if (!safeMoneyInput(amount) || amount > 10000 || !Number.isSafeInteger(cents(amount)) || !merchant || merchant.length > 80) {
       result.classList.add('declined');
       result.textContent = 'Not processed: enter a valid amount and merchant name.';
       return;
