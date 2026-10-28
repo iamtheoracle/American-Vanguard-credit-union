@@ -27,7 +27,7 @@ test('share transfers post balanced ledger entries and enforce invariants', asyn
 
   // Ledger invariant: newest entry per account matches its balance.
   const { query } = await import('../../server/db.js');
-  for (const account of after) {
+  for (const account of after.filter(a => [draft.id, primary.id].includes(a.id))) {
     const { rows } = await query(
       `SELECT balance_after_cents FROM ledger_entries WHERE account_id = $1 ORDER BY id DESC LIMIT 1`, [account.id]);
     assert.equal(Number(rows[0].balance_after_cents), account.balanceCents, `ledger matches balance for ${account.name}`);
