@@ -120,7 +120,7 @@ function localClassify(message) {
 }
 
 function localComplete({ member, message }) {
-  const intent = sandboxClassify(message);
+  const intent = localClassify(message);
   const toolCalls = [];
   if (intent === 'balance') {
     toolCalls.push({ tool: 'get_my_accounts', input: {} });
@@ -162,7 +162,7 @@ export async function runChat({ member, message, history, hooks }) {
   try {
     let completion;
     if (provider === 'failing') throw new Error('Simulated provider outage (test provider)');
-    completion = sandboxComplete({ member, message });
+    completion = localComplete({ member, message });
 
     const executed = [];
     let degraded = false;
