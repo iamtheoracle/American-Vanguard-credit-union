@@ -22,3 +22,6 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 
 .empty-state{padding:16px 0;color:#7f8d9b;font-size:11px;line-height:1.6}.danger-button{border-color:#edcaca;background:#fff6f6;color:#a53f46}.danger-button:hover{border-color:#dca3a5;background:#fff0f0}
+
+.portal-entry{display:inline-flex;align-items:center;justify-content:center;border:1px solid #d8e2ed;border-radius:8px;padding:8px 10px;color:#24496f;text-decoration:none;font-size:11px;font-weight:750;background:#fff;white-space:nowrap}.portal-entry:hover{background:#f0f5fb}
+@media(max-width:720px){.portal-entry{font-size:10px;padding:7px 8px}}
