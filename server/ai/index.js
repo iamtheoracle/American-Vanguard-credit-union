@@ -19,10 +19,8 @@ import { validAmountCents } from '../util.js';
  */
 
 export function activeProvider() {
-  const forced = process.env.AVCU_AI_PROVIDER;
-  if (forced) return forced;
-  if (process.env.AI_API_KEY && process.env.AI_BASE_URL) return 'openai';
-  return 'sandbox';
+  // AVCU assistance is deliberately self-contained; no external AI endpoint is called.
+  return 'local';
 }
 
 // ---- tool registry (allowlist; strict schemas) ------------------------------
@@ -155,36 +153,6 @@ function amountCentsSafe(message) {
   return cents !== null && validAmountCents(cents);
 }
 
-// ---- OpenAI-compatible adapter (only used when credentials are configured) ---
-async function openaiComplete({ member, message, history }) {
-  const baseUrl = process.env.AI_BASE_URL.replace(/\/$/, '');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), POLICY.AI_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AI_API_KEY}` },
-      body: JSON.stringify({
-        model: process.env.AI_MODEL || 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are the AVCU member assistant. Use only provided tools. Never move money directly; use create_transfer_proposal.' },
-          ...(history || []).slice(-8),
-          { role: 'user', content: String(message).slice(0, 4000) }
-        ],
-        temperature: 0.2
-      })
-    });
-    if (!response.ok) throw new Error(`Provider HTTP ${response.status}`);
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || !content.trim()) throw new Error('Malformed provider response');
-    return { reply: content.trim(), intent: 'general', toolCalls: [] };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export async function runChat({ member, message, history, hooks }) {
   const provider = activeProvider();
   const hooksCtx = {
@@ -194,9 +162,8 @@ export async function runChat({ member, message, history, hooks }) {
   };
   try {
     let completion;
-    if (provider === 'openai') completion = await openaiComplete({ member, message, history });
-    else if (provider === 'failing') throw new Error('Simulated provider outage (test provider)');
-    else completion = sandboxComplete({ member, message });
+    if (provider === 'failing') throw new Error('Simulated provider outage (test provider)');
+    completion = sandboxComplete({ member, message });
 
     const executed = [];
     let degraded = false;
