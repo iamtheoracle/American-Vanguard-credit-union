@@ -43,7 +43,7 @@ export function createApp() {
     next();
   };
   const rccAccess = [protectRccResponse, operatorAuth, requireOperatorRole('management', 'super_admin')];
-  app.get('/rcc-history.html', ...rccAccess, (req, res) => res.sendFile(join(ROOT, 'rcc-history.html')));
+  app.get(['/rcc-history', '/rcc-history.html'], ...rccAccess, (req, res) => res.sendFile(join(ROOT, 'rcc-history.html')));
   app.get('/rcc-history.css', ...rccAccess, (req, res) => res.sendFile(join(ROOT, 'rcc-history.css')));
   app.get('/rcc-history.js', ...rccAccess, (req, res) => res.sendFile(join(ROOT, 'rcc-history.js')));
 
