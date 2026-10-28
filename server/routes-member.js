@@ -294,9 +294,9 @@ router.post('/ai/chat', memberAuth, async (req, res, next) => {
       [req.member.id, activeProvider(), message.slice(0, 500)]);
     const taskId = rows[0].id;
 
-    const { task, rendered } = await runAiChat({ req, message, taskId });
+    const { task, rendered, completion } = await runAiChat({ req, message, taskId });
     res.json({ taskId: task.id, status: rendered.status, message: rendered.message,
-      toolCalls: rendered.toolCalls || [], provider: rendered.provider || undefined });
+      toolCalls: rendered.toolCalls || [], provider: completion.provider || activeProvider() });
   } catch (error) { next(error); }
 });
 
