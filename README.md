@@ -1,8 +1,8 @@
-# Atchison Village Credit Union — Member Banking Demo
+# American Vantoris Credit Union — Member Banking Demo
 
 A responsive, interactive **front-end demonstration** of a fictional credit-union member experience. This repository is intentionally self-contained: HTML, CSS, and browser JavaScript only.
 
-> **Demo-only notice:** Atchison Village Credit Union is represented here as a product concept, not a real or chartered credit union. The prototype is not insured, does not hold deposits, and cannot move real money. Jordan Hale, all account balances, transactions, rates, branch details, and the debit card are fictional sample data.
+> **Demo-only notice:** American Vantoris Credit Union is represented here as a product concept, not a real or chartered credit union. The prototype is not insured, does not hold deposits, and cannot move real money. Jordan Hale, all account balances, transactions, rates, branch details, and the debit card are fictional sample data.
 
 ## Preview features
 
