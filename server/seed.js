@@ -10,6 +10,9 @@ export const MEMBER_PASSWORD = 'Member!Demo2026';
 export const OPERATOR_PASSWORD = 'Operator!Demo2026';
 
 export async function seed({ log = console.log } = {}) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Development seed is disabled in production. Create real accounts through the approved administrative workflow.');
+  }
   const existing = await query('SELECT count(*) AS n FROM members WHERE email = $1', ['jordan@avcu.demo']);
   if (Number(existing.rows[0].n) > 0) {
     log('[avcu] seed already applied; skipping');
