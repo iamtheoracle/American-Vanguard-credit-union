@@ -93,7 +93,12 @@ export async function overrideMemberTier({ memberId, tier, reason, operator }) {
 }
 
 export async function clearMemberTierOverride(memberId, operator) {
-  await query('UPDATE members SET tier_override = NULL, tier_override_reason = NULL WHERE id = $1', [memberId]);
+  const cleared = await query('UPDATE members SET tier_override = NULL, tier_override_reason = NULL WHERE id = $1 RETURNING id', [memberId]);
+  if (!cleared.rows[0]) {
+    const error = new Error('Member not found');
+    error.status = 404;
+    throw error;
+  }
   await audit(null, { actorType: 'operator', actorId: operator.id, actorRole: operator.role,
     action: 'membership.tier.override_cleared', entityType: 'member', entityId: memberId });
   return recalculateMemberTier(memberId);
