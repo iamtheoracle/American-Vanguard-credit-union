@@ -6,7 +6,7 @@ test('RCC history page and assets require privileged operator access', async t =
   const env = await startTestServer();
   t.after(() => env.close());
 
-  for (const path of ['/rcc-history.html', '/rcc-history.css', '/rcc-history.js']) {
+  for (const path of ['/rcc-history', '/rcc-history.html', '/rcc-history.css', '/rcc-history.js']) {
     const anonymous = await api(env.base, path);
     assert.equal(anonymous.status, 401, `${path} must not be publicly readable`);
     assert.match(anonymous.headers.get('cache-control') || '', /no-store/);
