@@ -6,6 +6,7 @@ import memberRoutes from './routes-member.js';
 import operatorRoutes from './routes-operator.js';
 import { verifyWebhookSignature, webhookSecret, integrationHealth } from './integrations/index.js';
 import { query } from './db.js';
+import { operatorAuth, requireOperatorRole } from './auth.js';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -31,6 +32,20 @@ export function createApp() {
       res.status(500).json({ ok: false, error: 'Database unavailable' });
     }
   });
+
+  // RCC contains named corporate financial information. Never serve its page or
+  // assets through the public static handler; require a privileged operator
+  // session and prevent browser/proxy caching of the response.
+  const protectRccResponse = (req, res, next) => {
+    res.set('Cache-Control', 'no-store, private, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Vary', 'Cookie');
+    next();
+  };
+  const rccAccess = [protectRccResponse, operatorAuth, requireOperatorRole('management', 'super_admin')];
+  app.get('/rcc-history.html', ...rccAccess, (req, res) => res.sendFile(join(ROOT, 'rcc-history.html')));
+  app.get('/rcc-history.css', ...rccAccess, (req, res) => res.sendFile(join(ROOT, 'rcc-history.css')));
+  app.get('/rcc-history.js', ...rccAccess, (req, res) => res.sendFile(join(ROOT, 'rcc-history.js')));
 
   // Static front end (existing AVCU experience + operator portal + login).
   app.use(express.static(ROOT, { index: 'index.html', extensions: ['html'] }));
