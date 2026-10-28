@@ -387,7 +387,7 @@
   function showHelp() {
     showConfirm({
       title: 'About this demonstration',
-      description: 'Atchison Village Credit Union is a fictional member-banking concept. Jordan Hale, all balances, transactions, rates, and branch locations shown here are demo data.',
+      description: 'American Vantoris Credit Union is a fictional member-banking concept. Jordan Hale, all balances, transactions, rates, and branch locations shown here are demo data.',
       summary: '<div>Real account connection <strong>None</strong></div><div>Money movement <strong>Simulated only</strong></div><div>Deposit insurance <strong>Not applicable; not a real institution</strong></div><div>Storage <strong>This browser only</strong></div>',
       confirmText: 'Got it',
       onConfirm: () => {}
