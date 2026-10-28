@@ -105,7 +105,7 @@ router.post('/operator/approvals/:id/decide', ...guard('management', 'operator')
   try {
     const { action, reason } = req.body || {};
     const result = await decideApproval({ approvalId: req.params.id, operator: req.operator, action, reason });
-    const item = await query('SELECT item_type, member_id FROM approvals WHERE id = $1', [req.params.id]);
+    const item = await query('SELECT item_type, member_id, transaction_id FROM approvals WHERE id = $1', [req.params.id]);
     if (item.rows[0]?.item_type === 'membership' && item.rows[0].member_id) {
       const memberId = item.rows[0].member_id;
       await recalculateMemberTier(memberId).catch(() => {});
@@ -113,6 +113,19 @@ router.post('/operator/approvals/:id/decide', ...guard('management', 'operator')
         title: 'Membership application update',
         body: `Your membership application was ${result.approval.status}.`,
         subject: 'AVCU membership application update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
+    } else if (item.rows[0]?.item_type === 'transaction' && item.rows[0].transaction_id) {
+      const owner = await query(
+        `SELECT DISTINCT a.member_id FROM accounts a
+         JOIN transactions t ON t.from_account_id = a.id OR t.to_account_id = a.id
+         WHERE t.id = $1 LIMIT 1`, [item.rows[0].transaction_id]);
+      if (owner.rows[0]?.member_id) {
+        const memberId = owner.rows[0].member_id;
+        await recalculateMemberTier(memberId).catch(() => {});
+        await notifyMember({ memberId, eventType: 'transaction.approval_decided',
+          title: 'Transaction status update',
+          body: `A transaction review was ${result.approval.status}. Reference: ${result.approval.id}.`,
+          subject: 'AVCU transaction status update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
+      }
     }
     res.json({ ok: true, approval: { id: result.approval.id, status: result.approval.status }, outcome: result.outcome });
   } catch (error) {
@@ -203,7 +216,7 @@ router.get('/operator/membership-tiers', ...guard('management', 'operator'), asy
               m.membership_tier AS tier, m.tier_override AS "tierOverride",
               m.tier_override_reason AS "tierOverrideReason", m.tier_updated_at AS "tierUpdatedAt",
               m.created_at AS "createdAt",
-              (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
+              (SELECT count(DISTINCT t.id) FROM transactions t JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
                WHERE a.member_id = m.id AND t.status IN ('posted','completed','reversed')
                  AND t.created_at >= now() - interval '90 days') AS "activity90Days"
        FROM members m ${where} ORDER BY m.tier_updated_at DESC LIMIT 200`, params);
