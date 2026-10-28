@@ -99,7 +99,7 @@
   }
 
   function setView(view) {
-    if (!['home', 'move', 'deposit', 'card', 'more'].includes(view)) return;
+    if (!['home', 'move', 'deposit', 'card', 'more', 'alerts', 'messages', 'contact', 'about'].includes(view)) return;
     currentView = view;
     $$('.page-view').forEach(el => el.classList.toggle('hidden', el.dataset.view !== view));
     $$('[data-nav]').forEach(button => {
@@ -112,7 +112,11 @@
       move: ['MOVE MONEY', 'Move money'],
       deposit: ['DEPOSIT', 'Deposit a sample check'],
       card: ['CARD CONTROLS', 'Your debit card'],
-      more: ['MEMBER RESOURCES', 'More from AVCU']
+      more: ['MEMBER RESOURCES', 'More from AVCU'],
+      alerts: ['MEMBER NOTIFICATIONS', 'Alerts'],
+      messages: ['MEMBER SUPPORT', 'Messages'],
+      contact: ['CONTACT AVCU', 'Contact'],
+      about: ['ABOUT AVCU', 'About AVCU']
     }[view];
     $('#top-eyebrow').textContent = copy[0];
     $('#page-title').textContent = copy[1];
@@ -437,6 +441,25 @@
     $('#simulate-purchase').addEventListener('click', simulatePurchase);
     $('#reset-demo').addEventListener('click', resetDemo);
     $('#help-button').addEventListener('click', showHelp);
+    const demoMessageForm = $('#demo-message-form');
+    if (demoMessageForm) demoMessageForm.addEventListener('submit', event => {
+      event.preventDefault();
+      const message = String($('#demo-message').value || '').trim();
+      const result = $('#demo-message-result');
+      result.classList.remove('hidden');
+      result.replaceChildren();
+      const heading = document.createElement('strong');
+      heading.textContent = message ? 'Message preview ready' : 'Write a message first';
+      const body = document.createElement('p');
+      body.textContent = message ? 'This is only a local preview. Nothing was sent or stored.' : 'Enter a sample message to preview it.';
+      result.append(heading, body);
+      if (message) {
+        const preview = document.createElement('p');
+        preview.textContent = message;
+        result.append(preview);
+      }
+      announce(heading.textContent);
+    });
     $('#confirm-dialog').addEventListener('close', () => { pendingAction = null; });
     $('#confirm-dialog').addEventListener('submit', event => {
       if (event.submitter && event.submitter.value === 'confirm') {
