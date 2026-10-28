@@ -7,6 +7,8 @@ import {
 import { rateLimiter, clientKey, validEmail, validPassword, PASSWORD_MIN } from './util.js';
 import { decideApproval, reversePostedTransaction } from './approvals.js';
 import { integrationHealth } from './integrations/index.js';
+import { notifyMember } from './notifications.js';
+import { MEMBERSHIP_TIERS, recalculateMemberTier, overrideMemberTier, clearMemberTierOverride } from './membership-tiers.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -103,6 +105,15 @@ router.post('/operator/approvals/:id/decide', ...guard('management', 'operator')
   try {
     const { action, reason } = req.body || {};
     const result = await decideApproval({ approvalId: req.params.id, operator: req.operator, action, reason });
+    const item = await query('SELECT item_type, member_id FROM approvals WHERE id = $1', [req.params.id]);
+    if (item.rows[0]?.item_type === 'membership' && item.rows[0].member_id) {
+      const memberId = item.rows[0].member_id;
+      await recalculateMemberTier(memberId).catch(() => {});
+      await notifyMember({ memberId, eventType: 'membership.application_decided',
+        title: 'Membership application update',
+        body: `Your membership application was ${result.approval.status}.`,
+        subject: 'AVCU membership application update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
+    }
     res.json({ ok: true, approval: { id: result.approval.id, status: result.approval.status }, outcome: result.outcome });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
@@ -171,6 +182,64 @@ router.get('/operator/members/:id', ...guard('management', 'operator'), async (r
        FROM transactions t JOIN accounts a ON (a.id = t.from_account_id OR a.id = t.to_account_id)
        WHERE a.member_id = $1 ORDER BY t.created_at DESC LIMIT 50`, [member.id]);
     res.json({ member, accounts: accounts.rows, transactions: transactions.rows });
+  } catch (error) { next(error); }
+});
+
+
+// ---- membership tier operations ---------------------------------------------
+router.get('/operator/membership-tiers', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const tier = Object.hasOwn(MEMBERSHIP_TIERS, req.query.tier) ? req.query.tier : null;
+    const status = ['pending', 'verified', 'rejected'].includes(req.query.status) ? req.query.status : null;
+    const search = String(req.query.search || '').trim().slice(0, 80);
+    const params = [];
+    const filters = [];
+    if (tier) { params.push(tier); filters.push(`m.membership_tier = ${params.length}`); }
+    if (status) { params.push(status); filters.push(`m.status = ${params.length}`); }
+    if (search) { params.push(`%${search}%`); filters.push(`(m.full_name ILIKE ${params.length} OR m.email ILIKE ${params.length})`); }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const { rows } = await query(
+      `SELECT m.id, m.email, m.full_name AS "fullName", m.status,
+              m.membership_tier AS tier, m.tier_override AS "tierOverride",
+              m.tier_override_reason AS "tierOverrideReason", m.tier_updated_at AS "tierUpdatedAt",
+              m.created_at AS "createdAt",
+              (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
+               WHERE a.member_id = m.id AND t.status IN ('posted','completed','reversed')
+                 AND t.created_at >= now() - interval '90 days') AS "activity90Days"
+       FROM members m ${where} ORDER BY m.tier_updated_at DESC LIMIT 200`, params);
+    res.json({ tiers: rows, availableTiers: MEMBERSHIP_TIERS });
+  } catch (error) { next(error); }
+});
+
+router.put('/operator/members/:id/tier', ...guard('management'), async (req, res, next) => {
+  try {
+    const { tier, reason } = req.body || {};
+    const membership = await overrideMemberTier({ memberId: req.params.id, tier, reason, operator: req.operator });
+    res.json({ ok: true, membership });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
+
+router.delete('/operator/members/:id/tier/override', ...guard('management'), async (req, res, next) => {
+  try {
+    const membership = await clearMemberTierOverride(req.params.id, req.operator);
+    res.json({ ok: true, membership });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
+
+router.get('/operator/members/:id/tier/history', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT previous_tier AS "previousTier", new_tier AS "newTier", reason,
+              changed_by_type AS "changedByType", changed_by AS "changedBy", created_at AS "createdAt"
+       FROM membership_tier_history WHERE member_id = $1 ORDER BY created_at DESC LIMIT 100`,
+      [req.params.id]);
+    res.json({ history: rows });
   } catch (error) { next(error); }
 });
 
