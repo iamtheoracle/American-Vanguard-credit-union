@@ -38,3 +38,8 @@
 #demo-message-form textarea:focus-visible{outline:3px solid #76a9d7;outline-offset:2px}
 @media(max-width:900px){.legacy-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.legacy-shortcuts{grid-template-columns:1fr}.legacy-link{padding:13px}}
+
+.activity-balance{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0 18px;border-bottom:1px solid var(--line);margin-bottom:16px;color:var(--muted);font-size:12px}
+.activity-balance strong{font-size:20px;color:var(--navy);font-variant-numeric:tabular-nums}
+.activity-filter{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.activity-filter .secondary-button[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:#fff}
