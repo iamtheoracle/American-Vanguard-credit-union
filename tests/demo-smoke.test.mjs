@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, netlify] = await Promise.all([
+const [html, portal, portalJs, netlify] = await Promise.all([
   readFile(new URL('../index.html', import.meta.url), 'utf8'),
+  readFile(new URL('../member-portal.html', import.meta.url), 'utf8'),
+  readFile(new URL('../member-portal.js', import.meta.url), 'utf8'),
   readFile(new URL('../netlify.toml', import.meta.url), 'utf8'),
 ]);
 
@@ -30,4 +32,18 @@ test('landing page uses self-hosted vector branding and responsive, accessible s
   assert.doesNotMatch(html, /fonts\.googleapis|fonts\.gstatic/i);
   assert.match(netlify, /connect-src 'self'/);
   assert.match(netlify, /publish = "\."/);
+});
+
+test('member portal does not offer unsupported deposits or simulated card controls', () => {
+  assert.doesNotMatch(portal, /id="deposit-form"|id="purchase-form"|id="freeze-button"|Test authorization|Submit deposit/i);
+  assert.match(portal, /Deposits unavailable/);
+  assert.match(portal, /No live card issuer or processor is connected/);
+  assert.match(portal, /Internal share transfer/);
+  assert.doesNotMatch(portalJs, /api\('\/deposits'|post\('\/card\/freeze'|post\('\/card\/test-purchase'/);
+});
+
+test('development seed refuses to create sample accounts in production', async () => {
+  const seed = await readFile(new URL('../server/seed.js', import.meta.url), 'utf8');
+  assert.match(seed, /NODE_ENV === 'production'/);
+  assert.match(seed, /Development seed is disabled in production/);
 });
