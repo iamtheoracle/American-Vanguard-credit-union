@@ -31,7 +31,7 @@ export async function recalculateMemberTier(memberId) {
   const { rows } = await query(
     `SELECT m.status, m.membership_tier AS "membershipTier", m.tier_override AS "tierOverride",
             EXTRACT(EPOCH FROM (now() - m.created_at))/86400 AS "ageDays",
-            (SELECT count(*) FROM transactions t
+            (SELECT count(DISTINCT t.id) FROM transactions t
              JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
              WHERE a.member_id = m.id AND t.status IN ('posted','completed','reversed')
                AND t.created_at >= now() - interval '90 days') AS "activity90Days"
