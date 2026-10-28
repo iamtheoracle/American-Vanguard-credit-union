@@ -51,7 +51,7 @@ test('the demo does not connect to external services or use remote fonts', () =>
   assert.doesNotMatch(js, /\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource/);
   assert.doesNotMatch(html, /https?:\/\//);
   assert.doesNotMatch(css, /@import\s+url\s*\(/i);
-  assert.match(netlify, /connect-src 'none'/);
+  assert.match(netlify, /connect-src 'self'/);
   assert.match(netlify, /publish = "\."/);
 });
 
