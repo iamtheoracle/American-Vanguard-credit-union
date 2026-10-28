@@ -39,11 +39,8 @@
     const tier = tierData.membership;
     $('membership-tier').textContent = tier?.label || 'New Member';
     $('tier-detail').textContent = `${tier?.activity90Days ?? 0} qualifying transactions in 90 days`;
-    const card = cardData.card;
     $('card-status').textContent = 'Not connected';
     $('card-last4').textContent = 'Card details unavailable';
-    $('freeze-button').disabled = !card;
-    $('freeze-button').textContent = card?.status === 'frozen' ? 'Unfreeze card' : 'Freeze card';
     $('accounts-list').innerHTML = accounts.length ? accounts.map(a => `<article class="account-row"><span class="account-symbol">AV</span><span class="account-info"><strong>${escapeHtml(a.name)}</strong><small>${escapeHtml(a.kind)} · •••• ${escapeHtml(a.suffix)}</small></span><strong>${dollars(a.balanceCents)}</strong></article>`).join('') : '<p class="muted">No open share accounts yet. Membership approval is required.</p>';
     for (const id of ['transfer-from','transfer-to']) {
       const select = $(id);
