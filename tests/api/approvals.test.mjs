@@ -150,7 +150,7 @@ test('membership applications flow through the approval queue', async t => {
   assert.equal(approved.data.outcome.status, 'verified');
 
   // The approved applicant can now sign in and see funded-capable accounts.
-  const { cookie: memberCookie } = await loginMember(env.base, 'applicant@avcu.demo');
+  const { cookie: memberCookie } = await loginMember(env.base, 'applicant@avcu.demo', 'Str0ngPassphrase!');
   const me = await api(env.base, '/api/auth/me', { cookie: memberCookie });
   assert.equal(me.data.member.status, 'verified');
   const accounts = await getAccounts(env.base, memberCookie);
