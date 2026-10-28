@@ -3,7 +3,7 @@ import { query, withTx } from './db.js';
 import {
   memberAuth, operatorAuth, applySessionCookie, clearAuthCookie,
   createMemberSession, createOperatorSession, destroySession, hashPassword, verifyPassword,
-  findMemberByEmail, findOperatorByEmail
+  findMemberByEmail, findMemberByLogin, findOperatorByEmail
 } from './auth.js';
 import { rateLimiter, clientKey, validEmail, validPassword, PASSWORD_MIN, COOKIE_MEMBER, COOKIE_OPERATOR } from './util.js';
 import { submitMemberTransfer, submitMemberDeposit, freezeCard, testCardPurchase,
@@ -30,7 +30,7 @@ router.post('/auth/register', async (req, res, next) => {
     const hash = await hashPassword(password);
     const { rows } = await query(
       `INSERT INTO members (email, password_hash, full_name, status, application)
-       VALUES (lower($1),$2,$3,'pending',$4) RETURNING id, email, full_name, status, created_at`,
+       VALUES (lower($1),$2,$3,'pending',$4) RETURNING id, member_number AS "memberNumber", email, full_name, status, created_at`,
       [email, hash, name, JSON.stringify({ channel: 'web', submittedAt: new Date().toISOString() })]);
     const member = rows[0];
     await query(
@@ -41,7 +41,7 @@ router.post('/auth/register', async (req, res, next) => {
     await notifyMember({ memberId: member.id, eventType: 'membership.application_received',
       title: 'Membership application received', body: 'Your membership application has been received and is awaiting review.',
       subject: 'We received your AVCU membership application' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
-    res.status(201).json({ member: { id: member.id, email: member.email, fullName: member.full_name, status: member.status },
+    res.status(201).json({ member: { id: member.id, memberNumber: String(member.memberNumber), email: member.email, fullName: member.full_name, status: member.status },
       message: 'Application received. Sign in to track its status.' });
   } catch (error) { next(error); }
 });
@@ -51,14 +51,14 @@ router.post('/auth/login', async (req, res, next) => {
     if (!loginLimiter(clientKey(req))) {
       return res.status(429).json({ error: 'Too many sign-in attempts. Wait a minute and try again.' });
     }
-    const { email, password } = req.body || {};
-    const member = await findMemberByEmail(String(email || ''));
+    const { identifier, email, password } = req.body || {};
+    const member = await findMemberByLogin(String(identifier || email || ''));
     const ok = member && await verifyPassword(String(password || ''), member.password_hash);
     if (!ok) return res.status(401).json({ error: 'Email or password is incorrect' });
     const session = await createMemberSession(member.id);
     applySessionCookie(req, res, 'member', session);
     const tier = await recalculateMemberTier(member.id).catch(() => null);
-    res.json({ member: { id: member.id, email: member.email, fullName: member.full_name, status: member.status,
+    res.json({ member: { id: member.id, memberNumber: String(member.member_number), email: member.email, fullName: member.full_name, status: member.status,
       membershipTier: tier?.tier || member.membership_tier || 'new_member' } });
   } catch (error) { next(error); }
 });
