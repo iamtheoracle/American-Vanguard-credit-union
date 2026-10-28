@@ -19,8 +19,9 @@ import { validAmountCents } from '../util.js';
  */
 
 export function activeProvider() {
-  // AVCU assistance is deliberately self-contained; no external AI endpoint is called.
-  return 'local';
+  // Only the explicit failure injection is honored for automated tests.
+  // Normal requests stay local and never call an external AI endpoint.
+  return process.env.AVCU_AI_PROVIDER === 'failing' ? 'failing' : 'local';
 }
 
 // ---- tool registry (allowlist; strict schemas) ------------------------------
