@@ -13,10 +13,11 @@ export function createApp() {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '256kb' }));
-
-  // Webhooks: raw body for exact signature verification.
+  // Webhooks must receive the exact raw bytes for HMAC verification.
+  // Register the raw-body route before the general JSON parser consumes the stream.
   app.use('/api/integrations/webhooks', express.raw({ type: '*/*', limit: '256kb' }), webhookHandler);
+
+  app.use(express.json({ limit: '256kb' }));
 
   app.use('/api', memberRoutes);
   app.use('/api', operatorRoutes);
