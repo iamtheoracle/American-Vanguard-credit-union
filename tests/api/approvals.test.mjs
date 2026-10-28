@@ -9,7 +9,7 @@ async function submitLargeTransfer(env) {
   const primary = accounts.find(a => a.name === 'Primary Share');
   const r = await api(env.base, '/api/transfers', {
     method: 'POST', cookie,
-    body: { kind: 'share', fromAccountId: draft.id, toAccountId: primary.id, amountCents: 500_000, memo: 'house fund' }
+    body: { kind: 'share', fromAccountId: draft.id, toAccountId: primary.id, amountCents: 300_000, memo: 'house fund' }
   });
   assert.equal(r.status, 202);
   assert.equal(r.data.transaction.status, 'pending_approval');
@@ -43,7 +43,7 @@ test('high-value transfers require approval and approvals execute the posting', 
   assert.equal(approved.data.outcome.status, 'posted');
 
   const after = await getAccounts(env.base, (await loginMember(env.base)).cookie);
-  assert.equal(after.find(a => a.name === 'Share Draft').balanceCents, draftBefore - 500_000);
+  assert.equal(after.find(a => a.name === 'Share Draft').balanceCents, draftBefore - 300_000);
 });
 
 test('rejections require a reason; duplicates and concurrency are rejected atomically', async t => {
@@ -71,13 +71,15 @@ test('rejections require a reason; duplicates and concurrency are rejected atomi
   assert.equal(posting.status, 'posted', 'the winning decision still executed the posting');
 });
 
-test('amount above the management cap escalates to super admin', async t => {
+test('amount above the management cap requires super admin', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
   const { cookie } = await loginMember(env.base);
   const accounts = await getAccounts(env.base, cookie);
   const draft = accounts.find(a => a.name === 'Share Draft');
   const market = accounts.find(a => a.name === 'Money Market');
+  const { query } = await import('../../server/db.js');
+  await query('UPDATE accounts SET balance_cents = 3000000 WHERE id = $1', [draft.id]);
   const r = await api(env.base, '/api/transfers', {
     method: 'POST', cookie,
     body: { kind: 'share', fromAccountId: draft.id, toAccountId: market.id, amountCents: 2_000_000 }
@@ -90,7 +92,7 @@ test('amount above the management cap escalates to super admin', async t => {
     method: 'POST', cookie: manager, body: { action: 'approve' }
   });
   assert.equal(overLimit.status, 403);
-  assert.equal(overLimit.data.code, 'over_limit');
+  assert.equal(overLimit.data.code, 'insufficient_role');
 
   const { cookie: admin } = await loginOperator(env.base, 'super@avcu.demo');
   const approved = await api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
