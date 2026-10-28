@@ -34,7 +34,7 @@
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
-    $('member-subtitle').textContent = `${member?.email || ''} · Membership status: ${member?.status || 'unknown'}`;
+    $('member-subtitle').textContent = `Member ID: ${member?.memberNumber || 'pending'} · ${member?.email || ''} · Status: ${member?.status || 'unknown'}`;
     $('total-balance').textContent = dollars(accounts.reduce((sum, a) => sum + Number(a.balanceCents || 0), 0));
     const tier = tierData.membership;
     $('membership-tier').textContent = tier?.label || 'New Member';
@@ -62,12 +62,12 @@
   $('show-register').addEventListener('click', () => switchAuth(true));
   $('login-form').addEventListener('submit', async event => {
     event.preventDefault(); showMessage('auth-message','Signing in…');
-    try { const data = await post('/auth/login',{email:$('login-email').value,password:$('login-password').value}); member=data.member; setAuthenticated(true); await refresh(); }
+    try { const data = await post('/auth/login',{identifier:$('login-identifier').value,password:$('login-password').value}); member=data.member; setAuthenticated(true); await refresh(); }
     catch(error) { showMessage('auth-message',error.message,true); }
   });
   $('register-form').addEventListener('submit', async event => {
     event.preventDefault(); showMessage('auth-message','Submitting application…');
-    try { const data = await post('/auth/register',{fullName:$('register-name').value,email:$('register-email').value,password:$('register-password').value}); switchAuth(false); $('login-email').value=$('register-email').value; showMessage('auth-message',data.message || 'Application received. You can sign in to track it.'); }
+    try { const data = await post('/auth/register',{fullName:$('register-name').value,email:$('register-email').value,password:$('register-password').value}); switchAuth(false); $('login-identifier').value=$('register-email').value; const memberNumber = data.member?.memberNumber ? ` Your member number is ${data.member.memberNumber}; save it for future sign-in.` : ''; showMessage('auth-message',(data.message || 'Application received. You can sign in to track it.') + memberNumber); }
     catch(error) { showMessage('auth-message',error.message,true); }
   });
   $('logout-button').addEventListener('click', async () => {
