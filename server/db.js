@@ -5,11 +5,15 @@ import { fileURLToPath } from 'node:url';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 
-export const DATABASE_URL = process.env.DATABASE_URL || 'postgres://avcu:avcu@127.0.0.1:5432/avcu';
+export const DATABASE_URL = process.env.DATABASE_URL || (process.env.NODE_ENV === 'production' ? '' : 'postgres://avcu:avcu@127.0.0.1:5432/avcu');
 
 let pool = null;
 function getPool() {
-  if (!pool) pool = new pg.Pool({ connectionString: process.env.DATABASE_URL || DATABASE_URL, max: 10 });
+  if (!pool) {
+    const connectionString = process.env.DATABASE_URL || DATABASE_URL;
+    if (!connectionString) throw new Error('DATABASE_URL is required when NODE_ENV=production');
+    pool = new pg.Pool({ connectionString, max: 10 });
+  }
   return pool;
 }
 export default { get pool() { return getPool(); } };
