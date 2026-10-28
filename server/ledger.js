@@ -45,16 +45,21 @@ export async function postTwoSided(client, { transactionId, fromAccountId, toAcc
     ? [fromAccountId, toAccountId] : [fromAccountId || toAccountId]);
   const from = fromAccountId ? accounts.get(fromAccountId) : null;
   const to = toAccountId ? accounts.get(toAccountId) : null;
-  if (from && from.balance_cents < amountCents) {
+  const fromBalance = from ? Number(from.balance_cents) : null;
+  const toBalance = to ? Number(to.balance_cents) : null;
+  if (from && (!Number.isSafeInteger(fromBalance) || fromBalance < amountCents)) {
     throw new LedgerError(`Insufficient available funds in ${from.name}`, 400, 'insufficient_funds');
   }
   if (from) {
     await client.query('UPDATE accounts SET balance_cents = balance_cents - $1 WHERE id = $2', [amountCents, fromAccountId]);
-    await postEntry(client, fromAccountId, 'debit', amountCents, from.balance_cents - amountCents, transactionId, memo);
+    await postEntry(client, fromAccountId, 'debit', amountCents, fromBalance - amountCents, transactionId, memo);
+  }
+  if (to && (!Number.isSafeInteger(toBalance) || !Number.isSafeInteger(toBalance + amountCents))) {
+    throw new LedgerError('Account balance is outside the supported integer range', 409, 'balance_out_of_range');
   }
   if (to) {
     await client.query('UPDATE accounts SET balance_cents = balance_cents + $1 WHERE id = $2', [amountCents, toAccountId]);
-    await postEntry(client, toAccountId, 'credit', amountCents, to.balance_cents + amountCents, transactionId, memo);
+    await postEntry(client, toAccountId, 'credit', amountCents, toBalance + amountCents, transactionId, memo);
   }
   await client.query(
     `UPDATE transactions SET status = 'posted', updated_at = now() WHERE id = $1`, [transactionId]);
