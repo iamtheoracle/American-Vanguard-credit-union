@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { startTestServer, api, loginMember, loginOperator } from './helpers.mjs';
+import { startTestServer, api, loginMember, loginOperator, getAccounts } from './helpers.mjs';
 import { outbound, IntegrationError } from '../../server/integrations/index.js';
 import { webhookSecret } from '../../server/integrations/index.js';
 
