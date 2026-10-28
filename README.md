@@ -7,13 +7,15 @@ AVCU is a software prototype with a responsive browser demo and a separate Expre
 ## What is in this repository
 
 - Responsive member-facing demo interface with simulated shares, transfers, bill payments, deposits, card freeze/unfreeze, activity, and a clear demo disclosure.
+- Separate authenticated API-connected member portal at `/member-portal.html` for registration, sign-in, accounts, transactions, transfers, deposits, sandbox card controls, membership tier, and notifications.
+- Separate role-checked operator console at `/operator-portal.html` for approval queue, membership tiers and audited overrides, and email delivery history.
 - Express API for member registration/login, sessions, account and transaction endpoints, operator workflows, server-enforced roles, approval separation of duties, ledger entries, audit events, idempotency, and sandbox integrations.
 - PostgreSQL migrations and seed data for API development.
 - Activity-based membership tiers: New Member, Active Member, Established Member, Priority Service, and Review Required; tier changes are recorded in history and manual overrides are audited.
 - Gmail API notification adapter for membership and transaction status events, with delivery history. Gmail delivery is skipped until OAuth environment variables are configured.
 - Automated syntax, demo smoke, and PostgreSQL-backed API tests in GitHub Actions.
 
-**Important integration boundary:** The existing browser demo still uses local browser storage and simulated data. It is not yet wired to use the authenticated API as its data source. API features and the demo UI must not be described as a single production-ready banking system.
+**Important integration boundary:** The original demo at `/` still uses local browser storage and simulated data. The API-connected member and operator portals are separate pages that use the authenticated API. This remains a development prototype, not a production-ready banking system.
 
 ## Requirements and local setup
 
