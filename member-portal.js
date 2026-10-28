@@ -29,8 +29,8 @@
     $('dashboard').classList.toggle('hidden', !value);
   }
   async function loadDashboard() {
-    const [accountData, transactionData, cardData, notificationData, tierData] = await Promise.all([
-      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier')
+    const [accountData, transactionData, notificationData, tierData] = await Promise.all([
+      api('/accounts'), api('/transactions?limit=30'), api('/notifications'), api('/membership-tier')
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
