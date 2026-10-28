@@ -4,7 +4,7 @@ import { POLICY } from '../policy.js';
 import { validAmountCents } from '../util.js';
 
 /**
- * Provider-independent AI layer.
+ * Self-contained, deterministic local assistance layer. No external AI provider is called.
  *
  * Rules enforced here (server side):
  *  - the model never gets database access, credentials, or code execution;
@@ -13,9 +13,7 @@ import { validAmountCents } from '../util.js';
  *  - money movement via AI becomes an approval request, never a direct posting;
  *  - failures are recorded and surfaced for manual fallback.
  *
- * Providers: 'openai' (OpenAI-compatible chat endpoint) when AI_API_KEY and
- * AI_BASE_URL are configured; 'sandbox' deterministic adapter otherwise.
- * 'failing' is a test-only provider used by automated tests.
+ * The normal provider is 'local'. 'failing' is a test-only switch used by automated tests.
  */
 
 export function activeProvider() {
@@ -98,7 +96,7 @@ function validateToolCall(name, input) {
   }
 }
 
-// ---- sandbox (deterministic) adapter ----------------------------------------
+// ---- local deterministic response engine ------------------------------------
 const AMOUNT_RE = /\$\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/;
 
 function parseAmountCents(text) {
@@ -110,7 +108,7 @@ function parseAmountCents(text) {
   return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
 }
 
-function sandboxClassify(message) {
+function localClassify(message) {
   const m = String(message || '').toLowerCase();
   if (m.includes('balance') || m.includes('how much')) return 'balance';
   if (/(transfer|move)\s/.test(m) && AMOUNT_RE.test(m)) return 'transfer_request';
@@ -121,7 +119,7 @@ function sandboxClassify(message) {
   return 'general';
 }
 
-function sandboxComplete({ member, message }) {
+function localComplete({ member, message }) {
   const intent = sandboxClassify(message);
   const toolCalls = [];
   if (intent === 'balance') {
