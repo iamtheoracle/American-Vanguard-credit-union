@@ -10,12 +10,18 @@ import { postTwoSided, reverseTransaction } from './ledger.js';
  */
 
 export async function createTransactionApproval(client, transaction, { submittedByType, submittedBy }) {
-  const requiredRole = requiredApprovalRoleForAmount(transaction.amount_cents);
+  // PostgreSQL BIGINT values are commonly returned as strings by node-postgres.
+  // Normalize to integer cents before applying policy or serializing the payload.
+  const amountCents = Number(transaction.amount_cents);
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
+    throw new ApprovalError('Transaction amount must be a positive integer number of cents', 400, 'invalid_amount');
+  }
+  const requiredRole = requiredApprovalRoleForAmount(amountCents);
   const { rows } = await client.query(
     `INSERT INTO approvals (item_type, transaction_id, payload, status, required_role, submitted_by, submitted_by_type)
      VALUES ('transaction', $1, $2, 'pending', $3, $4, $5) RETURNING id`,
     [transaction.id,
-     JSON.stringify({ type: transaction.type, amountCents: transaction.amount_cents,
+     JSON.stringify({ type: transaction.type, amountCents,
        memo: transaction.memo, payee: transaction.payee, reference: transaction.reference }),
      requiredRole, submittedBy || null, submittedByType]);
   return rows[0].id;
@@ -90,8 +96,13 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
     }
 
     // Guard management over their cap: management may not approve beyond the cap.
+    const transactionAmountCents = approval.txn_amount == null ? null : Number(approval.txn_amount);
+    if (financial && (!Number.isSafeInteger(transactionAmountCents) || transactionAmountCents <= 0)) {
+      throw new ApprovalError('Stored transaction amount is invalid', 409, 'invalid_amount');
+    }
+
     if (action === 'approve' && financial && operator.role === 'management' &&
-        approval.txn_amount > POLICY.MANAGEMENT_APPROVAL_CAP_CENTS) {
+        transactionAmountCents > POLICY.MANAGEMENT_APPROVAL_CAP_CENTS) {
       throw new ApprovalError('Amount exceeds management approval limit; escalate to a super admin', 403, 'over_limit');
     }
 
