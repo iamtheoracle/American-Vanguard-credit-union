@@ -207,9 +207,9 @@ router.get('/operator/membership-tiers', ...guard('management', 'operator'), asy
     const search = String(req.query.search || '').trim().slice(0, 80);
     const params = [];
     const filters = [];
-    if (tier) { params.push(tier); filters.push(`m.membership_tier = ${params.length}`); }
-    if (status) { params.push(status); filters.push(`m.status = ${params.length}`); }
-    if (search) { params.push(`%${search}%`); filters.push(`(m.full_name ILIKE ${params.length} OR m.email ILIKE ${params.length})`); }
+    if (tier) { params.push(tier); filters.push(`m.membership_tier = $${params.length}`); }
+    if (status) { params.push(status); filters.push(`m.status = $${params.length}`); }
+    if (search) { params.push(`%${search}%`); filters.push(`(m.full_name ILIKE $${params.length} OR m.email ILIKE $${params.length})`); }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const { rows } = await query(
       `SELECT m.id, m.email, m.full_name AS "fullName", m.status,
