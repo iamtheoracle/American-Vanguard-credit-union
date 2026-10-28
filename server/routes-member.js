@@ -6,8 +6,7 @@ import {
   findMemberByEmail, findMemberByLogin, findOperatorByEmail
 } from './auth.js';
 import { rateLimiter, clientKey, validEmail, validPassword, PASSWORD_MIN, COOKIE_MEMBER, COOKIE_OPERATOR } from './util.js';
-import { submitMemberTransfer, submitMemberDeposit, freezeCard, testCardPurchase,
-  createSupportCase, lookupIdempotent } from './services-member.js';
+import { submitMemberTransfer, createSupportCase, lookupIdempotent } from './services-member.js';
 import { runChat, renderReply, activeProvider } from './ai/index.js';
 import { submitMemberTransfer as svcTransfer } from './services-member.js';
 import { notifyMember } from './notifications.js';
@@ -144,23 +143,12 @@ router.post('/transfers', memberAuth, async (req, res, next) => {
   }
 });
 
-router.post('/deposits', memberAuth, async (req, res, next) => {
-  try {
-    const idempotencyKey = req.header('Idempotency-Key') || null;
-    const result = await submitMemberDeposit({ member: req.member, body: req.body || {}, idempotencyKey });
-    await recalculateMemberTier(req.member.id).catch(() => {});
-    await notifyMember({ memberId: req.member.id, eventType: 'transaction.deposit_submitted',
-      title: 'Deposit status update', body: `Your deposit ${result.transaction.reference} is ${result.transaction.status.replaceAll('_', ' ')}.`,
-      subject: 'AVCU deposit status update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
-    res.status(result.approvalId ? 202 : 201).json({
-      transaction: { id: result.transaction.id, reference: result.transaction.reference, status: result.transaction.status },
-      message: result.status === 'pending_review'
-        ? 'Deposit received and awaiting review.' : 'Deposit posted.'
-    });
-  } catch (error) {
-    if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
-    next(error);
-  }
+// Deposits are disabled until a verified deposit-capture provider is configured.
+router.post('/deposits', memberAuth, (_req, res) => {
+  res.status(503).json({
+    error: 'Deposit requests are unavailable. No deposit was created and no funds were credited.',
+    code: 'deposit_service_unavailable'
+  });
 });
 
 // ---- card -------------------------------------------------------------------
@@ -168,32 +156,25 @@ router.get('/card', memberAuth, async (req, res, next) => {
   try {
     const { rows } = await query(
       `SELECT id, last4 AS "last4", status, expires FROM cards WHERE member_id = $1`, [req.member.id]);
-    res.json({ card: rows[0] || null });
+    // Card records may be stored locally, but they are not proof of an issued payment card.
+    res.json({ card: rows[0] || null, processorConnected: false });
   } catch (error) { next(error); }
 });
 
-router.post('/card/freeze', memberAuth, async (req, res, next) => {
-  try {
-    const card = await freezeCard({ member: req.member, frozen: Boolean(req.body?.frozen) });
-    res.json({ card: { id: card.id, last4: card.last4, status: card.status } });
-  } catch (error) { next(error); }
+// Do not let local database state masquerade as a live issuer card freeze.
+router.post('/card/freeze', memberAuth, (_req, res) => {
+  res.status(503).json({
+    error: 'Card controls are unavailable because no live card issuer is connected. Contact your card issuer directly.',
+    code: 'card_issuer_unavailable'
+  });
 });
 
-router.post('/card/test-purchase', memberAuth, async (req, res, next) => {
-  try {
-    const result = await testCardPurchase({ member: req.member, body: req.body || {} });
-    const d = result.decision;
-    res.status(d.outcome === 'approved' ? 200 : 402).json({
-      outcome: d.outcome, reason: d.reason || null, sandbox: Boolean(d.sandbox),
-      reference: result.transaction.reference,
-      message: d.outcome === 'approved'
-        ? `Sandbox authorization approved for ${req.body.merchant}. No funds moved.`
-        : 'Sandbox authorization declined.'
-    });
-  } catch (error) {
-    if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
-    next(error);
-  }
+// No simulated card authorizations in the member-facing portal.
+router.post('/card/test-purchase', memberAuth, (_req, res) => {
+  res.status(503).json({
+    error: 'Card purchases are unavailable because no live card processor is connected. No authorization was attempted.',
+    code: 'card_processor_unavailable'
+  });
 });
 
 // ---- notifications ----------------------------------------------------------
