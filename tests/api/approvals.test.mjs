@@ -146,7 +146,7 @@ test('membership applications flow through the approval queue', async t => {
   const approved = await api(env.base, `/api/operator/approvals/${membership.id}/decide`, {
     method: 'POST', cookie: teller, body: { action: 'approve' }
   });
-  assert.equal(approved.status, 200);
+  assert.equal(approved.status, 200, JSON.stringify(approved.data));
   assert.equal(approved.data.outcome.status, 'verified');
 
   // The approved applicant can now sign in and see funded-capable accounts.
