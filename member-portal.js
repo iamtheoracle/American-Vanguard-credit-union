@@ -29,8 +29,8 @@
     $('dashboard').classList.toggle('hidden', !value);
   }
   async function loadDashboard() {
-    const [accountData, transactionData, cardData, notificationData, tierData] = await Promise.all([
-      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier')
+    const [accountData, transactionData, notificationData, tierData] = await Promise.all([
+      api('/accounts'), api('/transactions?limit=30'), api('/notifications'), api('/membership-tier')
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
@@ -39,13 +39,10 @@
     const tier = tierData.membership;
     $('membership-tier').textContent = tier?.label || 'New Member';
     $('tier-detail').textContent = `${tier?.activity90Days ?? 0} qualifying transactions in 90 days`;
-    const card = cardData.card;
-    $('card-status').textContent = card?.status || 'Not issued';
-    $('card-last4').textContent = card ? `Sandbox card ending ${card.last4}` : 'Card appears after membership approval';
-    $('freeze-button').disabled = !card;
-    $('freeze-button').textContent = card?.status === 'frozen' ? 'Unfreeze card' : 'Freeze card';
+    $('card-status').textContent = 'Not connected';
+    $('card-last4').textContent = 'Card details unavailable';
     $('accounts-list').innerHTML = accounts.length ? accounts.map(a => `<article class="account-row"><span class="account-symbol">AV</span><span class="account-info"><strong>${escapeHtml(a.name)}</strong><small>${escapeHtml(a.kind)} · •••• ${escapeHtml(a.suffix)}</small></span><strong>${dollars(a.balanceCents)}</strong></article>`).join('') : '<p class="muted">No open share accounts yet. Membership approval is required.</p>';
-    for (const id of ['transfer-from','transfer-to','deposit-account']) {
+    for (const id of ['transfer-from','transfer-to']) {
       const select = $(id);
       const previous = select.value;
       select.innerHTML = accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)} · •••• ${escapeHtml(a.suffix)}</option>`).join('');
@@ -67,7 +64,7 @@
     }
   });
   $('forgot-password').addEventListener('click', () => {
-    showMessage('auth-message', 'Password recovery is not connected yet. For this prototype, contact the authorized system operator; do not share your password or verification codes.');
+    showMessage('auth-message', 'Password recovery is not available yet. Contact the authorized system operator; do not share your password or verification codes.');
   });
   $('show-login').addEventListener('click', () => switchAuth(false));
   $('show-register').addEventListener('click', () => switchAuth(true));
@@ -94,22 +91,6 @@
       const result = await api('/transfers',{method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({kind:'share',fromAccountId:$('transfer-from').value,toAccountId:$('transfer-to').value,amountCents,memo:$('transfer-memo').value})});
       showMessage('dashboard-message',result.message || 'Transfer submitted.'); await refresh();
     } catch(error) { showMessage('dashboard-message',error.message,true); }
-  });
-  $('deposit-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    try {
-      const result = await api('/deposits',{method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({accountId:$('deposit-account').value,amountCents:Math.round(Number($('deposit-amount').value)*100),description:$('deposit-description').value})});
-      showMessage('dashboard-message',result.message || 'Deposit submitted.'); await refresh();
-    } catch(error) { showMessage('dashboard-message',error.message,true); }
-  });
-  $('freeze-button').addEventListener('click', async () => {
-    try { const frozen = $('freeze-button').textContent.toLowerCase().includes('unfreeze'); await post('/card/freeze',{frozen:!frozen}); await refresh(); }
-    catch(error) { showMessage('dashboard-message',error.message,true); }
-  });
-  $('purchase-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    try { const result = await post('/card/test-purchase',{merchant:$('purchase-merchant').value,amountCents:Math.round(Number($('purchase-amount').value)*100)}); showMessage('dashboard-message',result.message); }
-    catch(error) { showMessage('dashboard-message',error.message,true); }
   });
   $('read-notifications').addEventListener('click', async () => {
     try { await post('/notifications/mark-read',{}); await refresh(); }

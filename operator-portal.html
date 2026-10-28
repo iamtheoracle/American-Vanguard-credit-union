@@ -6,14 +6,14 @@
   <link rel="stylesheet" href="/portal.css"><script src="/operator-portal.js" defer></script>
 </head>
 <body>
-  <header class="portal-header"><a class="portal-brand" href="/">AV<span>CU</span></a><div><strong>American Vantoris Credit Union</strong><small>Operator console · restricted access</small></div><a class="quiet-link" href="/">View demo</a></header>
+  <header class="portal-header"><a class="portal-brand" href="/">AV<span>CU</span></a><div><strong>American Vantoris Credit Union</strong><small>Operator console · restricted access</small></div><a class="quiet-link" href="/">Home</a></header>
   <main class="portal-shell">
     <section id="operator-auth" class="panel auth-panel"><p class="eyebrow">STAFF ACCESS</p><h1>Operator sign in</h1><p class="muted">Access is enforced by server-side role permissions. This console is for authorized development operators only.</p>
       <form id="operator-login-form" class="stack top-gap"><label for="operator-email">Work email</label><input id="operator-email" type="email" autocomplete="username" required><label for="operator-password">Password</label><input id="operator-password" type="password" autocomplete="current-password" required><button class="primary" type="submit">Sign in</button></form><p id="operator-auth-message" class="notice" role="status" aria-live="polite"></p>
     </section>
     <section id="operator-dashboard" class="hidden">
       <div class="welcome-row"><div><p class="eyebrow">OPERATIONS</p><h1>Admin console</h1><p id="operator-identity" class="muted"></p></div><button id="operator-logout" class="secondary" type="button">Sign out</button></div>
-      <p class="disclaimer">All financial actions shown here operate on the prototype database and sandbox adapters only. Never use this console for real deposits, payments, or customer financial data.</p>
+      <p class="disclaimer">This console is not connected to live deposit-taking or payment networks. Do not use it to authorize real deposits or payments, or to record real customer financial data.</p>
       <div id="operator-message" class="notice" role="status" aria-live="polite"></div>
       <div class="stat-grid"><article class="stat-card"><small>Pending approvals</small><strong id="queue-approvals">—</strong><span>Awaiting decision</span></article><article class="stat-card"><small>Pending members</small><strong id="queue-members">—</strong><span>Membership applications</span></article><article class="stat-card"><small>Open support cases</small><strong id="queue-cases">—</strong><span>Support workflow</span></article></div>
       <div class="content-grid">
@@ -23,6 +23,6 @@
       </div>
     </section>
   </main>
-  <footer class="portal-footer">American Vantoris Credit Union · Restricted prototype console · <a href="/member-portal.html">Member portal</a></footer>
+  <footer class="portal-footer">American Vantoris Credit Union · Restricted operations console · <a href="/member-portal.html">Member portal</a></footer>
 </body>
 </html>

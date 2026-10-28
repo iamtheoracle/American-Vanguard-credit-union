@@ -9,11 +9,11 @@
   <script src="/member-portal.js" defer></script>
 </head>
 <body>
-  <header class="portal-header"><a class="portal-brand" href="/">AV<span>CU</span></a><div><strong>American Vantoris Credit Union</strong><small>Member API portal · prototype</small></div><a class="quiet-link" href="/">View demo</a></header>
+  <header class="portal-header"><a class="portal-brand" href="/">AV<span>CU</span></a><div><strong>American Vantoris Credit Union</strong><small>Member services</small></div><a class="quiet-link" href="/">Home</a></header>
   <main class="portal-shell">
     <section id="auth-panel" class="panel auth-panel">
       <p class="eyebrow">MEMBER ACCESS</p><h1>Welcome to AVCU</h1>
-      <p class="muted">Sign in to your prototype member account or submit a membership application.</p>
+      <p class="muted">Sign in to your member account or submit a membership application.</p>
       <div class="tabs"><button class="tab active" id="show-login" type="button">Sign in</button><button class="tab" id="show-register" type="button">Apply for membership</button></div>
       <form id="login-form" class="stack">
         <label for="login-identifier">Member number or email</label><input id="login-identifier" type="text" inputmode="text" autocomplete="username" placeholder="10-digit member number or email" required>
@@ -21,7 +21,7 @@
         <label class="remember-row"><input id="remember-identifier" type="checkbox"> Remember member number or email on this device</label>
         <button class="primary" type="submit">Sign in</button>
         <button class="text-button recovery-link" id="forgot-password" type="button">Forgot your password?</button>
-        <p class="form-note">Device biometrics are not enabled in this prototype. Do not save your password in this app.</p>
+        <p class="form-note">Biometric sign-in is not available. Never share your password or verification codes.</p>
       </form>
       <form id="register-form" class="stack hidden">
         <label for="register-name">Full name</label><input id="register-name" maxlength="100" autocomplete="name" required>
@@ -31,38 +31,30 @@
         <p class="muted small">Your application stays pending until an authorized operator reviews it.</p>
       </form>
       <p id="auth-message" class="notice" role="status" aria-live="polite"></p>
-      <div class="legacy-links"><a href="/" id="locations-link">Locations</a><a href="/" id="contact-link">Contact</a><a href="/" id="privacy-link">Privacy &amp; demo information</a></div>
+      <div class="legacy-links"><a href="/" id="locations-link">Locations</a><a href="/" id="contact-link">Contact</a><a href="/" id="privacy-link">Privacy information</a></div>
     </section>
 
     <section id="dashboard" class="hidden">
       <div class="welcome-row"><div><p class="eyebrow">MEMBER SPACE</p><h1 id="welcome-title">Your accounts</h1><p id="member-subtitle" class="muted"></p></div><button id="logout-button" class="secondary" type="button">Sign out</button></div>
       <div id="dashboard-message" class="notice" role="status" aria-live="polite"></div>
-      <div class="stat-grid"><article class="stat-card"><small>Total share balance</small><strong id="total-balance">$0.00</strong><span>Prototype ledger</span></article><article class="stat-card"><small>Membership tier</small><strong id="membership-tier">—</strong><span id="tier-detail">Activity based</span></article><article class="stat-card"><small>Debit card</small><strong id="card-status">—</strong><span id="card-last4">Sandbox card</span></article></div>
+      <div class="stat-grid"><article class="stat-card"><small>Total share balance</small><strong id="total-balance">$0.00</strong><span>Account ledger</span></article><article class="stat-card"><small>Membership tier</small><strong id="membership-tier">—</strong><span id="tier-detail">Activity based</span></article><article class="stat-card"><small>Debit card</small><strong id="card-status">—</strong><span id="card-last4">Card details</span></article></div>
       <div class="content-grid">
         <section class="panel"><div class="section-head"><h2>Share accounts</h2><button class="text-button" id="refresh-button" type="button">Refresh</button></div><div id="accounts-list" class="account-list"></div></section>
-        <section class="panel"><h2>Move money between shares</h2><form id="transfer-form" class="stack">
+        <section class="panel"><h2>Internal share transfer</h2><p class="muted small">Transfers are recorded in the AVCU application ledger only. This does not move money through an external bank or payment network.</p><form id="transfer-form" class="stack">
           <label for="transfer-from">From account</label><select id="transfer-from" required></select>
           <label for="transfer-to">To account</label><select id="transfer-to" required></select>
           <label for="transfer-amount">Amount (USD)</label><input id="transfer-amount" type="number" min="0.01" max="100000" step="0.01" required>
           <label for="transfer-memo">Description (optional)</label><input id="transfer-memo" maxlength="120">
-          <button class="primary" type="submit">Submit transfer</button>
+          <button class="primary" type="submit">Submit internal transfer</button>
         </form></section>
-        <section class="panel"><h2>Simulated check deposit</h2><form id="deposit-form" class="stack">
-          <label for="deposit-account">Deposit into</label><select id="deposit-account" required></select>
-          <label for="deposit-amount">Amount (USD)</label><input id="deposit-amount" type="number" min="0.01" max="100000" step="0.01" required>
-          <label for="deposit-description">Description</label><input id="deposit-description" maxlength="120" required>
-          <button class="primary" type="submit">Submit deposit</button>
-          <p class="muted small">This is a simulation only. No check is captured and no real funds are deposited.</p>
-        </form></section>
-        <section class="panel"><h2>Debit card controls</h2><p class="muted">Card actions use the sandbox adapter and cannot reach a payment network.</p><button id="freeze-button" class="secondary" type="button">Freeze card</button>
-          <form id="purchase-form" class="stack top-gap"><label for="purchase-merchant">Test merchant</label><input id="purchase-merchant" value="Harbor Market" maxlength="80" required><label for="purchase-amount">Amount (USD)</label><input id="purchase-amount" type="number" value="12.50" min="0.01" max="10000" step="0.01" required><button class="secondary" type="submit">Test authorization</button></form>
-        </section>
+        <section class="panel"><h2>Deposits</h2><p class="muted">Unavailable — a verified deposit-capture provider is not connected. No deposit can be submitted from this portal.</p><button class="secondary" type="button" disabled>Deposits unavailable</button></section>
+        <section class="panel"><h2>Debit card</h2><p class="muted">No live card issuer or processor is connected. Card status shown here is not a live issuer status. Use your card issuer's official contact details for urgent card issues.</p><button class="secondary" type="button" disabled>Card controls unavailable</button></section>
         <section class="panel wide"><div class="section-head"><h2>Recent transactions</h2><span class="tag">API DATA</span></div><div id="transactions-list" class="table-wrap"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Notifications</h2><button id="read-notifications" class="text-button" type="button">Mark all read</button></div><div id="notifications-list" class="notification-list"></div></section>
       </div>
-      <p class="disclaimer">AVCU is a software prototype, not a chartered or insured financial institution. This portal uses a development API and sandbox workflows; it does not hold deposits or move real money.</p>
+      <p class="disclaimer">Online services and account records depend on the configured system and your authorization. Deposit-taking, payment-network access, card processing, and financial-institution status are not established by this software. Do not use this portal to represent that real funds are held or moved.</p>
     </section>
   </main>
-  <footer class="portal-footer">American Vantoris Credit Union · Secure API prototype · <a href="/operator-portal.html">Operator portal</a></footer>
+  <footer class="portal-footer">American Vantoris Credit Union · Member services · <a href="/operator-portal.html">Operator portal</a></footer>
 </body>
 </html>

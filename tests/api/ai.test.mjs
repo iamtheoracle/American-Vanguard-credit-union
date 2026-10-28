@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestServer, api, loginMember, loginOperator, getAccounts } from './helpers.mjs';
 
-test('chat works with the sandbox provider and answers balance questions via tools', async t => {
+test('chat works with the local provider and answers balance questions via tools', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
   const { cookie } = await loginMember(env.base);
@@ -12,7 +12,7 @@ test('chat works with the sandbox provider and answers balance questions via too
   });
   assert.equal(r.status, 200);
   assert.equal(r.data.status, 'succeeded');
-  assert.equal(r.data.provider, 'sandbox');
+  assert.equal(r.data.provider, 'local');
   const toolCall = r.data.toolCalls.find(c => c.tool === 'get_my_accounts');
   assert.ok(toolCall, 'expected the balance question to run the accounts tool');
   assert.equal(toolCall.status, 'ok');

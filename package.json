@@ -8,8 +8,8 @@
     "start": "node server/index.js",
     "migrate": "node server/migrate.js",
     "seed": "node server/seed.js",
-    "check": "node --check app.js && node --check member-portal.js && node --check operator-portal.js && node --check server/index.js && node --check server/auth.js && node --check server/db.js && node --check server/migrate.js && node --check server/seed.js && node --check server/approvals.js && node --check server/ledger.js && node --check server/policy.js && node --check server/routes-member.js && node --check server/routes-operator.js && node --check server/services-member.js && node --check server/util.js && node --check server/notifications.js && node --check server/membership-tiers.js && node --check server/integrations/index.js && node --check server/ai/index.js",
-    "test": "node --test tests/demo-smoke.test.mjs tests/membership-tiers.test.mjs",
+    "check": "node --check app.js && node --check member-portal.js && node --check operator-portal.js && node --check server/index.js && node --check rcc-history.js && node --check server/auth.js && node --check server/db.js && node --check server/migrate.js && node --check server/seed.js && node --check server/approvals.js && node --check server/ledger.js && node --check server/policy.js && node --check server/routes-member.js && node --check server/routes-operator.js && node --check server/services-member.js && node --check server/util.js && node --check server/notifications.js && node --check server/membership-tiers.js && node --check server/integrations/index.js && node --check server/ai/index.js",
+    "test": "node --test tests/demo-smoke.test.mjs tests/membership-tiers.test.mjs tests/rcc-history.test.mjs",
     "test:api": "node --test tests/api/*.test.mjs"
   },
   "engines": {

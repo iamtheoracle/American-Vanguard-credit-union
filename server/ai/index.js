@@ -4,7 +4,7 @@ import { POLICY } from '../policy.js';
 import { validAmountCents } from '../util.js';
 
 /**
- * Provider-independent AI layer.
+ * Self-contained, deterministic local assistance layer. No external AI provider is called.
  *
  * Rules enforced here (server side):
  *  - the model never gets database access, credentials, or code execution;
@@ -13,16 +13,13 @@ import { validAmountCents } from '../util.js';
  *  - money movement via AI becomes an approval request, never a direct posting;
  *  - failures are recorded and surfaced for manual fallback.
  *
- * Providers: 'openai' (OpenAI-compatible chat endpoint) when AI_API_KEY and
- * AI_BASE_URL are configured; 'sandbox' deterministic adapter otherwise.
- * 'failing' is a test-only provider used by automated tests.
+ * The normal provider is 'local'. 'failing' is a test-only switch used by automated tests.
  */
 
 export function activeProvider() {
-  const forced = process.env.AVCU_AI_PROVIDER;
-  if (forced) return forced;
-  if (process.env.AI_API_KEY && process.env.AI_BASE_URL) return 'openai';
-  return 'sandbox';
+  // Only the explicit failure injection is honored for automated tests.
+  // Normal requests stay local and never call an external AI endpoint.
+  return process.env.AVCU_AI_PROVIDER === 'failing' ? 'failing' : 'local';
 }
 
 // ---- tool registry (allowlist; strict schemas) ------------------------------
@@ -99,7 +96,7 @@ function validateToolCall(name, input) {
   }
 }
 
-// ---- sandbox (deterministic) adapter ----------------------------------------
+// ---- local deterministic response engine ------------------------------------
 const AMOUNT_RE = /\$\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/;
 
 function parseAmountCents(text) {
@@ -111,7 +108,7 @@ function parseAmountCents(text) {
   return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
 }
 
-function sandboxClassify(message) {
+function localClassify(message) {
   const m = String(message || '').toLowerCase();
   if (m.includes('balance') || m.includes('how much')) return 'balance';
   if (/(transfer|move)\s/.test(m) && AMOUNT_RE.test(m)) return 'transfer_request';
@@ -122,8 +119,8 @@ function sandboxClassify(message) {
   return 'general';
 }
 
-function sandboxComplete({ member, message }) {
-  const intent = sandboxClassify(message);
+function localComplete({ member, message }) {
+  const intent = localClassify(message);
   const toolCalls = [];
   if (intent === 'balance') {
     toolCalls.push({ tool: 'get_my_accounts', input: {} });
@@ -155,36 +152,6 @@ function amountCentsSafe(message) {
   return cents !== null && validAmountCents(cents);
 }
 
-// ---- OpenAI-compatible adapter (only used when credentials are configured) ---
-async function openaiComplete({ member, message, history }) {
-  const baseUrl = process.env.AI_BASE_URL.replace(/\/$/, '');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), POLICY.AI_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AI_API_KEY}` },
-      body: JSON.stringify({
-        model: process.env.AI_MODEL || 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are the AVCU member assistant. Use only provided tools. Never move money directly; use create_transfer_proposal.' },
-          ...(history || []).slice(-8),
-          { role: 'user', content: String(message).slice(0, 4000) }
-        ],
-        temperature: 0.2
-      })
-    });
-    if (!response.ok) throw new Error(`Provider HTTP ${response.status}`);
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || !content.trim()) throw new Error('Malformed provider response');
-    return { reply: content.trim(), intent: 'general', toolCalls: [] };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export async function runChat({ member, message, history, hooks }) {
   const provider = activeProvider();
   const hooksCtx = {
@@ -194,9 +161,8 @@ export async function runChat({ member, message, history, hooks }) {
   };
   try {
     let completion;
-    if (provider === 'openai') completion = await openaiComplete({ member, message, history });
-    else if (provider === 'failing') throw new Error('Simulated provider outage (test provider)');
-    else completion = sandboxComplete({ member, message });
+    if (provider === 'failing') throw new Error('Simulated provider outage (test provider)');
+    completion = localComplete({ member, message });
 
     const executed = [];
     let degraded = false;
