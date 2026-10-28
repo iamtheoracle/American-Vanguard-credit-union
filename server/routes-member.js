@@ -89,7 +89,7 @@ router.get('/accounts', memberAuth, async (req, res, next) => {
     const { rows } = await query(
       `SELECT id, kind, name, suffix, balance_cents AS "balanceCents", status
        FROM accounts WHERE member_id = $1 AND status = 'open' ORDER BY created_at`, [req.member.id]);
-    res.json({ accounts: rows });
+    res.json({ accounts: rows.map(row => ({ ...row, balanceCents: Number(row.balanceCents) })) });
   } catch (error) { next(error); }
 });
 
@@ -114,7 +114,7 @@ router.get('/transactions', memberAuth, async (req, res, next) => {
        LEFT JOIN accounts ta ON ta.id = t.to_account_id
        WHERE ${where}
        ORDER BY t.created_at DESC LIMIT ${capped}`, params);
-    res.json({ transactions: rows });
+    res.json({ transactions: rows.map(row => ({ ...row, amountCents: Number(row.amountCents) })) });
   } catch (error) { next(error); }
 });
 
@@ -316,7 +316,7 @@ router.post('/ai/retry', memberAuth, async (req, res, next) => {
       req, message: task.input_excerpt, taskId
     });
     res.json({ taskId: updated.id, status: rendered.status, message: rendered.message,
-      toolCalls: rendered.toolCalls || [] });
+      toolCalls: rendered.toolCalls || [], provider: activeProvider() });
   } catch (error) { next(error); }
 });
 
