@@ -134,7 +134,7 @@ test('membership applications flow through the approval queue', async t => {
   t.after(() => env.close());
 
   await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'applicant@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Sam Lee' }
+    method: 'POST', body: { email: 'applicant@avcu.demo', username: 'sam.lee', password: 'Str0ngPassphrase!', fullName: 'Sam Lee' }
   });
   const { cookie: teller } = await loginOperator(env.base, 'teller@avcu.demo');
   const queue = await api(env.base, '/api/operator/approvals?status=pending', { cookie: teller });
@@ -148,7 +148,7 @@ test('membership applications flow through the approval queue', async t => {
   assert.equal(approved.data.outcome.status, 'verified');
 
   // The approved applicant can now sign in and see funded-capable accounts.
-  const { cookie: memberCookie } = await loginMember(env.base, 'applicant@avcu.demo');
+  const { cookie: memberCookie } = await loginMember(env.base, 'applicant@avcu.demo', 'Str0ngPassphrase!');
   const me = await api(env.base, '/api/auth/me', { cookie: memberCookie });
   assert.equal(me.data.member.status, 'verified');
   const accounts = await getAccounts(env.base, memberCookie);

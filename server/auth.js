@@ -41,7 +41,8 @@ export async function destroyAllSessions(kind, subjectId) {
   else await query('DELETE FROM operator_sessions WHERE operator_id = $1', [subjectId]);
 }
 
-const MEMBER_SELECT = `SELECT m.id, m.email, m.full_name, m.status, s.token, s.expires_at
+const MEMBER_SELECT = `SELECT m.id, m.email, m.full_name, m.status, m.username, m.member_number,
+         m.email_verified, m.phone, m.mailing_address, s.token, s.expires_at
   FROM member_sessions s JOIN members m ON m.id = s.member_id WHERE s.token = $1`;
 const OPERATOR_SELECT = `SELECT o.id, o.email, o.name, o.role, o.active, s.token, s.expires_at
   FROM operator_sessions s JOIN operators o ON o.id = s.operator_id WHERE s.token = $1`;
@@ -54,7 +55,12 @@ export function memberAuth(req, res, next) {
     if (!row || new Date(row.expires_at) <= new Date()) {
       return res.status(401).json({ error: 'Session expired or invalid' });
     }
-    req.member = { id: row.id, email: row.email, fullName: row.full_name, status: row.status };
+    req.member = {
+      id: row.id, email: row.email, fullName: row.full_name, status: row.status,
+      username: row.username, memberNumber: row.member_number,
+      emailVerified: row.email_verified, phone: row.phone,
+      mailingAddress: row.mailing_address
+    };
     req.sessionToken = token;
     next();
   }).catch(next);
@@ -103,6 +109,21 @@ export function clearAuthCookie(req, res, kind) {
 export async function findMemberByEmail(email) {
   const { rows } = await query('SELECT * FROM members WHERE lower(email) = lower($1)', [email]);
   return rows[0] || null;
+}
+
+// Members sign in with email, username, or numeric member number.
+export async function findMemberByIdentifier(identifier) {
+  const value = String(identifier || '').trim();
+  if (!value) return null;
+  const { rows } = await query(
+    `SELECT * FROM members
+      WHERE lower(email) = lower($1) OR lower(username) = lower($1) OR member_number = $1
+      LIMIT 1`, [value]);
+  return rows[0] || null;
+}
+
+export async function destroyOtherMemberSessions(memberId, currentToken) {
+  await query('DELETE FROM member_sessions WHERE member_id = $1 AND token <> $2', [memberId, currentToken]);
 }
 
 export async function findOperatorByEmail(email) {

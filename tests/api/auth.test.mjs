@@ -8,18 +8,18 @@ test('authentication and session lifecycle', async t => {
 
   // 1. Register creates a pending application, not a verified member.
   const reg = await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'newmember@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
+    method: 'POST', body: { email: 'newmember@avcu.demo', username: 'new.member', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
   });
   assert.equal(reg.status, 201);
   assert.equal(reg.data.member.status, 'pending');
 
   // 2. Registration validation.
   const bad = await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'nope', password: 'short', fullName: 'X' }
+    method: 'POST', body: { email: 'nope', username: 'x', password: 'short', fullName: 'X' }
   });
   assert.equal(bad.status, 400);
   const dupe = await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'newmember@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
+    method: 'POST', body: { email: 'newmember@avcu.demo', username: 'new.member', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
   });
   assert.equal(dupe.status, 409);
 
@@ -60,7 +60,7 @@ test('member data isolation', async t => {
   t.after(() => env.close());
 
   await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'isolation@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Riley Fox' }
+    method: 'POST', body: { email: 'isolation@avcu.demo', username: 'riley.fox', password: 'Str0ngPassphrase!', fullName: 'Riley Fox' }
   });
   const { cookie: cookieB } = await loginMember(env.base, 'isolation@avcu.demo', 'Str0ngPassphrase!');
   // Pending member cannot see accounts and cannot move money.

@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 
+// BIGINT columns carry integer minor units; expose them as JSON numbers.
+// Amounts are validated well below Number.MAX_SAFE_INTEGER.
+pg.types.setTypeParser(20, value => (value === null ? null : Number(value)));
+
 export const DATABASE_URL = process.env.DATABASE_URL || 'postgres://avcu:avcu@127.0.0.1:5432/avcu';
 
 let pool = null;

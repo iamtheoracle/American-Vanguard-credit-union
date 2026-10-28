@@ -74,7 +74,11 @@ const TOOLS = {
         fromAccountId: from.id, toAccountId: to.id,
         amountCents: args.amountCents, memo: 'Requested via AI assistant'
       });
-      return { proposalCreated: true, reference: result.reference, status: result.status };
+      return {
+        proposalCreated: true,
+        reference: result.transaction?.reference || result.reference,
+        status: result.status || result.transaction?.status
+      };
     }
   },
   create_support_case: {
@@ -233,6 +237,7 @@ function summarizeToolResult(result) {
   }
   if (result && result.proposalCreated) return { proposalCreated: true, reference: result.reference, status: result.status };
   if (result && result.caseId) return { caseId: result.caseId };
+  if (result && result.id && result.subject) return { caseId: result.id };
   return result || {};
 }
 
@@ -257,7 +262,7 @@ export function renderReply(completion, results) {
     if (r.status === 'failed') notes.push(completion.fallbackNote || 'One step could not be completed.');
   }
   if (notes.length) text = `${text}\n\n${notes.join(' ')}`;
-  return { status: completion.status, message: text, toolCalls: results };
+  return { status: completion.status, message: text, toolCalls: results, provider: completion.provider };
 }
 
 export async function recordAiTask({ requesterType, requesterId, provider, purpose, input, completion, results, outcome }) {

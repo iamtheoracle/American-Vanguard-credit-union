@@ -4,6 +4,8 @@ import { createTransactionApproval } from './approvals.js';
 import { postTwoSided, createTransaction, LedgerError } from './ledger.js';
 import { validAmountCents } from './util.js';
 import { cardIssuerAdapter, paymentsAdapter, outbound } from './integrations/index.js';
+import { notify } from './notify.js';
+import { awardPoints } from './services-finance.js';
 
 /**
  * Member banking services. Shared by HTTP routes and the AI tool layer so the
@@ -74,12 +76,19 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
         entityType: 'transaction', entityId: tx.id,
         metadata: { amountCents, payee: String(body.payee).trim(), kind }
       });
+      await notify(client, {
+        memberId: member.id, kind: 'payment', title: 'Bill payment submitted',
+        body: `${(amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} to ${String(body.payee).trim()} awaits review.`
+      });
       return { transaction: tx, approvalId };
     });
     await consumeIdempotencyOutsideTx(idempotencyKey, `transfer:${member.id}`, serializeTransfer(result.transaction));
     return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
   }
 
+  if (from.balance_cents < amountCents) {
+    throw new LedgerError(`Insufficient available funds in ${from.name}`, 400, 'insufficient_funds');
+  }
   const needsApproval = amountCents > POLICY.TRANSFER_APPROVAL_LIMIT_CENTS;
   const result = await withTx(async client => {
     const status = needsApproval ? 'pending_approval' : 'posted';
@@ -102,6 +111,19 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
       entityType: 'transaction', entityId: tx.id,
       metadata: { amountCents, kind, needsApproval }
     });
+    await notify(client, {
+      memberId: member.id, kind: 'payment',
+      title: needsApproval ? 'Transfer submitted for review' : 'Transfer completed',
+      body: needsApproval
+        ? 'Your transfer is above the review limit. Balances update after approval.'
+        : 'The transfer posted between your shares.'
+    });
+    if (!needsApproval) {
+      await awardPoints(client, {
+        memberId: member.id, points: Math.floor(amountCents / 1000),
+        reason: 'Share transfer activity', transactionId: tx.id
+      });
+    }
     return { transaction: tx, approvalId };
   });
   await consumeIdempotencyOutsideTx(idempotencyKey, `transfer:${member.id}`, serializeTransfer(result.transaction));
@@ -143,6 +165,19 @@ export async function submitMemberDeposit({ member, body, idempotencyKey }) {
       actorType: 'member', actorId: member.id, action: 'deposit.submitted',
       entityType: 'transaction', entityId: tx.id, metadata: { amountCents, needsReview }
     });
+    await notify(client, {
+      memberId: member.id, kind: 'deposit',
+      title: needsReview ? 'Deposit awaiting review' : 'Deposit posted',
+      body: needsReview
+        ? 'Your check deposit is above the review limit. It posts after operator approval.'
+        : `${(amountCents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} was recorded in ${account.name}.`
+    });
+    if (!needsReview) {
+      await awardPoints(client, {
+        memberId: member.id, points: Math.floor(amountCents / 100),
+        reason: 'Deposit activity', transactionId: tx.id
+      });
+    }
     await consumeIdempotency(client, idempotencyKey, `deposit:${member.id}`,
       { reference: tx.reference, status: tx.status });
     return { transaction: tx, approvalId, status: tx.status };

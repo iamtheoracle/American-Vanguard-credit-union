@@ -157,6 +157,7 @@ test('card freeze controls sandbox authorizations', async t => {
   const { rows } = await query(
     `SELECT status, count(*) AS n FROM transactions WHERE type = 'card_auth' GROUP BY status`);
   const byStatus = Object.fromEntries(rows.map(r => [r.status, Number(r.n)]));
-  assert.equal(byStatus.completed, 1);
+  // The seed already contains one settled card authorization.
+  assert.equal(byStatus.completed, 2);
   assert.equal(byStatus.rejected, 1);
 });

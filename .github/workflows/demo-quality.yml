@@ -1,4 +1,4 @@
-name: AVCU Demo Quality
+name: AVCU Platform Quality
 on:
   push:
     branches:
@@ -9,18 +9,40 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: avcu-demo-quality-${{ github.workflow }}-${{ github.ref }}
+  group: avcu-platform-quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: avcu
+          POSTGRES_PASSWORD: avcu
+          POSTGRES_DB: avcu
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U avcu -d avcu"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://avcu:avcu@127.0.0.1:5432/avcu
+      AVCU_TEST_ADMIN_URL: postgres://avcu:avcu@127.0.0.1:5432/avcu
     steps:
       - name: Check out source
         uses: actions/checkout@v4
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - name: Validate JavaScript syntax and demo smoke tests
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Validate syntax
         run: npm run check
+      - name: Run platform tests
+        run: npm test

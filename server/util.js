@@ -88,3 +88,32 @@ export function validPassword(password) {
 export function validEmail(email) {
   return typeof email === 'string' && email.length >= 5 && email.length <= 200 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 }
+
+// Universal username: 4-24 characters, starts with a letter, no ambiguous punctuation.
+export const USERNAME_RE = /^[a-z][a-z0-9._-]{3,23}$/;
+export function validUsername(username) {
+  return typeof username === 'string' && USERNAME_RE.test(username);
+}
+
+// Numeric member number (8 digits, never reused).
+export const MEMBER_NUMBER_RE = /^\d{8}$/;
+export function validMemberNumber(value) {
+  return typeof value === 'string' && MEMBER_NUMBER_RE.test(value);
+}
+
+export function validIdentifier(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 200) return false;
+  return validEmail(trimmed) || validUsername(trimmed.toLowerCase()) || validMemberNumber(trimmed);
+}
+
+// Verification codes are stored hashed, never in plain text.
+export function hashCode(code) {
+  return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+export function numericCode(digits = 6) {
+  const max = 10 ** digits;
+  return String(crypto.randomInt(0, max)).padStart(digits, '0');
+}

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102b4e">
+  <meta name="robots" content="noindex">
+  <title>AVCU Operations Console</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./js/ops.js"></script>
+</head>
+<body class="ops-body">
+  <a class="skip-link" href="#ops-main">Skip to content</a>
+
+  <section id="ops-auth" class="auth-screen hidden" aria-labelledby="ops-auth-heading">
+    <div class="auth-brand ops-auth-brand">
+      <a class="brand auth-brand-link" href="./index.html">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 44 44"><path d="M22 3 39 10v12c0 9-7 15-17 19C12 37 5 31 5 22V10L22 3Z" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m12 26 7-13 5 10 3-6 6 12H11l1-3Z" fill="currentColor"/><path d="M10 31h24" stroke="currentColor" stroke-width="2"/></svg></span>
+        <span class="brand-copy"><strong>AMERICAN VANGUARD</strong><small>CREDIT UNION</small></span>
+      </a>
+      <div class="auth-brand-copy">
+        <p class="eyebrow">AUTHORIZED STAFF ONLY</p>
+        <h2>Operations console<span class="title-period">.</span></h2>
+        <p class="auth-lede">Every action is permission-checked on the server and written to the audit trail. Sessions expire in 30 minutes.</p>
+        <ul class="auth-points">
+          <li><span aria-hidden="true">⌑</span> Separate staff identity and session</li>
+          <li><span aria-hidden="true">✓</span> Approval limits and separation of duties</li>
+          <li><span aria-hidden="true">≡</span> Full audit of member data access</li>
+        </ul>
+      </div>
+      <p class="auth-brand-foot">Fictional demonstration institution.</p>
+    </div>
+    <div class="auth-panel">
+      <div class="auth-card">
+        <form id="ops-login-form" class="auth-form" novalidate>
+          <h1 id="ops-auth-heading">Staff sign in</h1>
+          <p class="auth-sub">Use your operator email and password.</p>
+          <label for="ops-email">Operator email</label>
+          <input id="ops-email" type="email" autocomplete="username" required>
+          <label for="ops-password">Password</label>
+          <input id="ops-password" type="password" autocomplete="current-password" required>
+          <p class="form-error" id="ops-login-error" role="alert" hidden></p>
+          <button class="primary-button auth-submit" type="submit">Sign in <span>→</span></button>
+          <p class="auth-alt">Member? <a href="./index.html">Go to member banking</a></p>
+        </form>
+      </div>
+      <p class="auth-legal">Development seed operators: super@avcu.demo, manager@avcu.demo, teller@avcu.demo.</p>
+    </div>
+  </section>
+
+  <div class="app-frame hidden" id="ops-app">
+    <aside class="sidebar ops-sidebar" aria-label="Operations navigation">
+      <a class="brand" href="#" data-ops-view="queue">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 44 44"><path d="M22 3 39 10v12c0 9-7 15-17 19C12 37 5 31 5 22V10L22 3Z" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m12 26 7-13 5 10 3-6 6 12H11l1-3Z" fill="currentColor"/><path d="M10 31h24" stroke="currentColor" stroke-width="2"/></svg></span>
+        <span class="brand-copy"><strong>AVCU OPS</strong><small>OPERATIONS CONSOLE</small></span>
+      </a>
+      <div class="nav-label">QUEUES</div>
+      <nav class="nav-list" id="ops-nav">
+        <button class="nav-item active" data-ops-view="queue"><span class="nav-icon" aria-hidden="true">⌂</span><span>Dashboard</span></button>
+        <button class="nav-item" data-ops-view="approvals"><span class="nav-icon" aria-hidden="true">✓</span><span>Approvals</span></button>
+        <button class="nav-item" data-ops-view="members"><span class="nav-icon" aria-hidden="true">▤</span><span>Members</span></button>
+        <button class="nav-item" data-ops-view="cases"><span class="nav-icon" aria-hidden="true">☎</span><span>Support</span></button>
+      </nav>
+      <div class="nav-label nav-label-secondary">LEDGER</div>
+      <nav class="nav-list">
+        <button class="nav-item" data-ops-view="transactions"><span class="nav-icon" aria-hidden="true">≡</span><span>Transactions</span></button>
+        <button class="nav-item" data-ops-view="imports"><span class="nav-icon" aria-hidden="true">↥</span><span>History import</span></button>
+        <button class="nav-item" data-ops-view="lending"><span class="nav-icon" aria-hidden="true">◱</span><span>Lending &amp; deposits</span></button>
+      </nav>
+      <div class="nav-label nav-label-secondary">GOVERNANCE</div>
+      <nav class="nav-list">
+        <button class="nav-item" data-ops-view="ai"><span class="nav-icon" aria-hidden="true">✦</span><span>AI tasks</span></button>
+        <button class="nav-item" data-ops-view="audit"><span class="nav-icon" aria-hidden="true">◍</span><span>Audit log</span></button>
+        <button class="nav-item" data-ops-view="team"><span class="nav-icon" aria-hidden="true">⌑</span><span>Team</span></button>
+        <button class="nav-item" data-ops-view="integrations"><span class="nav-icon" aria-hidden="true">⇄</span><span>Integrations</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <button class="member-mini" data-ops-view="queue">
+          <span class="avatar" id="ops-avatar">--</span>
+          <span><strong id="ops-name">Operator</strong><small id="ops-role">—</small></span>
+          <span class="member-menu">⋯</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="ops-main" class="main-content" tabindex="-1">
+      <header class="topbar">
+        <div><p class="eyebrow" id="ops-eyebrow">OPERATIONS</p><h1 id="ops-title">Dashboard</h1></div>
+        <div class="top-actions">
+          <span class="local-badge"><span></span> Server-enforced</span>
+          <a class="icon-button" href="./index.html" title="Member application" aria-label="Open member application">↗</a>
+          <button class="icon-button" id="ops-logout" title="Sign out" aria-label="Sign out">×</button>
+        </div>
+      </header>
+      <div class="content-wrap">
+        <section class="page-view" data-ops-section="queue">
+          <div class="page-intro"><span class="page-icon">⌂</span><div><p class="eyebrow">TODAY</p><h2>Operations dashboard</h2><p>Queues, integration health, and what needs a decision.</p></div></div>
+          <div class="stat-grid" id="ops-stats"></div>
+          <section class="panel"><div class="panel-heading"><div><p class="eyebrow">INTEGRATIONS</p><h2>Provider status</h2></div></div><div id="ops-health" class="health-grid"></div></section>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="approvals">
+          <div class="page-intro"><span class="page-icon">✓</span><div><p class="eyebrow">DECISION QUEUE</p><h2>Approvals</h2><p>Approve, reject, escalate, or request information. Amount limits are enforced server-side.</p></div></div>
+          <div class="filter-bar panel">
+            <div><label for="approval-status">Status</label>
+              <select id="approval-status"><option value="pending">Pending</option><option value="escalated">Escalated</option><option value="info_requested">Info requested</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></div>
+            <button class="secondary-button" id="approval-refresh" type="button">Refresh</button>
+          </div>
+          <div id="approvals-list" class="queue-list"></div>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="members">
+          <div class="page-intro"><span class="page-icon">▤</span><div><p class="eyebrow">MEMBERSHIP</p><h2>Members</h2><p>Search by name, email, username, or member number.</p></div></div>
+          <form class="panel filter-bar" id="member-search-form">
+            <div><label for="member-search">Search</label><input id="member-search" placeholder="Name, email, username"></div>
+            <button class="secondary-button" type="submit">Search</button>
+          </form>
+          <div id="members-list" class="queue-list"></div>
+          <section class="panel" id="member-detail-panel" hidden>
+            <div class="panel-heading"><div><p class="eyebrow" id="member-detail-eyebrow">MEMBER</p><h2 id="member-detail-title">Member</h2></div><button class="text-button" id="member-detail-close">Close</button></div>
+            <div id="member-detail"></div>
+          </section>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="cases">
+          <div class="page-intro"><span class="page-icon">☎</span><div><p class="eyebrow">SUPPORT</p><h2>Support cases</h2><p>Reply, move to in progress, escalate, or resolve.</p></div></div>
+          <div id="ops-cases" class="queue-list"></div>
+          <section class="panel" id="ops-case-panel" hidden>
+            <div class="panel-heading"><div><p class="eyebrow" id="ops-case-eyebrow">CASE</p><h2 id="ops-case-title">Conversation</h2></div><button class="text-button" id="ops-case-close">Close</button></div>
+            <div id="ops-case-thread" class="case-thread"></div>
+            <form id="ops-case-reply" class="case-reply"><input id="ops-case-reply-input" maxlength="2000" placeholder="Reply to the member" required><button class="primary-button" type="submit">Send</button></form>
+            <div class="decision-actions" id="ops-case-actions"></div>
+          </section>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="transactions">
+          <div class="page-intro"><span class="page-icon">≡</span><div><p class="eyebrow">LEDGER</p><h2>Transactions</h2><p>Review recorded activity across members, including historical entries.</p></div></div>
+          <form class="panel filter-bar" id="txn-filter">
+            <div><label for="txn-search">Search</label><input id="txn-search" placeholder="Reference, payee, member"></div>
+            <div><label for="txn-status">Status</label><select id="txn-status"><option value="">All</option><option value="posted">Posted</option><option value="pending_approval">Pending approval</option><option value="pending_review">Pending review</option><option value="rejected">Rejected</option><option value="completed">Completed</option><option value="failed">Failed</option><option value="reversed">Reversed</option></select></div>
+            <button class="secondary-button" type="submit">Apply</button>
+          </form>
+          <section class="panel"><div class="panel-heading"><div><p class="eyebrow">MANUAL PROCESSING</p><h2>Pending items</h2></div></div><div id="pending-transactions" class="queue-list"></div></section>
+          <section class="panel"><div class="panel-heading"><div><p class="eyebrow">HISTORY</p><h2>Recorded transactions</h2></div></div><div id="ops-transactions" class="queue-list"></div></section>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="imports">
+          <div class="page-intro"><span class="page-icon">↥</span><div><p class="eyebrow">HISTORICAL DATA</p><h2>Enter or import history</h2><p>Preserve original dates, references, descriptions, and statuses. Only settled statuses change balances.</p></div></div>
+          <div class="form-layout">
+            <form class="panel form-panel" id="historical-form" novalidate>
+              <h3>Single historical entry</h3>
+              <label for="hist-member">Member (username, member number, or email)</label><input id="hist-member" required>
+              <label for="hist-account">Account number or suffix</label><input id="hist-account" required>
+              <label for="hist-type">Type</label><select id="hist-type"><option value="deposit">Deposit</option><option value="adjustment">Adjustment credit</option><option value="bill_pay">Bill payment</option><option value="card_auth">Card purchase</option></select>
+              <label for="hist-amount">Amount</label><div class="amount-input"><span>$</span><input id="hist-amount" type="number" min="0.01" step="0.01" required></div>
+              <label for="hist-date">Original date and time</label><input id="hist-date" type="datetime-local" required>
+              <label for="hist-status">Original status</label><select id="hist-status"><option value="posted">Posted</option><option value="completed">Completed</option><option value="pending_review">Pending review</option><option value="pending_approval">Pending approval</option><option value="rejected">Rejected</option><option value="failed">Failed</option><option value="declined">Declined</option><option value="reversed">Reversed</option></select>
+              <label for="hist-reference">External reference <span class="optional">(optional)</span></label><input id="hist-reference" maxlength="120">
+              <label for="hist-description">Description</label><input id="hist-description" maxlength="160" required>
+              <button class="primary-button" type="submit">Record historical entry <span>→</span></button>
+            </form>
+            <form class="panel form-panel" id="import-form" novalidate>
+              <h3>CSV import</h3>
+              <p class="muted">Header: <code>member,account,date,type,amount,status,reference,description</code>. Dates are ISO timestamps. The whole batch is rejected if any row is invalid.</p>
+              <label for="import-file">Choose a CSV file</label><input id="import-file" type="file" accept=".csv,text/csv">
+              <label for="import-text">Or paste rows</label><textarea id="import-text" rows="6" placeholder="member,account,date,type,amount,status,reference,description"></textarea>
+              <div class="form-note"><span>ⓘ</span> Financial amounts are converted to integer cents server-side. Imported rows are audited against your operator identity.</div>
+              <button class="primary-button" type="submit">Import history <span>→</span></button>
+            </form>
+          </div>
+          <section class="panel"><div class="panel-heading"><div><p class="eyebrow">BATCHES</p><h2>Import history</h2></div></div><div id="imports-list" class="queue-list"></div></section>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="lending">
+          <div class="page-intro"><span class="page-icon">◱</span><div><p class="eyebrow">LENDING &amp; DEPOSITS</p><h2>Loans, certificates, requests</h2><p>Portfolio view. Decisions happen in the approvals queue.</p></div></div>
+          <section class="panel"><div class="panel-heading"><div><p class="eyebrow">LOANS</p><h2>Loan book</h2></div></div><div id="ops-loans" class="queue-list"></div></section>
+          <section class="panel"><div class="panel-heading"><div><p class="eyebrow">CERTIFICATES</p><h2>Share certificate commitments</h2></div></div><div id="ops-investments" class="queue-list"></div></section>
+          <section class="panel"><div class="panel-heading"><div><p class="eyebrow">REQUESTS</p><h2>Member money requests</h2></div></div><div id="ops-requests" class="queue-list"></div></section>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="ai">
+          <div class="page-intro"><span class="page-icon">✦</span><div><p class="eyebrow">ASSISTANT</p><h2>AI task oversight</h2><p>Failed assistant tasks are visible here for manual follow-up. The assistant never posts money directly.</p></div></div>
+          <div class="filter-bar panel"><div><label for="ai-status">Status</label><select id="ai-status"><option value="">All</option><option value="failed">Failed</option><option value="succeeded">Succeeded</option><option value="pending">Pending</option></select></div><button class="secondary-button" id="ai-refresh" type="button">Refresh</button></div>
+          <div id="ai-tasks" class="queue-list"></div>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="audit">
+          <div class="page-intro"><span class="page-icon">◍</span><div><p class="eyebrow">GOVERNANCE</p><h2>Audit log</h2><p>Append-only record of member and operator actions.</p></div></div>
+          <div id="audit-list" class="queue-list"></div>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="team">
+          <div class="page-intro"><span class="page-icon">⌑</span><div><p class="eyebrow">ACCESS</p><h2>Operators</h2><p>Super admins manage staff access. Normal operators cannot view this section.</p></div></div>
+          <div class="form-layout">
+            <form class="panel form-panel" id="operator-form" novalidate>
+              <h3>Add an operator</h3>
+              <label for="op-name">Full name</label><input id="op-name" required>
+              <label for="op-email">Email</label><input id="op-email" type="email" required>
+              <label for="op-role">Role</label><select id="op-role"><option value="operator">Normal operator</option><option value="management">Management</option><option value="super_admin">Super admin</option></select>
+              <label for="op-password">Temporary password</label><input id="op-password" type="password" minlength="10" required>
+              <button class="primary-button" type="submit">Create operator <span>→</span></button>
+            </form>
+            <aside class="panel side-summary"><p class="eyebrow">TIERS</p><h3>What each role can do</h3><ul class="simple-steps">
+              <li><span>1</span><div><strong>Normal operator</strong><p>Queues, member lookup, support, low-tier approvals.</p></div></li>
+              <li><span>2</span><div><strong>Management</strong><p>Approvals up to $10,000, historical entry, imports, audit.</p></div></li>
+              <li><span>3</span><div><strong>Super admin</strong><p>Unlimited approvals, reversals, operator administration.</p></div></li>
+            </ul></aside>
+          </div>
+          <div id="operators-list" class="queue-list"></div>
+        </section>
+
+        <section class="page-view hidden" data-ops-section="integrations">
+          <div class="page-intro"><span class="page-icon">⇄</span><div><p class="eyebrow">INTEGRATIONS</p><h2>Provider readiness</h2><p>Sandbox adapters are clearly labeled. Real money movement requires authorized partners.</p></div></div>
+          <div id="integration-cards" class="health-grid"></div>
+          <div class="panel"><p class="muted">Webhook verification, timeouts, retries, and circuit breakers are enforced in the integration layer. Production requires per-provider secrets and authorized financial-institution relationships.</p></div>
+        </section>
+      </div>
+      <footer class="app-footer"><span>© 2026 American Vanguard Credit Union <span class="footer-dot">·</span> Operations console</span><span><span class="footer-lock">⌑</span> Actions are audited</span></footer>
+    </main>
+  </div>
+
+  <dialog id="decision-dialog" class="app-dialog" aria-labelledby="decision-title">
+    <form method="dialog" class="dialog-card" id="decision-form">
+      <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+      <p class="eyebrow" id="decision-eyebrow">DECISION</p>
+      <h2 id="decision-title">Record decision</h2>
+      <p id="decision-description"></p>
+      <div id="decision-summary" class="dialog-summary"></div>
+      <label for="decision-reason">Reason / note</label>
+      <textarea id="decision-reason" rows="3" maxlength="300" placeholder="Required for rejections"></textarea>
+      <div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" id="decision-confirm" value="confirm">Confirm decision</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+  <div class="screen-reader-only" id="live-announcer" aria-live="polite"></div>
+</body>
+</html>

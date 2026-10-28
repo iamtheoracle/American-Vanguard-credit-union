@@ -1,15 +1,16 @@
 {
   "name": "american-vanguard-credit-union",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "AVCU full-stack digital banking platform (development)",
+  "description": "AVCU digital banking platform: Express API, PostgreSQL ledger, member and operations applications",
   "scripts": {
     "start": "node server/index.js",
     "migrate": "node server/migrate.js",
     "seed": "node server/seed.js",
-    "check": "node --check app.js && node --check operator.js && node --check login.js && node --check chat.js && node --check server/index.js",
-    "test": "node --test \"tests/**/*.test.mjs\""
+    "check": "node --check server/index.js && node --check server/routes-member.js && node --check server/routes-operator.js && node --check server/services-member.js && node --check server/services-finance.js && node --check server/services-operator.js && node --check server/approvals.js && node --check server/ledger.js && node --check server/ai/index.js && node --check server/integrations/index.js && node --check js/api.js && node --check js/ui.js && node --check js/auth.js && node --check js/app.js && node --check js/chat.js && node --check js/ops.js",
+    "test": "node --test --test-concurrency=1 \"tests/**/*.test.mjs\"",
+    "verify": "npm run check && npm test"
   },
   "engines": {
     "node": ">=22"

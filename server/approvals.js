@@ -1,6 +1,7 @@
 import { query, withTx, audit } from './db.js';
 import { POLICY, requiredApprovalRoleForAmount } from './policy.js';
-import { postTwoSided, reverseTransaction } from './ledger.js';
+import { postTwoSided, createTransaction, reverseTransaction } from './ledger.js';
+import { notify } from './notify.js';
 
 /**
  * Approval engine. Approvals are the only path through which pending money
@@ -70,7 +71,17 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
       throw new ApprovalError(`Item already decided (${approval.status})`, 409, 'already_decided');
     }
 
-    const requiredRole = approval.status === 'escalated' ? 'management' : approval.required_role;
+    const requiredRole = approval.status === 'escalated' ? 'super_admin' : approval.required_role;
+    const financial = approval.item_type === 'transaction' || approval.item_type === 'loan';
+    const financialAmount = approval.txn_amount || Number(approval.payload?.principalCents) || 0;
+
+    // Guard management over their cap before role escalation: the clearer error
+    // is an amount limit, not a missing role.
+    if (action === 'approve' && financial && operator.role === 'management' &&
+        financialAmount > POLICY.MANAGEMENT_APPROVAL_CAP_CENTS) {
+      throw new ApprovalError('Amount exceeds management approval limit; escalate to a super admin', 403, 'over_limit');
+    }
+
     if (!roleSatisfies(operator.role, requiredRole)) {
       throw new ApprovalError(`This decision requires the ${requiredRole} role`, 403, 'insufficient_role');
     }
@@ -81,18 +92,11 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
       throw new ApprovalError('Separation of duties: you may not decide an item you submitted', 403, 'self_approval');
     }
 
-    const financial = approval.item_type === 'transaction';
     if (action === 'reject' && financial && (!reason || !String(reason).trim())) {
       throw new ApprovalError('A written reason is required to reject a financial action', 400, 'reason_required');
     }
     if (action === 'reject' && approval.item_type === 'membership' && (!reason || !String(reason).trim())) {
       throw new ApprovalError('A written reason is required to reject a membership application', 400, 'reason_required');
-    }
-
-    // Guard management over their cap: management may not approve beyond the cap.
-    if (action === 'approve' && financial && operator.role === 'management' &&
-        approval.txn_amount > POLICY.MANAGEMENT_APPROVAL_CAP_CENTS) {
-      throw new ApprovalError('Amount exceeds management approval limit; escalate to a super admin', 403, 'over_limit');
     }
 
     let outcome = null;
@@ -101,7 +105,15 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
         outcome = await executeApprovedTransaction(client, approval, operator);
       } else if (approval.item_type === 'membership') {
         outcome = await executeApprovedMembership(client, approval, operator);
+      } else if (approval.item_type === 'loan') {
+        outcome = await executeApprovedLoan(client, approval, operator);
       }
+    }
+    if (action === 'reject' && approval.item_type === 'loan') {
+      await client.query(
+        `UPDATE loans SET status = 'declined', decision_reason = $1, approved_by = $2
+          WHERE id = $3 AND status = 'pending'`,
+        [reason || null, operator.id, approval.payload?.loanId]);
     }
 
     const nextStatus = action === 'approve' ? 'approved'
@@ -122,6 +134,21 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
         reason: reason || null, requiredRole }
     });
 
+    if (approval.member_id && ['approve', 'reject', 'request_info'].includes(action)) {
+      const label = approval.item_type === 'membership' ? 'membership application'
+        : approval.item_type === 'loan' ? 'loan application' : 'review item';
+      await notify(client, {
+        memberId: approval.member_id,
+        kind: action === 'approve' ? 'success' : action === 'reject' ? 'warning' : 'info',
+        title: action === 'approve' ? `Your ${label} was approved`
+          : action === 'reject' ? `Your ${label} was declined` : 'More information needed',
+        body: action === 'request_info'
+          ? (reason || 'An operator requested additional information on your application.')
+          : action === 'reject' ? (reason || 'Contact support if you have questions.')
+            : 'The decision is recorded and visible in your account.'
+      });
+    }
+
     return { approval: updated.rows[0], outcome };
   });
   return result;
@@ -134,16 +161,70 @@ async function executeApprovedTransaction(client, approval, operator) {
   if (!['pending_approval', 'pending_review'].includes(txn.status)) {
     throw new ApprovalError(`Transaction already in state ${txn.status}`, 409, 'already_processed');
   }
+  const amountCents = Number(txn.amount_cents);
   await postTwoSided(client, {
     transactionId: txn.id,
     fromAccountId: txn.from_account_id,
     toAccountId: txn.to_account_id,
-    amountCents: txn.amount_cents,
-    memo: txn.memo || txn.payee
+    amountCents,
+    memo: txn.memo || txn.payee,
+    occurredAt: txn.occurred_at
   });
-  await client.query('UPDATE transactions SET processed_by = $1, updated_at = now() WHERE id = $2',
+  await client.query('UPDATE transactions SET processed_by = $1, posted_at = now(), updated_at = now() WHERE id = $2',
     [operator.id, txn.id]);
+  const { rows: account } = await client.query(
+    `SELECT member_id FROM accounts WHERE id = $1`, [txn.to_account_id || txn.from_account_id]);
+  const memberId = account[0]?.member_id;
+  if (memberId) {
+    await notify(client, {
+      memberId, kind: 'payment', title: 'Transaction approved',
+      body: `A ${(Number(txn.amount_cents) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} ${String(txn.type).replace(/_/g, ' ')} posted after review.`
+    });
+    if (['deposit', 'bill_pay', 'request_payment', 'transfer'].includes(txn.type)) {
+      const points = Math.floor(Number(txn.amount_cents) / 100);
+      if (points > 0) {
+        await client.query(
+          `INSERT INTO reward_entries (member_id, points, reason, transaction_id)
+           VALUES ($1,$2,$3,$4)`, [memberId, points, 'Relationship rewards', txn.id]);
+      }
+    }
+  }
   return { transactionId: txn.id, status: 'posted' };
+}
+
+async function executeApprovedLoan(client, approval, operator) {
+  const loanId = approval.payload?.loanId;
+  const { rows } = await client.query('SELECT * FROM loans WHERE id = $1 FOR UPDATE', [loanId]);
+  const loan = rows[0];
+  if (!loan) throw new ApprovalError('Linked loan missing', 409);
+  if (loan.status !== 'pending') throw new ApprovalError(`Loan already in state ${loan.status}`, 409, 'already_processed');
+
+  const { rows: accountRows } = await client.query(
+    `SELECT * FROM accounts WHERE id = $1 AND member_id = $2 AND status = 'open'`,
+    [loan.disbursement_account_id, loan.member_id]);
+  const account = accountRows[0];
+  if (!account) throw new ApprovalError('Disbursement account is no longer open', 409, 'account_closed');
+
+  const principalCents = Number(loan.principal_cents);
+  const tx = await createTransaction(client, {
+    type: 'loan_disbursement', toAccountId: account.id, amountCents: principalCents,
+    status: 'posted', memo: `Loan disbursement · ${loan.reference}`,
+    description: 'Approved loan disbursement (recorded ledger)',
+    submittedBy: operator.id, submittedByType: 'operator', source: 'operator'
+  });
+  await postTwoSided(client, {
+    transactionId: tx.id, fromAccountId: null, toAccountId: account.id,
+    amountCents: principalCents, memo: `Loan disbursement ${loan.reference}`
+  });
+  await client.query(
+    `UPDATE loans SET status = 'active', approved_by = $1, approved_at = now(),
+       next_due_date = (current_date + interval '30 days')::date, transaction_id = $2
+     WHERE id = $3`, [operator.id, tx.id, loan.id]);
+  await notify(client, {
+    memberId: loan.member_id, kind: 'loan', title: 'Loan approved and disbursed',
+    body: `${loan.reference} was approved. Funds are recorded in your account.`
+  });
+  return { loanId: loan.id, status: 'active', transactionId: tx.id, reference: tx.reference };
 }
 
 async function executeApprovedMembership(client, approval, operator) {

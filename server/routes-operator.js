@@ -7,6 +7,9 @@ import {
 import { rateLimiter, clientKey, validEmail, validPassword, PASSWORD_MIN } from './util.js';
 import { decideApproval, reversePostedTransaction } from './approvals.js';
 import { integrationHealth } from './integrations/index.js';
+import {
+  recordHistoricalTransaction, importHistoricalTransactions, listImports, processTransaction
+} from './services-operator.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -53,7 +56,7 @@ const TIERS = {
 
 router.get('/operator/queue', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const [approvals, cases, aiFailed, membership, health] = await Promise.all([
+    const [approvals, cases, aiFailed, membership, health, loans, requests, pendingTxns] = await Promise.all([
       query(`SELECT count(*) FILTER (WHERE status = 'pending') AS pending,
                     count(*) FILTER (WHERE status = 'escalated') AS escalated
              FROM approvals`),
@@ -62,13 +65,19 @@ router.get('/operator/queue', ...guard('management', 'operator'), async (req, re
              FROM support_cases`),
       query(`SELECT count(*) AS failed FROM ai_tasks WHERE status = 'failed'`),
       query(`SELECT count(*) AS pending FROM members WHERE status = 'pending'`),
-      integrationHealth()
+      integrationHealth(),
+      query(`SELECT count(*) AS pending FROM loans WHERE status = 'pending'`),
+      query(`SELECT count(*) AS pending FROM payment_requests WHERE status = 'pending'`),
+      query(`SELECT count(*) AS pending FROM transactions WHERE status IN ('pending_approval','pending_review')`)
     ]);
     res.json({
       approvals: { pending: Number(approvals.rows[0].pending), escalated: Number(approvals.rows[0].escalated) },
       cases: { open: Number(cases.rows[0].open), escalated: Number(cases.rows[0].escalated) },
       aiFailed: Number(aiFailed.rows[0].failed),
       membershipPending: Number(membership.rows[0].pending),
+      loansPending: Number(loans.rows[0].pending),
+      requestsPending: Number(requests.rows[0].pending),
+      transactionsPending: Number(pendingTxns.rows[0].pending),
       integrations: health
     });
   } catch (error) { next(error); }
@@ -145,7 +154,9 @@ router.get('/operator/members', ...guard('management', 'operator'), async (req, 
     const params = search ? [`%${search}%`] : [];
     const where = search ? 'WHERE (m.full_name ILIKE $1 OR m.email ILIKE $1)' : '';
     const { rows } = await query(
-      `SELECT m.id, m.email, m.full_name AS "fullName", m.status, m.created_at AS "createdAt",
+      `SELECT m.id, m.email, m.full_name AS "fullName", m.username,
+              m.member_number AS "memberNumber", m.email_verified AS "emailVerified",
+              m.status, m.created_at AS "createdAt",
               (SELECT coalesce(sum(a.balance_cents),0) FROM accounts a WHERE a.member_id = m.id) AS "totalCents"
        FROM members m ${where} ORDER BY m.created_at DESC LIMIT 100`, params);
     res.json({ members: rows });
@@ -155,7 +166,10 @@ router.get('/operator/members', ...guard('management', 'operator'), async (req, 
 router.get('/operator/members/:id', ...guard('management', 'operator'), async (req, res, next) => {
   try {
     const { rows } = await query(
-      'SELECT id, email, full_name AS "fullName", status, created_at AS "createdAt" FROM members WHERE id = $1',
+      `SELECT id, email, full_name AS "fullName", username, member_number AS "memberNumber",
+              email_verified AS "emailVerified", phone, mailing_address AS "mailingAddress",
+              status, created_at AS "createdAt", last_login_at AS "lastLoginAt"
+         FROM members WHERE id = $1`,
       [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Member not found' });
     const member = rows[0];
@@ -165,12 +179,28 @@ router.get('/operator/members/:id', ...guard('management', 'operator'), async (r
       action: 'member.viewed', entityType: 'member', entityId: member.id
     });
     const accounts = await query(
-      `SELECT id, name, kind, suffix, balance_cents AS "balanceCents", status FROM accounts WHERE member_id = $1`, [member.id]);
+      `SELECT id, name, kind, suffix, account_number AS "accountNumber",
+              routing_number AS "routingNumber", balance_cents AS "balanceCents", status,
+              opened_at AS "openedAt"
+         FROM accounts WHERE member_id = $1 ORDER BY created_at`, [member.id]);
     const transactions = await query(
-      `SELECT t.reference, t.type, t.status, t.amount_cents AS "amountCents", t.created_at AS "createdAt", t.memo, t.payee
+      `SELECT DISTINCT t.id, t.reference, t.external_reference AS "externalReference",
+              t.type, t.status, t.amount_cents AS "amountCents",
+              t.occurred_at AS "occurredAt", t.source, t.memo, t.payee, t.description
        FROM transactions t JOIN accounts a ON (a.id = t.from_account_id OR a.id = t.to_account_id)
-       WHERE a.member_id = $1 ORDER BY t.created_at DESC LIMIT 50`, [member.id]);
-    res.json({ member, accounts: accounts.rows, transactions: transactions.rows });
+       WHERE a.member_id = $1 ORDER BY t.occurred_at DESC LIMIT 100`, [member.id]);
+    const loans = await query(
+      `SELECT id, reference, product, principal_cents AS "principalCents",
+              balance_cents AS "balanceCents", status, created_at AS "createdAt"
+         FROM loans WHERE member_id = $1 ORDER BY created_at DESC`, [member.id]);
+    const certificates = await query(
+      `SELECT id, amount_cents AS "amountCents", term_months AS "termMonths",
+              apy_bps AS "apyBps", status, opened_at AS "openedAt", matures_at AS "maturesAt"
+         FROM certificate_commitments WHERE member_id = $1 ORDER BY opened_at DESC`, [member.id]);
+    res.json({
+      member, accounts: accounts.rows, transactions: transactions.rows,
+      loans: loans.rows, certificates: certificates.rows
+    });
   } catch (error) { next(error); }
 });
 
@@ -253,6 +283,126 @@ router.get('/operator/ai-tasks', ...guard('management', 'super_admin'), async (r
 router.get('/operator/integrations', ...guard('management', 'super_admin'), async (req, res, next) => {
   try {
     res.json({ integrations: await integrationHealth() });
+  } catch (error) { next(error); }
+});
+
+// ---- transactions, historical entry, imports -------------------------------------------
+router.get('/operator/transactions', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const params = [];
+    const where = [];
+    const status = String(req.query.status || '');
+    if (/^[a-z_]{3,20}$/.test(status)) { params.push(status); where.push(`t.status = $${params.length}`); }
+    const search = String(req.query.search || '').slice(0, 80);
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(t.reference ILIKE $${params.length} OR t.external_reference ILIKE $${params.length}
+        OR t.memo ILIKE $${params.length} OR t.payee ILIKE $${params.length}
+        OR m.full_name ILIKE $${params.length} OR m.username ILIKE $${params.length}
+        OR m.member_number = $${params.length + 1})`);
+      params.push(search);
+    }
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 300);
+    const { rows } = await query(
+      `SELECT DISTINCT t.id, t.reference, t.external_reference AS "externalReference",
+              t.type, t.status, t.amount_cents AS "amountCents", t.source,
+              t.memo, t.payee, t.description,
+              t.occurred_at AS "occurredAt", t.created_at AS "createdAt",
+              t.decision_reason AS "decisionReason",
+              m.full_name AS "memberName", m.username, m.member_number AS "memberNumber",
+              fa.name AS "fromAccountName", ta.name AS "toAccountName"
+         FROM transactions t
+         JOIN accounts a ON (a.id = t.from_account_id OR a.id = t.to_account_id)
+         JOIN members m ON m.id = a.member_id
+         LEFT JOIN accounts fa ON fa.id = t.from_account_id
+         LEFT JOIN accounts ta ON ta.id = t.to_account_id
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY t.occurred_at DESC LIMIT ${limit}`, params);
+    res.json({ transactions: rows });
+  } catch (error) { next(error); }
+});
+
+router.post('/operator/transactions', ...guard('management'), async (req, res, next) => {
+  try {
+    const result = await recordHistoricalTransaction({ operator: req.operator, body: req.body || {} });
+    res.status(201).json(result);
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
+    next(error);
+  }
+});
+
+router.post('/operator/transactions/:id/process', ...guard('management'), async (req, res, next) => {
+  try {
+    const result = await processTransaction({
+      operator: req.operator, transactionId: req.params.id,
+      action: req.body?.action, reason: req.body?.reason
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
+    next(error);
+  }
+});
+
+router.get('/operator/imports', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    res.json({ batches: await listImports(req.query.limit) });
+  } catch (error) { next(error); }
+});
+
+router.post('/operator/imports', ...guard('management'), async (req, res, next) => {
+  try {
+    const result = await importHistoricalTransactions({
+      operator: req.operator, rows: req.body?.rows, filename: req.body?.filename
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
+    next(error);
+  }
+});
+
+// ---- lending and investment oversight --------------------------------------------------
+router.get('/operator/loans', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT l.id, l.reference, l.product, l.principal_cents AS "principalCents",
+              l.balance_cents AS "balanceCents", l.apr_bps AS "aprBps", l.term_months AS "termMonths",
+              l.status, l.purpose, l.created_at AS "createdAt", l.next_due_date AS "nextDueDate",
+              m.full_name AS "memberName", m.username, m.member_number AS "memberNumber"
+         FROM loans l JOIN members m ON m.id = l.member_id
+        ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 200`);
+    res.json({ loans: rows });
+  } catch (error) { next(error); }
+});
+
+router.get('/operator/investments', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT c.id, c.amount_cents AS "amountCents", c.term_months AS "termMonths",
+              c.apy_bps AS "apyBps", c.status, c.opened_at AS "openedAt", c.matures_at AS "maturesAt",
+              m.full_name AS "memberName", m.username, a.account_number AS "accountNumber"
+         FROM certificate_commitments c
+         JOIN members m ON m.id = c.member_id
+         JOIN accounts a ON a.id = c.account_id
+        ORDER BY c.opened_at DESC LIMIT 200`);
+    res.json({ commitments: rows });
+  } catch (error) { next(error); }
+});
+
+router.get('/operator/requests', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT r.id, r.amount_cents AS "amountCents", r.memo, r.status,
+              r.created_at AS "createdAt", r.payer_email AS "payerEmail",
+              rm.full_name AS "requesterName", rm.username AS "requesterUsername",
+              pm.full_name AS "payerName", pm.username AS "payerUsername"
+         FROM payment_requests r
+         JOIN members rm ON rm.id = r.requester_member_id
+         LEFT JOIN members pm ON pm.id = r.payer_member_id
+        ORDER BY r.created_at DESC LIMIT 200`);
+    res.json({ requests: rows });
   } catch (error) { next(error); }
 });
 
