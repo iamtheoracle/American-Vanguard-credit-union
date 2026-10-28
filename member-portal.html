@@ -40,23 +40,15 @@
       <div class="stat-grid"><article class="stat-card"><small>Total share balance</small><strong id="total-balance">$0.00</strong><span>Account ledger</span></article><article class="stat-card"><small>Membership tier</small><strong id="membership-tier">—</strong><span id="tier-detail">Activity based</span></article><article class="stat-card"><small>Debit card</small><strong id="card-status">—</strong><span id="card-last4">Card details</span></article></div>
       <div class="content-grid">
         <section class="panel"><div class="section-head"><h2>Share accounts</h2><button class="text-button" id="refresh-button" type="button">Refresh</button></div><div id="accounts-list" class="account-list"></div></section>
-        <section class="panel"><h2>Move money between shares</h2><form id="transfer-form" class="stack">
+        <section class="panel"><h2>Internal share transfer</h2><p class="muted small">Transfers are recorded in the AVCU application ledger only. This does not move money through an external bank or payment network.</p><form id="transfer-form" class="stack">
           <label for="transfer-from">From account</label><select id="transfer-from" required></select>
           <label for="transfer-to">To account</label><select id="transfer-to" required></select>
           <label for="transfer-amount">Amount (USD)</label><input id="transfer-amount" type="number" min="0.01" max="100000" step="0.01" required>
           <label for="transfer-memo">Description (optional)</label><input id="transfer-memo" maxlength="120">
-          <button class="primary" type="submit">Submit transfer</button>
+          <button class="primary" type="submit">Submit internal transfer</button>
         </form></section>
-        <section class="panel"><h2>Deposit request</h2><form id="deposit-form" class="stack">
-          <label for="deposit-account">Deposit into</label><select id="deposit-account" required></select>
-          <label for="deposit-amount">Amount (USD)</label><input id="deposit-amount" type="number" min="0.01" max="100000" step="0.01" required>
-          <label for="deposit-description">Description</label><input id="deposit-description" maxlength="120" required>
-          <button class="primary" type="submit">Submit deposit</button>
-          <p class="muted small">Deposit requests are not connected to a check-capture or payment network. Do not submit a request expecting funds to be deposited.</p>
-        </form></section>
-        <section class="panel"><h2>Debit card controls</h2><p class="muted">Card controls are not connected to a live card processor. Do not rely on this control to freeze a real card.</p><button id="freeze-button" class="secondary" type="button">Freeze card</button>
-          <form id="purchase-form" class="stack top-gap"><label for="purchase-merchant">Test merchant</label><input id="purchase-merchant" value="Harbor Market" maxlength="80" required><label for="purchase-amount">Amount (USD)</label><input id="purchase-amount" type="number" value="12.50" min="0.01" max="10000" step="0.01" required><button class="secondary" type="submit">Test authorization</button></form>
-        </section>
+        <section class="panel"><h2>Deposits</h2><p class="muted">Unavailable — a verified deposit-capture provider is not connected. No deposit can be submitted from this portal.</p><button class="secondary" type="button" disabled>Deposits unavailable</button></section>
+        <section class="panel"><h2>Debit card</h2><p class="muted">No live card issuer or processor is connected. Card status shown here is not a live issuer status. Use your card issuer's official contact details for urgent card issues.</p><button class="secondary" type="button" disabled>Card controls unavailable</button></section>
         <section class="panel wide"><div class="section-head"><h2>Recent transactions</h2><span class="tag">API DATA</span></div><div id="transactions-list" class="table-wrap"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Notifications</h2><button id="read-notifications" class="text-button" type="button">Mark all read</button></div><div id="notifications-list" class="notification-list"></div></section>
       </div>
