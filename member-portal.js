@@ -58,11 +58,22 @@
     try { await loadDashboard(); showMessage('dashboard-message','Account information refreshed.'); }
     catch (error) { showMessage('dashboard-message',error.message,true); }
   }
+  const rememberedIdentifier = (() => { try { return localStorage.getItem('avcu.remembered-member-identifier') || ''; } catch { return ''; } })();
+  $('login-identifier').value = rememberedIdentifier;
+  $('remember-identifier').checked = Boolean(rememberedIdentifier);
+  $('remember-identifier').addEventListener('change', () => {
+    if (!$('remember-identifier').checked) {
+      try { localStorage.removeItem('avcu.remembered-member-identifier'); } catch {}
+    }
+  });
+  $('forgot-password').addEventListener('click', () => {
+    showMessage('auth-message', 'Password recovery is not connected yet. For this prototype, contact the authorized system operator; do not share your password or verification codes.');
+  });
   $('show-login').addEventListener('click', () => switchAuth(false));
   $('show-register').addEventListener('click', () => switchAuth(true));
   $('login-form').addEventListener('submit', async event => {
     event.preventDefault(); showMessage('auth-message','Signing in…');
-    try { const data = await post('/auth/login',{identifier:$('login-identifier').value,password:$('login-password').value}); member=data.member; setAuthenticated(true); await refresh(); }
+    try { const identifier = $('login-identifier').value.trim(); if ($('remember-identifier').checked) { try { localStorage.setItem('avcu.remembered-member-identifier', identifier); } catch {} } else { try { localStorage.removeItem('avcu.remembered-member-identifier'); } catch {} } const data = await post('/auth/login',{identifier,password:$('login-password').value}); member=data.member; setAuthenticated(true); await refresh(); }
     catch(error) { showMessage('auth-message',error.message,true); }
   });
   $('register-form').addEventListener('submit', async event => {
