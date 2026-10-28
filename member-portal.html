@@ -18,7 +18,10 @@
       <form id="login-form" class="stack">
         <label for="login-identifier">Member number or email</label><input id="login-identifier" type="text" inputmode="text" autocomplete="username" placeholder="10-digit member number or email" required>
         <label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required>
+        <label class="remember-row"><input id="remember-identifier" type="checkbox"> Remember member number or email on this device</label>
         <button class="primary" type="submit">Sign in</button>
+        <button class="text-button recovery-link" id="forgot-password" type="button">Forgot your password?</button>
+        <p class="form-note">Device biometrics are not enabled in this prototype. Do not save your password in this app.</p>
       </form>
       <form id="register-form" class="stack hidden">
         <label for="register-name">Full name</label><input id="register-name" maxlength="100" autocomplete="name" required>
@@ -28,6 +31,7 @@
         <p class="muted small">Your application stays pending until an authorized operator reviews it.</p>
       </form>
       <p id="auth-message" class="notice" role="status" aria-live="polite"></p>
+      <div class="legacy-links"><a href="/#more" id="locations-link">Locations</a><a href="/#more" id="contact-link">Contact</a><a href="/#more" id="privacy-link">Privacy &amp; demo information</a></div>
     </section>
 
     <section id="dashboard" class="hidden">
