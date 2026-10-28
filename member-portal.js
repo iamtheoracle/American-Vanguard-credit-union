@@ -67,7 +67,7 @@
   });
   $('register-form').addEventListener('submit', async event => {
     event.preventDefault(); showMessage('auth-message','Submitting application…');
-    try { const data = await post('/auth/register',{fullName:$('register-name').value,email:$('register-email').value,password:$('register-password').value}); showMessage('auth-message',data.message || 'Application received. You can sign in to track it.'); switchAuth(false); $('login-email').value=$('register-email').value; }
+    try { const data = await post('/auth/register',{fullName:$('register-name').value,email:$('register-email').value,password:$('register-password').value}); switchAuth(false); $('login-email').value=$('register-email').value; showMessage('auth-message',data.message || 'Application received. You can sign in to track it.'); }
     catch(error) { showMessage('auth-message',error.message,true); }
   });
   $('logout-button').addEventListener('click', async () => {
