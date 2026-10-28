@@ -20,6 +20,7 @@
   };
   let state = loadState();
   let currentView = 'home';
+  let activityRangeDays = 15;
   let pendingAction = null;
   let toastTimer = null;
 
@@ -99,7 +100,7 @@
   }
 
   function setView(view) {
-    if (!['home', 'move', 'deposit', 'card', 'more', 'alerts', 'messages', 'contact', 'about'].includes(view)) return;
+    if (!['home', 'move', 'deposit', 'card', 'more', 'activity', 'alerts', 'messages', 'contact', 'about'].includes(view)) return;
     currentView = view;
     $$('.page-view').forEach(el => el.classList.toggle('hidden', el.dataset.view !== view));
     $$('[data-nav]').forEach(button => {
@@ -113,6 +114,7 @@
       deposit: ['DEPOSIT', 'Deposit a sample check'],
       card: ['CARD CONTROLS', 'Your debit card'],
       more: ['MEMBER RESOURCES', 'More from AVCU'],
+      activity: ['ACCOUNT ACTIVITY', 'Transaction history'],
       alerts: ['MEMBER NOTIFICATIONS', 'Alerts'],
       messages: ['MEMBER SUPPORT', 'Messages'],
       contact: ['CONTACT AVCU', 'Contact'],
@@ -122,6 +124,7 @@
     $('#page-title').textContent = copy[1];
     if (view === 'move') renderMoveBalances();
     if (view === 'more') renderAllTransactions();
+    if (view === 'activity') renderActivity();
     $('#main-content').focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   }
@@ -163,6 +166,18 @@
     $('#all-transactions').innerHTML = rows.length ? rows.map(transactionMarkup).join('') : '<p class="empty-state">No activity in the demo ledger yet.</p>';
     $('#ledger-count').textContent = String(state.transactions.length);
     $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Active';
+  }
+
+  function renderActivity() {
+    $('#activity-balance').textContent = money(total());
+    const cutoff = activityRangeDays === null ? 0 : Date.now() - activityRangeDays * 24 * 60 * 60 * 1000;
+    const rows = [...state.transactions]
+      .filter(transaction => activityRangeDays === null || new Date(transaction.date).getTime() >= cutoff)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    $('#activity-transactions').innerHTML = rows.length ? rows.map(transactionMarkup).join('') : '<p class="empty-state">No transactions found for this date range.</p>';
+    $('#activity-range-label').textContent = activityRangeDays === null ? 'Showing all demo activity' : 'Transactions from the previous 15 days';
+    $('#activity-15-days').setAttribute('aria-pressed', String(activityRangeDays === 15));
+    $('#activity-all-dates').setAttribute('aria-pressed', String(activityRangeDays === null));
   }
 
   function renderCard() {
@@ -441,6 +456,8 @@
     $('#simulate-purchase').addEventListener('click', simulatePurchase);
     $('#reset-demo').addEventListener('click', resetDemo);
     $('#help-button').addEventListener('click', showHelp);
+    $('#activity-15-days').addEventListener('click', () => { activityRangeDays = 15; renderActivity(); });
+    $('#activity-all-dates').addEventListener('click', () => { activityRangeDays = null; renderActivity(); });
     const demoMessageForm = $('#demo-message-form');
     if (demoMessageForm) demoMessageForm.addEventListener('submit', event => {
       event.preventDefault();
