@@ -9,7 +9,7 @@ AVCU is a software prototype with a responsive browser demo and a separate Expre
 - Responsive member-facing demo interface with simulated shares, transfers, bill payments, deposits, card freeze/unfreeze, activity, and a clear demo disclosure.
 - Separate authenticated API-connected member portal at `/member-portal.html` for registration, sign-in, accounts, transactions, transfers, deposits, sandbox card controls, membership tier, and notifications.
 - Separate role-checked operator console at `/operator-portal.html` for approval queue, membership tiers and audited overrides, and email delivery history.
-- Express API for member registration/login, sessions, account and transaction endpoints, operator workflows, server-enforced roles, approval separation of duties, ledger entries, audit events, idempotency, and sandbox integrations.
+- Express API for member registration/login, unique 10-digit numeric member IDs (separate from email), sessions, account and transaction endpoints, operator workflows, server-enforced roles, approval separation of duties, ledger entries, audit events, idempotency, and sandbox integrations.
 - PostgreSQL migrations and seed data for API development.
 - Activity-based membership tiers: New Member, Active Member, Established Member, Priority Service, and Review Required; tier changes are recorded in history and manual overrides are audited.
 - Gmail API notification adapter for membership and transaction status events, with delivery history. Gmail delivery is skipped until OAuth environment variables are configured.
@@ -65,5 +65,7 @@ Member endpoint: `GET /api/membership-tier`.
 `npm run test:api` runs API integration tests against PostgreSQL and creates temporary test databases; the configured test database user must have permission to create and drop databases.
 
 ## Security and production boundary
+
+Members receive a unique 10-digit numeric member ID at registration. They can sign in with that ID or their email address; neither is a substitute for the password. Google sign-in is not configured in this prototype.
 
 The API uses password hashing, expiring server-side sessions, role checks, audit events, approval workflows, integer cents, and a PostgreSQL ledger. These controls are useful development foundations, not a production security certification. Before any real use, the system still needs an independent security review, threat modeling, end-to-end frontend/API integration, operational monitoring, backups, privacy/legal review, fraud/AML controls as applicable, authorized banking/payment partners, and required licenses and regulatory approvals. No production deployment is included by this implementation branch.
