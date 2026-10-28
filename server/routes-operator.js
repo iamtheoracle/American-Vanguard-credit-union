@@ -243,7 +243,25 @@ router.get('/operator/members/:id/tier/history', ...guard('management', 'operato
   } catch (error) { next(error); }
 });
 
+
+router.get('/operator/email-deliveries', ...guard('management'), async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const status = ['sent', 'skipped', 'failed'].includes(req.query.status) ? req.query.status : null;
+    const params = status ? [status] : [];
+    const where = status ? 'WHERE status = $1' : '';
+    const { rows } = await query(
+      `SELECT id, member_id AS "memberId", recipient, event_type AS "eventType",
+              subject, status, provider_message_id AS "providerMessageId",
+              error_code AS "errorCode", created_at AS "createdAt"
+       FROM email_delivery_log ${where} ORDER BY created_at DESC LIMIT ${limit}`, params);
+    res.json({ deliveries: rows, gmailConfigured: Boolean(process.env.AVCU_GMAIL_CLIENT_ID &&
+      process.env.AVCU_GMAIL_CLIENT_SECRET && process.env.AVCU_GMAIL_REFRESH_TOKEN && process.env.AVCU_GMAIL_FROM) });
+  } catch (error) { next(error); }
+});
+
 // ---- support cases -------------------------------------------------------------
+
 router.get('/operator/cases', ...guard('management', 'operator'), async (req, res, next) => {
   try {
     const { rows } = await query(
