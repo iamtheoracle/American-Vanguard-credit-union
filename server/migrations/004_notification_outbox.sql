@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS notification_outbox (
   id BIGSERIAL PRIMARY KEY,
   event_key TEXT NOT NULL UNIQUE,
-  member_id UUID NOT NULL REFERENCES members(id) ON DELETE RESTRICT,
+  member_id UUID REFERENCES members(id) ON DELETE SET NULL,
   event_type TEXT NOT NULL,
   recipient TEXT NOT NULL,
   title TEXT NOT NULL,
