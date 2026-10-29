@@ -164,6 +164,8 @@ test('member activity supports safe filtering, date validation, and offset pagin
 
   const badDate = await api(env.base, '/api/transactions?from=not-a-date', { cookie });
   assert.equal(badDate.status, 400);
+  const impossibleDate = await api(env.base, '/api/transactions?from=2026-02-30', { cookie });
+  assert.equal(impossibleDate.status, 400);
 
   const reversedRange = await api(env.base, '/api/transactions?from=2026-10-20&to=2026-10-01', { cookie });
   assert.equal(reversedRange.status, 400);
