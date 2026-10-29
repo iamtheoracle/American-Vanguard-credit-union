@@ -136,7 +136,7 @@ test('membership applications flow through the approval queue', async t => {
   t.after(() => env.close());
 
   await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'applicant@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Sam Lee' }
+    method: 'POST', body: { email: 'applicant@avcu.demo', username: 'sam_lee', password: 'Str0ngPassphrase!', fullName: 'Sam Lee' }
   });
   const { cookie: manager } = await loginOperator(env.base, 'manager@avcu.demo');
   const queue = await api(env.base, '/api/operator/approvals?status=pending', { cookie: manager });
