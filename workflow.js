@@ -34,9 +34,11 @@ function create(d,f){
 }
 function postTransfer(r){
  const s=member();if(!s?.balances||typeof s.balances!=='object'||!Array.isArray(s.transactions))return 'Local account records are unavailable; connect the core account service before posting.';
+ const processed=Array.isArray(s.processedTransferRequests)?s.processedTransferRequests:[];
+ if(processed.includes(r.id))return 'This request was already applied to the local ledger. Reconcile the request record before retrying; no second transfer was posted.';
  const fromBalance=s.balances[r.from],toBalance=s.balances[r.to];
- if(!Number.isSafeInteger(r.amountCents)||r.amountCents<=0||!Number.isSafeInteger(fromBalance)||!Number.isSafeInteger(toBalance)||fromBalance<r.amountCents)return 'Approval blocked: valid account balances and sufficient available funds are required.';
- s.balances[r.from]=fromBalance-r.amountCents;s.balances[r.to]=toBalance+r.amountCents;const now=new Date().toISOString();
+ if(!Number.isSafeInteger(r.amountCents)||r.amountCents<=0||!Number.isSafeInteger(fromBalance)||!Number.isSafeInteger(toBalance)||fromBalance<r.amountCents||r.from===r.to)return 'Approval blocked: valid distinct accounts and sufficient available funds are required.';
+ s.balances[r.from]=fromBalance-r.amountCents;s.balances[r.to]=toBalance+r.amountCents;s.processedTransferRequests=[...processed,r.id].slice(-1000);const now=new Date().toISOString();
  s.transactions.unshift({id:uid(),account:r.from,title:'Approved account transfer',amount:-r.amountCents,date:now,detail:'Approved internal transfer'},{id:uid(),account:r.to,title:'Transfer received',amount:r.amountCents,date:now,detail:'Approved internal transfer'});
  s.transactions=s.transactions.slice(0,100);try{localStorage.setItem(MK,JSON.stringify(s))}catch{return 'Approval blocked: account records could not be saved. No transfer was posted.'}window.dispatchEvent(new CustomEvent('avcu:member-state-updated'));return '';
 }
