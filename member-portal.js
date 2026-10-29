@@ -72,7 +72,7 @@
       <p>${escapeHtml(app.purpose)}</p>
       ${app.decisionReason ? `<p class="muted">Decision note: ${escapeHtml(app.decisionReason)}</p>` : ''}
       <small>Submitted ${escapeHtml(new Date(app.submittedAt).toLocaleString())} · USD</small>
-      ${app.status === 'information_required' ? `<form class="loan-response-form stack top-gap" data-loan-id="${escapeHtml(app.id)}"><label>Additional information requested</label><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>` : ''}
+      ${app.status === 'information_required' ? `<form class="loan-response-form stack top-gap" data-loan-id="${escapeHtml(app.id)}"><label>Additional information requested</label><p>${escapeHtml(app.informationRequested || "Please provide the information requested by the reviewer.")}</p><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>` : ''}
     </article>`).join('') : '<p class="muted">No loan applications yet.</p>';
     const pools = poolData.pools || [];
     $('funding-pools-list').innerHTML = pools.length ? pools.map(pool => {
