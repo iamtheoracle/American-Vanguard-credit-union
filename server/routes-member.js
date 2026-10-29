@@ -135,8 +135,7 @@ router.post('/auth/password-reset/complete', async (req, res, next) => {
       await client.query('UPDATE members SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, reset.member_id]);
       await client.query('UPDATE password_reset_tokens SET used_at = now() WHERE id = $1', [reset.id]);
       await client.query(
-        `UPDATE member_sessions SET revoked_at = now()
-         WHERE member_id = $1 AND revoked_at IS NULL`, [reset.member_id]);
+        `DELETE FROM member_sessions WHERE member_id = $1`, [reset.member_id]);
       await client.query(
         `UPDATE password_reset_tokens SET used_at = now()
          WHERE member_id = $1 AND id <> $2 AND used_at IS NULL`, [reset.member_id, reset.id]);
