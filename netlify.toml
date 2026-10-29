@@ -1,5 +1,5 @@
 [build]
-  command = "npm run check"
+  command = "npm run build && npm run check"
   publish = "."
 
 [[headers]]
@@ -9,3 +9,6 @@
     Referrer-Policy = "no-referrer"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
     Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+
+[functions]
+  node_bundler = "esbuild"
