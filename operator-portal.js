@@ -14,13 +14,29 @@
   function setAuthed(value){$('operator-auth').classList.toggle('hidden',value);$('operator-dashboard').classList.toggle('hidden',!value);}
   async function loadApprovals(){
     const data=await api('/operator/approvals');
-    $('approval-list').innerHTML=data.approvals?.length? `<table><thead><tr><th>Type</th><th>Member / reference</th><th>Amount</th><th>Status</th><th>Required role</th><th>Actions</th></tr></thead><tbody>${data.approvals.map(a=>`<tr><td>${esc(a.itemType)}</td><td><strong>${esc(a.memberName||a.reference||a.id)}</strong><small>${esc(a.memberEmail||a.transactionType||'')}</small></td><td>${a.amountCents==null?'—':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(a.amountCents)/100)}</td><td><span class="status-pill">${esc(a.status.replaceAll('_',' '))}</span></td><td>${esc(a.requiredRole)}</td><td class="action-cell">${['pending','escalated'].includes(a.status)?`<button class="mini-action" data-approval="${esc(a.id)}" data-action="approve">Approve</button><button class="mini-action danger-action" data-approval="${esc(a.id)}" data-action="reject">Reject</button><button class="mini-action" data-approval="${esc(a.id)}" data-action="escalate">Escalate</button>`:'—'}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">No approvals in this queue.</p>';
+    $('approval-list').innerHTML=data.approvals?.length? `<table><thead><tr><th>Type</th><th>Member / reference</th><th>Amount</th><th>Status</th><th>Required role</th><th>Actions</th></tr></thead><tbody>${data.approvals.map(a=>`<tr><td>${esc(a.itemType)}</td><td><strong>${esc(a.memberName||a.reference||a.id)}</strong><small>${esc(a.memberEmail||a.transactionType||'')}</small></td><td>${a.amountCents==null?'—':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(a.amountCents)/100)}</td><td><span class="status-pill">${esc(a.status.replaceAll('_',' '))}</span></td><td>${esc(a.requiredRole)}</td><td class="action-cell">${['pending','escalated'].includes(a.status)?`<button class="mini-action" data-approval="${esc(a.id)}" data-action="approve">Approve</button><button class="mini-action danger-action" data-approval="${esc(a.id)}" data-action="reject">Reject</button><button class="mini-action" data-approval="${esc(a.id)}" data-action="request_info">Request info</button><button class="mini-action" data-approval="${esc(a.id)}" data-action="escalate">Escalate</button>`:'—'}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">No approvals in this queue.</p>';
     $('approval-list').querySelectorAll('[data-approval]').forEach(button=>button.addEventListener('click',async()=>{
       const action=button.dataset.action;
       let reason='';
-      if(action==='reject'||action==='escalate'){reason=window.prompt(action==='reject'?'Enter the reason for rejection:':'Enter why this item needs escalation:')||'';if(!reason.trim())return;}
+      if(action==='reject'||action==='escalate'||action==='request_info'){reason=window.prompt(action==='reject'?'Enter the reason for rejection:':action==='request_info'?'Describe the additional information required:':'Enter why this item needs escalation:')||'';if(!reason.trim())return;}
       try{await api(`/operator/approvals/${encodeURIComponent(button.dataset.approval)}/decide`,{method:'POST',body:JSON.stringify({action,reason})});notice('operator-message',`Approval ${action} request processed.`);await loadAll();}
       catch(error){notice('operator-message',error.message,true);}
+    }));
+  }
+  async function loadLoanAlerts(){
+    const data = await api('/operator/loan-alerts?status=pending');
+    const alerts = data.alerts || [];
+    $('loan-alert-list').innerHTML = alerts.length ? `<table><thead><tr><th>Submitted</th><th>Reference / member</th><th>Requested amount</th><th>Application status</th><th>Action</th></tr></thead><tbody>${alerts.map(alert => `<tr><td>${esc(new Date(alert.submittedAt || alert.createdAt).toLocaleString())}</td><td><strong>${esc(alert.reference)}</strong><small>${esc(alert.memberName)} · ${esc(alert.memberEmail)}</small></td><td>${new Intl.NumberFormat('en-US',{style:'currency',currency:alert.currency||'USD'}).format(Number(alert.requestedAmountCents)/100)}</td><td><span class="status-pill">${esc(String(alert.applicationStatus).replaceAll('_',' '))}</span></td><td><button class="mini-action" data-ack-alert="${esc(alert.id)}">Acknowledge</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No unacknowledged loan alerts.</p>';
+    $('loan-alert-list').querySelectorAll('[data-ack-alert]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await post(`/operator/loan-alerts/${encodeURIComponent(button.dataset.ackAlert)}/acknowledge`, {});
+        notice('operator-message', 'Loan alert acknowledged and audited.');
+        await loadAll();
+      } catch (error) {
+        notice('operator-message', error.message, true);
+        button.disabled = false;
+      }
     }));
   }
   async function loadTiers(){
@@ -56,6 +72,8 @@
     $('queue-approvals').textContent=Number(queue.approvals?.pending||0)+Number(queue.approvals?.escalated||0);
     $('queue-members').textContent=queue.membershipPending??0;
     $('queue-cases').textContent=queue.cases?.open??0;
+    $('queue-loan-alerts').textContent=queue.loanAlertsPending??0;
+    await loadLoanAlerts();
     await loadApprovals();
     await loadTiers();
     await loadEmailLog();
@@ -67,6 +85,7 @@
   });
   $('operator-logout').addEventListener('click',async()=>{try{await post('/operator/logout',{});}catch{}operator=null;setAuthed(false);});
   $('refresh-operator').addEventListener('click',async()=>{try{await loadAll();notice('operator-message','Console refreshed.');}catch(error){notice('operator-message',error.message,true);}});
+  $('refresh-loan-alerts').addEventListener('click',async()=>{try{await loadLoanAlerts();notice('operator-message','Loan alerts refreshed.');}catch(error){notice('operator-message',error.message,true);}});
   $('tier-filter').addEventListener('submit',async event=>{event.preventDefault();try{await loadTiers();}catch(error){notice('operator-message',error.message,true);}});
   (async()=>{try{const data=await api('/auth/operator/me');operator=data.operator;setAuthed(true);$('operator-identity').textContent=`${operator.name} · ${operator.email} · Role: ${operator.role}`;await loadAll();}catch{setAuthed(false);}})();
 })();
