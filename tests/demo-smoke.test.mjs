@@ -82,5 +82,6 @@ test('documentation and scripts describe standalone and provider boundaries', ()
   for (const value of ['Pending Approval','Approved · Awaiting Provider','not protected by real staff authentication','provider-confirmed outcomes may be marked settled']) assert.ok(readme.includes(value));
   assert.ok(!readme.includes('sample balances'));
   assert.ok(pkg.includes('node --check workflow.js'));
-  assert.ok(netlify.includes("connect-src 'none'"));
+  assert.ok(netlify.includes("connect-src 'self'"));
+  assert.ok(netlify.includes('camera=(self)'));
 });
