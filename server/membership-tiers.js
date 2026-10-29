@@ -92,9 +92,11 @@ export async function recalculateMemberTier(memberId) {
        VALUES ($1,$2,$3,$4)`,
       [memberId, member.membershipTier, next, member.tierOverride ? 'Configured operator override' : 'Automatic activity recalculation']);
   }
+  const activity90Days = Number(member.activity90Days || 0);
+  const accountAgeDays = Math.floor(Number(member.ageDays || 0));
   return { tier: next, label: MEMBERSHIP_TIERS[next], calculatedTier: calculated,
-    activity90Days: Number(member.activity90Days || 0), accountAgeDays: Math.floor(Number(member.ageDays || 0)),
-    overridden: Boolean(member.tierOverride) };
+    activity90Days, accountAgeDays, overridden: Boolean(member.tierOverride),
+    progress: getTierProgress({ tier: next, calculatedTier: calculated, activity90Days, accountAgeDays }) };
 }
 
 export async function overrideMemberTier({ memberId, tier, reason, operator }) {
