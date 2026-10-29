@@ -57,7 +57,7 @@ test('staff review API requires server-side admin role, a note and a valid decis
   assert.match(adminApi, /note\.length < 3/);
   assert.match(adminApi, /INSERT INTO verification_review_events/);
   assert.match(adminApi, /already been decided/);
-  assert.match(adminApi, /Request origin could not be verified/);
+  assert.match(adminApi, /origin !== new URL\(req\.url\)\.origin/);
 });
 
 test('new accounts receive member role and cannot self-assign admin through signup', () => {
