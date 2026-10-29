@@ -21,6 +21,9 @@ test('AVCU identity, seven demo accounts, and disclaimers are consistent', () =>
   assert.match(html, /not a real credit union account/i);
   assert.match(html, /NCUA insurance/i);
   assert.match(html, /Richmond &amp; San Pablo/i);
+  for (const key of ['draft', 'primary', 'market', 'holiday', 'business', 'ira', 'certificate']) {
+    assert.ok(html.includes('<option value="' + key + '"'), 'expected account option ' + key);
+  }
   assert.match(readme, /Atchison Village Credit Union \(AVCU\)/);
   assert.match(readme, /seven sample accounts/i);
   assert.doesNotMatch(readme, /American Vanguard Credit Union/);
