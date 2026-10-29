@@ -11,6 +11,8 @@ A responsive member-services front end built with HTML, CSS, vanilla JavaScript,
 - Approved external requests move to Approved · Awaiting Provider. They are not marked as sent or settled without provider confirmation.
 - Check-deposit flow supports camera/photo capture of the front and back, previews images, and requires both images before submission. Images are kept in memory for the current browser session, not persisted to browser storage.
 - The Zelle flow does not falsely claim to verify a recipient. Live directory lookup and sending require the authorized Zelle/payment provider.
+- Local automated review flags identify high-value requests, retirement/check requirements, and possible duplicates. They are advisory rules, not an AI fraud verdict.
+- A review-assistant adapter can be connected to a trusted backend later; AI output must remain advisory and cannot replace operator approval.
 - Empty local account records are used rather than fabricated opening balances, rates, card numbers, or transaction history.
 
 ## Run and test
@@ -24,7 +26,7 @@ The command validates JavaScript syntax and runs source-level regression checks.
 - Browser storage is device-local and is not a secure, authoritative ledger. Requests and review records do not synchronize across devices.
 - The operator workspace is not protected by real staff authentication or role-based authorization. Do not use it to approve real financial transactions.
 - A local approval is a workflow decision only. It does not transmit a wire, send a Zelle payment, execute FX, credit a check deposit, control an issued card, or settle a withdrawal.
-- External account balances, payment execution, check image transfer and retention, live Zelle recipient verification, FX rates and conversion, and card issuer controls require authorized providers and secure backend services.
+- External account balances, payment execution, check image transfer and retention, live Zelle recipient verification, FX rates and conversion, AI service calls, and card issuer controls require authorized providers and secure backend services.
 - IRA and 401(k) workflows require provider-specific plan, eligibility, tax, identity, and compliance checks before processing.
 - Do not enter real credentials, account numbers, government identifiers, or real check images into this standalone build.
 
