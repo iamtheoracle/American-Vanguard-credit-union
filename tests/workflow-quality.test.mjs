@@ -23,6 +23,8 @@ test('AVCU workspace has eight account categories and no fabricated opening bala
   for (const fake of ['$3,240.65', '$6,840.00', '$24,230.65', '4826', 'JORDAN HALE']) assert.ok(!html.includes(fake), 'unexpected fabricated detail: ' + fake);
   assert.ok(html.includes('STANDALONE OPERATIONS'));
   assert.ok(html.includes('External financial services require authorized connections'));
+  assert.ok(!/\\bdemo\\b/i.test(html + app), 'visible UI and application code should not label the product as a demo');
+  for (const fabricatedSuffix of ["suffix: '2048'", "suffix: '3812'", "suffix: '6621'", "suffix: '9055'", "suffix: '7314'", "suffix: '4472'", "suffix: '1189'"]) assert.ok(!app.includes(fabricatedSuffix), 'fabricated account suffix remains: ' + fabricatedSuffix);
 });
 
 test('payment workspace supports request initiation and operator review', () => {
