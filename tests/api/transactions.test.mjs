@@ -101,64 +101,50 @@ test('duplicate submissions are prevented via idempotency keys', async t => {
   assert.equal(draftAfter.balanceCents, draft.balanceCents - 500, 'charged exactly once');
 });
 
-test('deposits under the review threshold post immediately; large deposits await review', async t => {
+test('deposits fail closed without a verified provider and never change balances', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
   const { cookie } = await loginMember(env.base);
-  const accounts = await getAccounts(env.base, cookie);
-  const draft = accounts.find(a => a.name === 'Share Draft');
-  const holiday = accounts.find(a => a.name === 'Holiday Club');
+  const before = await getAccounts(env.base, cookie);
+  const draft = before.find(a => a.name === 'Share Draft');
+  const holiday = before.find(a => a.name === 'Holiday Club');
 
-  const small = await api(env.base, '/api/deposits', {
-    method: 'POST', cookie,
-    body: { accountId: draft.id, amountCents: 2500, description: 'Small check' }
-  });
-  assert.equal(small.status, 201);
-  assert.equal(small.data.transaction.status, 'posted');
-
-  const large = await api(env.base, '/api/deposits', {
-    method: 'POST', cookie,
-    body: { accountId: holiday.id, amountCents: 250_000, description: 'Large check' }
-  });
-  assert.equal(large.status, 202);
-  assert.equal(large.data.transaction.status, 'pending_review');
+  for (const request of [
+    { accountId: draft.id, amountCents: 2500, description: 'Small check' },
+    { accountId: holiday.id, amountCents: 250_000, description: 'Large check' }
+  ]) {
+    const response = await api(env.base, '/api/deposits', {
+      method: 'POST', cookie, body: request
+    });
+    assert.equal(response.status, 503);
+    assert.equal(response.data.code, 'deposit_service_unavailable');
+  }
 
   const after = await getAccounts(env.base, cookie);
-  assert.equal(after.find(a => a.name === 'Holiday Club').balanceCents, holiday.balanceCents,
-    'pending deposit must not change the balance');
+  assert.equal(after.find(a => a.name === 'Share Draft').balanceCents, draft.balanceCents);
+  assert.equal(after.find(a => a.name === 'Holiday Club').balanceCents, holiday.balanceCents);
 });
 
-test('card freeze controls sandbox authorizations', async t => {
+test('card controls fail closed without a live issuer and create no fake authorizations', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
   const { cookie } = await loginMember(env.base);
   const { query } = await import('../../server/db.js');
-  const beforeRows = await query(`SELECT status, count(*) AS n FROM transactions WHERE type = 'card_auth' GROUP BY status`);
-  const beforeCounts = Object.fromEntries(beforeRows.rows.map(r => [r.status, Number(r.n)]));
+  const before = await query(`SELECT count(*) AS n FROM transactions WHERE type = 'card_auth'`);
 
-  const active = await api(env.base, '/api/card/test-purchase', {
+  const purchase = await api(env.base, '/api/card/test-purchase', {
     method: 'POST', cookie, body: { amountCents: 2450, merchant: 'Harbor Market' }
   });
-  assert.equal(active.status, 200);
-  assert.equal(active.data.outcome, 'approved');
-  assert.equal(active.data.sandbox, true);
+  assert.equal(purchase.status, 503);
+  assert.equal(purchase.data.code, 'card_processor_unavailable');
 
-  const freeze = await api(env.base, '/api/card/freeze', { method: 'POST', cookie, body: { frozen: true } });
-  assert.equal(freeze.status, 200);
-  assert.equal(freeze.data.card.status, 'frozen');
-
-  const declined = await api(env.base, '/api/card/test-purchase', {
-    method: 'POST', cookie, body: { amountCents: 2450, merchant: 'Harbor Market' }
+  const freeze = await api(env.base, '/api/card/freeze', {
+    method: 'POST', cookie, body: { frozen: true }
   });
-  assert.equal(declined.status, 402);
-  assert.equal(declined.data.outcome, 'declined');
-  assert.equal(declined.data.reason, 'card_frozen');
+  assert.equal(freeze.status, 503);
+  assert.equal(freeze.data.code, 'card_issuer_unavailable');
 
-  await api(env.base, '/api/card/freeze', { method: 'POST', cookie, body: { frozen: false } });
-  // Failed and completed card authorizations must be recorded as transactions.
-  const { rows } = await query(
-    `SELECT status, count(*) AS n FROM transactions WHERE type = 'card_auth' GROUP BY status`);
-  const byStatus = Object.fromEntries(rows.map(r => [r.status, Number(r.n)]));
-  assert.equal(byStatus.completed, (beforeCounts.completed || 0) + 1);
-  assert.equal(byStatus.rejected, (beforeCounts.rejected || 0) + 1);
+  const after = await query(`SELECT count(*) AS n FROM transactions WHERE type = 'card_auth'`);
+  assert.equal(Number(after.rows[0].n), Number(before.rows[0].n),
+    'unavailable provider must not create simulated card transactions');
 });
