@@ -150,7 +150,7 @@
     $('#card-status-text').textContent = state.frozen ? 'Card is frozen' : 'Card is active';
     $('#today-label').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
     $('#ledger-count').textContent = String(state.transactions.length);
-    $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Active';
+    $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Not connected';
   }
 
   function renderMoveBalances() {
@@ -186,6 +186,8 @@
     renderCard();
     if (currentView === 'more') renderAllTransactions();
   }
+
+  window.renderAll = renderAll;
 
   function addTransaction(account, title, amount, detail) {
     state.transactions.unshift({ id: createId(), account, title, amount, date: new Date().toISOString(), detail });
