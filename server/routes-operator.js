@@ -434,10 +434,6 @@ router.get('/operator/loan-alerts', ...guard('management', 'operator'), async (r
   try {
     const status = ['pending','acknowledged','resolved'].includes(req.query.status) ? req.query.status : null;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
-    const params = [];
-    let where = 'TRUE';
-    if (status) { params.push(status); where = 'oa.status = 
-    params.push(limit);
     const { rows } = await query(
       `SELECT oa.id, oa.alert_type AS "alertType", oa.status,
               oa.created_at AS "createdAt", oa.acknowledged_at AS "acknowledgedAt",
@@ -452,9 +448,9 @@ router.get('/operator/loan-alerts', ...guard('management', 'operator'), async (r
        JOIN loan_applications la ON la.id = oa.loan_application_id
        JOIN members m ON m.id = la.member_id
        LEFT JOIN notification_outbox outbox ON outbox.event_key = 'loan-application-operations:' || la.id::text || ':submitted'
-       WHERE ${where}
+       WHERE ($1::text IS NULL OR oa.status = $1)
        ORDER BY CASE oa.status WHEN 'pending' THEN 0 ELSE 1 END, oa.created_at DESC
-       LIMIT ${params.length}`, params);
+       LIMIT $2`, [status, limit]);
     res.json({ alerts: rows.map(row => ({ ...row, requestedAmountCents: Number(row.requestedAmountCents) })) });
   } catch (error) { next(error); }
 });
