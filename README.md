@@ -87,3 +87,7 @@ Batches with validation exceptions are marked `blocked`; even clean batches are 
 ## Money requests
 
 Members can submit and track withdrawal, transfer, account-service, and other money requests through the authenticated API and member portal. Staff can request more information, and management makes final approval/rejection decisions with a recorded reason. Requests, decisions, audit events, member notifications, and the operations email outbox are persisted transactionally. Approval only changes the request status; it does not create a transaction or move funds.
+
+## Member identity
+
+New membership applications require a unique lowercase username (3–24 letters, digits, or underscores), a legal name, email, and password. The system keeps that username separate from the generated 10-digit numeric member number and account identifiers. Member sign-in accepts username, email, or numeric member number; credentials remain server-side and are never included in ordinary member records. Existing accounts without a username can continue using their email or member number until an authorized profile-update flow is provided.
