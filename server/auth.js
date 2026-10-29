@@ -108,7 +108,7 @@ export async function findMemberByEmail(email) {
 export async function findMemberByLogin(identifier) {
   const value = String(identifier || '').trim();
   const { rows } = await query(
-    'SELECT * FROM members WHERE lower(email) = lower($1) OR member_number::text = $1 LIMIT 1', [value]);
+    'SELECT * FROM members WHERE lower(email) = lower($1) OR member_number::text = $1 OR lower(username) = lower($1) LIMIT 1', [value]);
   return rows[0] || null;
 }
 
