@@ -59,6 +59,20 @@
       catch(error){notice('operator-message',error.message,true);}
     }));
   }
+  async function loadMigrations(){
+    const data = await api('/operator/migrations?limit=10');
+    const batches = data.batches || [];
+    $('migration-batches').innerHTML = batches.length ? `<table><thead><tr><th>Created</th><th>Source</th><th>Rows</th><th>Exceptions</th><th>Status</th><th>Provenance</th><th></th></tr></thead><tbody>${batches.map(batch => `<tr><td>${esc(new Date(batch.createdAt).toLocaleString())}</td><td>${esc(batch.sourceSystem)}<small>${esc(batch.sourceFileName)}</small></td><td>${esc(batch.acceptedCount)} / ${esc(batch.sourceCount)}</td><td>${esc(batch.exceptionCount)}</td><td><span class="status-pill">${esc(batch.status)}</span></td><td><code>${esc(String(batch.sourcePayloadSha256||'').slice(0,16))}…</code></td><td><button class="mini-action" data-migration-detail="${esc(batch.id)}">Details</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No migration batches have been staged.</p>';
+    $('migration-batches').querySelectorAll('[data-migration-detail]').forEach(button => button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const detail = await api(`/operator/migrations/${encodeURIComponent(button.dataset.migrationDetail)}`);
+        $('migration-result').textContent = JSON.stringify(detail, null, 2);
+      } catch (error) {
+        notice('operator-message', error.message, true);
+      } finally { button.disabled = false; }
+    }));
+  }
   async function loadEmailLog(){
     try{
       const data=await api('/operator/email-deliveries?limit=50');
@@ -76,6 +90,7 @@
     await loadLoanAlerts();
     await loadApprovals();
     await loadTiers();
+    await loadMigrations();
     await loadEmailLog();
   }
   $('operator-login-form').addEventListener('submit',async event=>{
@@ -84,6 +99,32 @@
     catch(error){notice('operator-auth-message',error.message,true);}
   });
   $('operator-logout').addEventListener('click',async()=>{try{await post('/operator/logout',{});}catch{}operator=null;setAuthed(false);});
+
+  $('migration-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = $('migration-validate');
+    button.disabled = true;
+    notice('operator-message', 'Validating and staging migration batch…');
+    try {
+      const rows = JSON.parse($('migration-json').value);
+      if (!Array.isArray(rows)) throw new Error('Transaction data must be a JSON array.');
+      const result = await post('/operator/migrations/validate', {
+        sourceSystem: $('migration-source-system').value.trim(),
+        sourceFileName: $('migration-file-name').value.trim(),
+        rows
+      });
+      $('migration-result').textContent = JSON.stringify(result, null, 2);
+      notice('operator-message', `Batch staged: ${result.batch.acceptedCount} accepted, ${result.batch.exceptionCount} exceptions. Cutover remains disabled.`);
+      await loadMigrations();
+    } catch (error) {
+      notice('operator-message', error.message, true);
+      $('migration-result').textContent = error.message;
+    } finally { button.disabled = false; }
+  });
+  $('refresh-migrations').addEventListener('click', async () => {
+    try { await loadMigrations(); notice('operator-message', 'Migration batch list refreshed.'); }
+    catch (error) { notice('operator-message', error.message, true); }
+  });
   $('refresh-operator').addEventListener('click',async()=>{try{await loadAll();notice('operator-message','Console refreshed.');}catch(error){notice('operator-message',error.message,true);}});
   $('refresh-loan-alerts').addEventListener('click',async()=>{try{await loadLoanAlerts();notice('operator-message','Loan alerts refreshed.');}catch(error){notice('operator-message',error.message,true);}});
   $('tier-filter').addEventListener('submit',async event=>{event.preventDefault();try{await loadTiers();}catch(error){notice('operator-message',error.message,true);}});
