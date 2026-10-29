@@ -150,7 +150,7 @@
     $('#card-status-text').textContent = state.frozen ? 'Local controls frozen' : 'Issuer not connected';
     $('#today-label').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
     $('#ledger-count').textContent = String(state.transactions.length);
-    $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Not connected';
+    $('#ledger-card-status').textContent = state.frozen ? 'Frozen locally' : 'Not connected';
   }
 
   function renderMoveBalances() {
