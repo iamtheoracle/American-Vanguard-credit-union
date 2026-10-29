@@ -35,7 +35,7 @@ export function verifyPrivyAccessToken(token) {
         typeof claims.sub !== 'string' || !claims.sub.startsWith('did:privy:') ||
         !Number.isFinite(claims.exp) || claims.exp <= now ||
         (Number.isFinite(claims.iat) && claims.iat > now + 60) ||
-        (claims.iss && claims.iss !== 'privy.io')) throw new Error('invalid claims');
+        claims.iss !== 'privy.io') throw new Error('invalid claims');
     return claims;
   } catch {
     const error = new Error('Privy access token verification failed');
