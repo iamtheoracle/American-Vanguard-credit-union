@@ -61,3 +61,11 @@ test('user-entered strings are escaped before HTML rendering', () => {
   assert.match(js, /escapeHtml\(merchant\)/);
   assert.match(js, /escapeHtml\(payee\)/);
 });
+
+test('failed local persistence cannot be followed by a misleading success message', () => {
+  assert.match(js, /function persistenceFeedback\(saved, successMessage\)/);
+  assert.match(js, /saved \? 'success' : 'error'/);
+  assert.match(js, /This demo action is available only in this session/);
+  assert.equal((js.match(/const saved = saveState\(\);/g) || []).length, 4);
+  assert.doesNotMatch(js, /Local storage is unavailable\. Your changes may not persist after refresh\./);
+});
