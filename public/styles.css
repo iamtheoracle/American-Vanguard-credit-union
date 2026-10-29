@@ -91,3 +91,17 @@ body{background:var(--wash);color:var(--ink)}
 .check-upload-preview img{width:82px;height:60px;object-fit:contain;border-radius:5px;background:#e8ece8}
 #workflow-check-wrap input[type=file],#deposit-form input[type=file]{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:11px}
 @media(max-width:620px){.mobile-nav{grid-template-columns:repeat(6,minmax(0,1fr))}.mobile-nav-item small{font-size:8px}.workflow-request{padding:12px}.workflow-request-top{flex-direction:column}.workflow-actions .primary-button,.workflow-actions .secondary-button{flex:1 1 100%}.workflow-meta{flex-direction:column;gap:4px}}
+
+
+/* Authenticated shared-workspace controls */
+.auth-button { padding: 9px 12px; min-height: 38px; white-space: nowrap; font-size: 12px; }
+#auth-status { max-width: 210px; min-width: 0; }
+#auth-status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-status-dot { flex: 0 0 7px; }
+#auth-dialog .dialog-card { width: min(100%, 440px); }
+#auth-dialog #auth-error { color: var(--danger, #a33); min-height: 1.25em; }
+#auth-form input { width: 100%; margin: 6px 0 14px; }
+@media (max-width: 620px) {
+  #auth-status { max-width: 118px; font-size: 10px; }
+  .auth-button { padding: 8px 9px; min-height: 36px; font-size: 11px; }
+}
