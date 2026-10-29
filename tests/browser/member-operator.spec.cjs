@@ -36,6 +36,16 @@ test('member navigation works and mobile layout has no horizontal page overflow'
   expect(dimensions.page).toBeLessThanOrEqual(dimensions.viewport + 1);
 });
 
+test('unauthenticated users see local mode and a sign-in entry point', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#auth-status-text')).toContainText('Local mode');
+  await expect(page.locator('#auth-button')).toHaveText('Sign in');
+  await page.locator('#auth-button').click();
+  await expect(page.locator('#auth-dialog')).toBeVisible();
+  await expect(page.locator('#auth-title')).toHaveText('Sign in to AVCU');
+  await expect(page.locator('#auth-form')).toContainText('institution-issued account');
+});
+
 test('member request enters approval queue and operator can request more information', async ({ page }) => {
   await openOperations(page);
   await fillBaseRequest(page);
