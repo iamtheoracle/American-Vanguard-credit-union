@@ -374,6 +374,138 @@ router.post('/loans/applications/:id/information', memberAuth, async (req, res, 
   }
 });
 
+// ---- money requests ----------------------------------------------------------
+router.get('/money-requests', memberAuth, async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, reference, request_type AS "requestType", amount_cents AS "amountCents",
+              currency, member_note AS "memberNote", status,
+              decision_reason AS "decisionReason", information_requested AS "informationRequested",
+              submitted_at AS "submittedAt", reviewed_at AS "reviewedAt", created_at AS "createdAt"
+       FROM money_requests WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [req.member.id]);
+    res.json({ requests: rows.map(row => ({ ...row, amountCents: Number(row.amountCents) })) });
+  } catch (error) { next(error); }
+});
+
+router.post('/money-requests', memberAuth, async (req, res, next) => {
+  try {
+    if (req.member.status !== 'verified') {
+      return res.status(403).json({ error: 'Membership verification is required before submitting a money request', code: 'membership_pending' });
+    }
+    const body = req.body || {};
+    const requestType = String(body.requestType || '').trim();
+    if (!['withdrawal','transfer','account_service','other'].includes(requestType)) {
+      return res.status(400).json({ error: 'Choose a supported request type', code: 'invalid_request_type' });
+    }
+    const amountCents = body.amountCents;
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
+      return res.status(400).json({ error: 'Enter a positive whole-number amount in cents', code: 'invalid_amount' });
+    }
+    const currency = String(body.currency || 'USD').toUpperCase();
+    if (currency !== 'USD') return res.status(400).json({ error: 'Only USD requests are currently supported', code: 'unsupported_currency' });
+    const note = String(body.note || '').trim();
+    if (note.length < 5 || note.length > 2000) {
+      return res.status(400).json({ error: 'Describe the request in 5–2000 characters', code: 'invalid_note' });
+    }
+
+    const request = await withTx(async client => {
+      const reference = `AVCU-MR-${randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`;
+      const inserted = await client.query(
+        `INSERT INTO money_requests (member_id, reference, request_type, amount_cents, currency, member_note)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [req.member.id, reference, requestType, amountCents, currency, note]);
+      const created = inserted.rows[0];
+      const approval = await client.query(
+        `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
+         VALUES ('money_request',$1,$2,'pending','management',$1,'member') RETURNING id`,
+        [req.member.id, JSON.stringify({ moneyRequestId: created.id, reference, requestType, amountCents, currency, note })]);
+      await client.query('UPDATE money_requests SET approval_id = $1 WHERE id = $2', [approval.rows[0].id, created.id]);
+      await client.query(
+        `INSERT INTO operations_alerts (alert_type, money_request_id)
+         VALUES ('money_request_submitted',$1) ON CONFLICT DO NOTHING`, [created.id]);
+      await queueOperationsEmail(client, {
+        eventKey: `money-request-operations:${created.id}:submitted`,
+        eventType: 'money_request.submitted',
+        title: 'New money request submitted',
+        subject: `New AVCU money request ${reference}`,
+        body: [
+          `Reference: ${reference}`,
+          `Submitted at (UTC): ${new Date(created.submitted_at).toISOString()}`,
+          `Requested amount: ${(amountCents / 100).toFixed(2)} ${currency}`,
+          `Request type: ${requestType}`,
+          'Sign in with your authorized staff account to review. Approval does not move funds.'
+        ].join(String.fromCharCode(10))
+      });
+      await queueMemberNotification(client, {
+        memberId: req.member.id, eventType: 'money_request.received',
+        eventKey: `money-request:${created.id}:submitted`,
+        title: 'Money request received',
+        body: `Request ${reference} was submitted for review. No funds have been moved.`,
+        subject: 'AVCU money request received'
+      });
+      await audit(client, {
+        actorType: 'member', actorId: req.member.id, action: 'money_request.submitted',
+        entityType: 'money_request', entityId: created.id,
+        metadata: { reference, requestType, amountCents, currency }
+      });
+      return { ...created, approval_id: approval.rows[0].id };
+    });
+    res.status(201).json({
+      request: { id: request.id, reference: request.reference, requestType: request.request_type,
+        amountCents: Number(request.amount_cents), currency: request.currency, memberNote: request.member_note,
+        status: request.status, submittedAt: request.submitted_at, approvalId: request.approval_id },
+      message: 'Request submitted for review. This does not initiate a transfer or settlement.'
+    });
+  } catch (error) { next(error); }
+});
+
+router.post('/money-requests/:id/information', memberAuth, async (req, res, next) => {
+  try {
+    const responseText = String(req.body?.response || '').trim();
+    if (responseText.length < 10 || responseText.length > 2000) {
+      return res.status(400).json({ error: 'Provide a response between 10 and 2000 characters', code: 'invalid_response' });
+    }
+    const request = await withTx(async client => {
+      const { rows } = await client.query(
+        `SELECT id, reference, approval_id AS "approvalId", status
+         FROM money_requests WHERE id = $1 AND member_id = $2 FOR UPDATE`,
+        [req.params.id, req.member.id]);
+      const current = rows[0];
+      if (!current) { const error = new Error('Money request not found'); error.status = 404; throw error; }
+      if (current.status !== 'information_required' || !current.approvalId) {
+        const error = new Error('This request is not waiting for information'); error.status = 409; throw error;
+      }
+      const updatedApproval = await client.query(
+        `UPDATE approvals SET status = 'pending', info_requested = NULL, decision_reason = NULL,
+           decided_at = NULL, updated_at = now()
+         WHERE id = $1 AND status = 'info_requested' RETURNING id`, [current.approvalId]);
+      if (!updatedApproval.rowCount) { const error = new Error('The review state changed; refresh and try again'); error.status = 409; throw error; }
+      await client.query(
+        `UPDATE money_requests SET status = 'submitted', member_response = $1,
+           information_requested = NULL, updated_at = now() WHERE id = $2`, [responseText, current.id]);
+      await client.query(
+        `UPDATE operations_alerts SET status = 'pending', acknowledged_at = NULL, acknowledged_by = NULL
+         WHERE money_request_id = $1`, [current.id]);
+      await queueMemberNotification(client, {
+        memberId: req.member.id, eventType: 'money_request.information_received',
+        eventKey: `money-request:${current.id}:information-received:${randomUUID()}`,
+        title: 'Additional information submitted',
+        body: `Your response for request ${current.reference} was submitted for review.`,
+        subject: 'AVCU money request update'
+      });
+      await audit(client, {
+        actorType: 'member', actorId: req.member.id, action: 'money_request.information_submitted',
+        entityType: 'money_request', entityId: current.id
+      });
+      return { id: current.id, reference: current.reference, status: 'submitted' };
+    });
+    res.json({ request });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
+    next(error);
+  }
+});
+
 // ---- funding pool discovery -------------------------------------------------
 router.get('/funding-pools', memberAuth, async (req, res, next) => {
   try {
