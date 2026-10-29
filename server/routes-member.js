@@ -39,6 +39,7 @@ router.post('/auth/register', async (req, res, next) => {
       JSON.stringify({ memberId: member.id, email: member.email, fullName: member.full_name })]);
     await recalculateMemberTier(member.id).catch(error => console.error('[avcu] initial tier calculation failed:', error.code || error.name));
     await notifyMember({ memberId: member.id, eventType: 'membership.application_received',
+      eventKey: `membership-application:${member.id}:received`,
       title: 'Membership application received', body: 'Your membership application has been received and is awaiting review.',
       subject: 'We received your AVCU membership application' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
     res.status(201).json({ member: { id: member.id, memberNumber: String(member.memberNumber), email: member.email, fullName: member.full_name, status: member.status },
@@ -130,6 +131,7 @@ router.post('/transfers', memberAuth, async (req, res, next) => {
     if (result.replayed) return res.json({ replayed: true, transaction: result.transaction });
     await recalculateMemberTier(req.member.id).catch(() => {});
     await notifyMember({ memberId: req.member.id, eventType: 'transaction.transfer_submitted',
+      eventKey: `transaction:${tx.id}:transfer-submitted`,
       title: 'Transfer status update', body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
       subject: 'AVCU transfer status update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
     res.status(result.approvalId ? 202 : 201).json({
@@ -150,6 +152,7 @@ router.post('/deposits', memberAuth, async (req, res, next) => {
     const result = await submitMemberDeposit({ member: req.member, body: req.body || {}, idempotencyKey });
     await recalculateMemberTier(req.member.id).catch(() => {});
     await notifyMember({ memberId: req.member.id, eventType: 'transaction.deposit_submitted',
+      eventKey: `transaction:${result.transaction.id}:deposit-submitted`,
       title: 'Deposit status update', body: `Your deposit ${result.transaction.reference} is ${result.transaction.status.replaceAll('_', ' ')}.`,
       subject: 'AVCU deposit status update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
     res.status(result.approvalId ? 202 : 201).json({
