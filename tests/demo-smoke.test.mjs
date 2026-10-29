@@ -15,8 +15,14 @@ test('initial member overview renders balances and demo disclaimer in HTML befor
   assert.match(html, /Primary Share[\s\S]*?\$6,840\.00/);
   assert.match(html, /Money Market[\s\S]*?\$1,900\.00/);
   assert.match(html, /Holiday Club[\s\S]*?\$500\.00/);
+  assert.match(html, /Business Operating Account[\s\S]*?\$4,750\.00/);
+  assert.match(html, /Traditional IRA[\s\S]*?\$2,000\.00/);
+  assert.match(html, /Share Certificate[\s\S]*?\$5,000\.00/);
   assert.match(html, /DEMONSTRATION ONLY/);
   assert.match(html, /not a real credit union account/i);
+  assert.match(html, /NCUA insurance/i);
+  assert.match(html, /Richmond &amp; San Pablo/i);
+  assert.match(html, /LOCAL DEMONSTRATION ONLY/i);
 });
 
 test('all promised demo journeys have their controls and handlers', () => {
@@ -33,6 +39,10 @@ test('all promised demo journeys have their controls and handlers', () => {
   assert.match(js, /if \(state\.frozen\)/);
   assert.match(js, /state\.frozen = next/);
   assert.match(js, /localStorage\.setItem\(STORAGE_KEY/);
+  assert.match(js, /business: \{ name: 'Business Operating Account'/);
+  assert.match(js, /ira: \{ name: 'Traditional IRA'/);
+  assert.match(js, /certificate: \{ name: 'Share Certificate'/);
+  assert.match(js, /Migrate older local demo saves/);
   assert.ok(js.includes('Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-7'));
   assert.ok(js.includes('amount > 10000'));
 });
