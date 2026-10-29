@@ -104,6 +104,8 @@ test('documentation and scripts describe standalone and provider boundaries', ()
   assert.ok(!readme.includes('sample balances'));
   assert.ok(pkg.includes('node --check public/workflow.js'));
   assert.ok(pkg.includes('node --check public/review-assistant.js'));
+  assert.ok(netlify.includes('publish = "public"'), 'backend source must remain outside the published directory');
+  assert.ok(netlify.includes("img-src 'self' data: blob:"), 'check-image previews require blob: under the content security policy');
   assert.ok(netlify.includes("connect-src 'self'"));
   assert.ok(netlify.includes('camera=(self)'));
 });
