@@ -55,6 +55,8 @@ test('FX and check-deposit submissions fail safely on invalid or stale input', (
   assert.ok(workflow.includes("!String(file.type||'').startsWith('image/')"), 'check uploads must reject non-image files');
   assert.ok(workflow.includes("!Number.isSafeInteger(fromBalance)||!Number.isSafeInteger(toBalance)"), 'internal transfers must reject missing or invalid balances');
   assert.ok(workflow.includes("Approval blocked: account records could not be saved"), 'storage failure must block transfer approval');
+  assert.ok(workflow.includes('processedTransferRequests'), 'retry protection must prevent duplicate ledger postings');
+  assert.ok(workflow.includes('already applied to the local ledger'), 'duplicate requests must be blocked for reconciliation');
 });
 
 test('external approvals remain un-settled until provider confirmation', () => {
