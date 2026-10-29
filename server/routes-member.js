@@ -88,7 +88,7 @@ router.get('/auth/me', memberAuth, (req, res) => {
 router.get('/membership-tier', memberAuth, async (req, res, next) => {
   try {
     const tier = await recalculateMemberTier(req.member.id);
-    res.json({ membership: tier });
+    res.json({ membership: tier, progress: tier?.progress || null });
   } catch (error) { next(error); }
 
 });
