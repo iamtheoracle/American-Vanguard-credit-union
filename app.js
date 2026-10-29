@@ -190,7 +190,7 @@ async function handleHash() {
   const params = new URLSearchParams(location.hash.replace(/^#/, ''));
   const tokenParam = params.get('confirmation_token') || params.get('recovery_token') || params.get('invite_token') || params.get('email_change_token');
   const type = params.has('confirmation_token') ? 'signup' : params.has('recovery_token') ? 'recovery' : params.has('invite_token') ? 'invite' : params.has('email_change_token') ? 'email_change' : null;
-  if (!tokenParam || !type) return;
+  if (!tokenParam || !type) return false;
   try {
     const data = await api('/verify', { token: tokenParam, type }, 'POST', null);
     history.replaceState(null, '', location.pathname + location.search);
@@ -198,13 +198,16 @@ async function handleHash() {
     if (type === 'recovery') {
       setMode('reset');
       showNotice('Recovery link verified. Choose a new password below.', 'success');
+      return true;
     } else {
-      showNotice(type === 'signup' ? 'Email confirmed. Sign in to continue your membership application.' : 'The link was verified. Please continue securely.', 'success');
       setMode('login');
+      showNotice(type === 'signup' ? 'Email confirmed. Sign in to continue your membership application.' : 'The link was verified. Please continue securely.', 'success');
     }
   } catch (error) {
     showNotice(error.message + ' Request a fresh link if this one has expired.', 'error');
+    return false;
   }
+  return false;
 }
 document.querySelectorAll('[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
 form.addEventListener('submit', async event => {
@@ -216,8 +219,8 @@ form.addEventListener('submit', async event => {
   try {
     if (mode === 'signup') {
       await api('/signup', { email, password, data: { full_name: $('#full-name').value.trim() } }, 'POST', null);
-      showNotice('Account created. Check your email for the confirmation link. Account creation does not approve membership.', 'success');
       setMode('login');
+      showNotice('Account created. Check your email for the confirmation link. Account creation does not approve membership.', 'success');
     } else if (mode === 'reset') {
       const currentToken = token();
       if (!currentToken) throw new Error('Your recovery session has expired. Request a new password recovery link.');
@@ -275,7 +278,8 @@ $('#open-admin').addEventListener('click', async () => {
 });
 $('#back-member').addEventListener('click', () => { $('#admin-panel').hidden = true; $('#member-panel').hidden = false; });
 (async () => {
-  await handleHash();
+  const recoveryHandled = await handleHash();
+  if (recoveryHandled) return;
   const currentToken = token();
   if (!currentToken) return;
   try {
