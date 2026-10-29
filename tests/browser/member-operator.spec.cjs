@@ -58,6 +58,11 @@ test('member request enters approval queue and operator can request more informa
   await operatorRequest.locator('[data-review="needs-information"]').click();
   await expect(page.locator('#workflow-member-queue .workflow-request').first().locator('.workflow-status')).toHaveText('Needs Information');
   await expect(page.locator('#workflow-pending-count')).toHaveText('1 pending');
+  const followUp = page.locator('#workflow-operator-queue .workflow-request').first();
+  await followUp.locator('input[data-note]').fill('Reviewed details and rejected');
+  await followUp.locator('[data-review="reject"]').click();
+  await expect(page.locator('#workflow-member-queue .workflow-request').first().locator('.workflow-status')).toHaveText('Rejected');
+  await expect(page.locator('#workflow-pending-count')).toHaveText('0 pending');
 });
 
 test('internal transfer approval cannot create money from zero balances', async ({ page }) => {
