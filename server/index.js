@@ -58,8 +58,13 @@ async function webhookHandler(req, res) {
   const timestamp = req.header('X-AVCU-Timestamp');
   const eventId = req.header('X-AVCU-Event-Id');
   const body = req.body instanceof Buffer ? req.body : Buffer.from('');
+  const secret = webhookSecret(provider);
+  if (!secret) {
+    console.error('[avcu] webhook rejected: provider secret is not configured', provider);
+    return res.status(503).json({ error: 'Webhook provider is not configured' });
+  }
   const valid = verifyWebhookSignature({
-    secret: webhookSecret(provider), body: body.toString('utf8'), signature, timestamp
+    secret, body: body.toString('utf8'), signature, timestamp
   });
   if (!valid || !eventId) {
     console.warn('[avcu] webhook rejected: bad signature or missing event id', provider);
