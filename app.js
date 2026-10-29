@@ -164,7 +164,7 @@
     const rows = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
     $('#all-transactions').innerHTML = rows.length ? rows.map(transactionMarkup).join('') : '<p class="empty-state">No account activity yet.</p>';
     $('#ledger-count').textContent = String(state.transactions.length);
-    $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Active';
+    $('#ledger-card-status').textContent = state.frozen ? 'Frozen locally' : 'Not connected';
   }
 
   function renderCard() {
