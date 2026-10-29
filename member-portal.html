@@ -16,12 +16,13 @@
       <p class="muted">Sign in to your prototype member account or submit a membership application.</p>
       <div class="tabs"><button class="tab active" id="show-login" type="button">Sign in</button><button class="tab" id="show-register" type="button">Apply for membership</button></div>
       <form id="login-form" class="stack">
-        <label for="login-identifier">Member number or email</label><input id="login-identifier" type="text" inputmode="text" autocomplete="username" placeholder="10-digit member number or email" required>
+        <label for="login-identifier">Member number, username, or email</label><input id="login-identifier" type="text" inputmode="text" autocomplete="username" placeholder="member number, username, or email" required>
         <label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required>
         <button class="primary" type="submit">Sign in</button>
       </form>
       <form id="register-form" class="stack hidden">
         <label for="register-name">Full name</label><input id="register-name" maxlength="100" autocomplete="name" required>
+        <label for="register-username">Username</label><input id="register-username" minlength="3" maxlength="24" pattern="[a-z0-9_]{3,24}" autocomplete="username" required><p class="muted small">Use 3–24 lowercase letters, numbers, or underscores. This is separate from your numeric member number.</p>
         <label for="register-email">Email</label><input id="register-email" type="email" autocomplete="email" required>
         <label for="register-password">Create password</label><input id="register-password" type="password" minlength="12" autocomplete="new-password" required>
         <button class="primary" type="submit">Submit application</button>
