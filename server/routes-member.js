@@ -83,7 +83,7 @@ router.get('/membership-tier', memberAuth, async (req, res, next) => {
     // or any financial benefit. Requirements come from the same centralized tier policy.
     const order = ['new_member', 'active_member', 'established_member', 'priority_service'];
     const currentIndex = order.indexOf(membership.tier);
-    const nextTier = currentIndex >= 0 && currentIndex < order.length - 1 ? order[currentIndex + 1] : null;
+    const nextTier = !membership.overridden && currentIndex >= 0 && currentIndex < order.length - 1 ? order[currentIndex + 1] : null;
     const nextRequirements = nextTier === 'active_member'
       ? [{ key: 'transactions', label: 'Qualifying transactions in the last 90 days', current: membership.activity90Days, required: TIER_POLICY.activeTransactions90Days }]
       : nextTier === 'established_member'
@@ -103,11 +103,13 @@ router.get('/membership-tier', memberAuth, async (req, res, next) => {
       currentTier: membership.label,
       nextTier: nextTier ? MEMBERSHIP_TIERS[nextTier] : null,
       requirements: nextRequirements.map(item => ({ ...item, remaining: Math.max(0, item.required - item.current) })),
-      percent: membership.tier === 'review_required' ? 0 : progressPercent,
+      percent: membership.tier === 'review_required' ? 0 : membership.overridden ? null : progressPercent,
       note: membership.tier === 'review_required'
         ? 'Membership verification is required before activity-based tier progress can be earned.'
-        : nextTier ? 'Progress is based on recorded activity and membership age; it does not guarantee approval for any financial product.'
-          : 'You are at the highest activity-based service tier.'
+        : membership.overridden
+          ? 'This tier was assigned by an operator. Automatic tier progress is not shown while an override is active.'
+          : nextTier ? 'Progress is based on recorded activity and membership age; it does not guarantee approval for any financial product.'
+            : 'You are at the highest activity-based service tier.'
     }});
   } catch (error) { next(error); }
 });
