@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { getTierProgress } from "../src/domain/membership-tiers.mjs";
 
 test("tier progress shows each active requirement and a stable percentage", () => {
-  const result = getTierProgress("plus", { verified_profile: true, months_active: 2, eligible_activity_count: 5 });
+  const result = getTierProgress("plus", { verified_profile: true, months_active: 2, eligible_activity_count: 25 });
   assert.equal(result.currentTier, "Plus");
   assert.equal(result.nextTier, "Premier");
   assert.equal(result.qualified, false);
