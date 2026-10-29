@@ -58,9 +58,17 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       return true;
     } catch {
-      showToast('Local storage is unavailable. Your changes may not persist after refresh.', 'error');
       return false;
     }
+  }
+
+  function persistenceFeedback(saved, successMessage) {
+    showToast(
+      saved
+        ? successMessage
+        : 'This demo action is available only in this session. Local storage is unavailable, so the change may be lost after refresh.',
+      saved ? 'success' : 'error'
+    );
   }
 
   function escapeHtml(value) {
@@ -285,14 +293,14 @@
           state.balances[to] += amountCents;
           addTransaction(to, 'Transfer received', amountCents, 'Share transfer');
         }
-        saveState();
+        const saved = saveState();
         renderAll();
         form.reset();
         $('#transfer-kind').value = 'share';
         $('#transfer-from').disabled = false;
         $('#transfer-to').value = 'primary';
         updateTransferMode();
-        showToast(kind === 'bill' ? 'Demo bill payment recorded.' : 'Demo share transfer completed.');
+        persistenceFeedback(saved, kind === 'bill' ? 'Demo bill payment recorded.' : 'Demo share transfer completed.');
       }
     });
   }
@@ -319,12 +327,12 @@
       onConfirm: () => {
         state.balances[account] += amountCents;
         addTransaction(account, description, amountCents, 'Sample check deposit');
-        saveState();
+        const saved = saveState();
         renderAll();
         form.reset();
         $('#deposit-description').value = 'Sample check deposit';
         $('#check-preview-amount').textContent = '$0.00';
-        showToast('Sample deposit posted to your local demo ledger.');
+        persistenceFeedback(saved, 'Sample deposit posted to your local demo ledger.');
       }
     });
   }
@@ -338,10 +346,10 @@
       confirmText: next ? 'Freeze demo card' : 'Unfreeze demo card',
       onConfirm: () => {
         state.frozen = next;
-        saveState();
+        const saved = saveState();
         renderCard();
         renderHome();
-        showToast(next ? 'Demo card frozen. Test purchases will decline.' : 'Demo card unfrozen. Test purchases can be approved.');
+        persistenceFeedback(saved, next ? 'Demo card frozen. Test purchases will decline.' : 'Demo card unfrozen. Test purchases can be approved.');
       }
     });
   }
@@ -376,10 +384,10 @@
       confirmText: 'Reset demo data',
       onConfirm: () => {
         state = cloneSeed();
-        saveState();
+        const saved = saveState();
         renderAll();
         renderAllTransactions();
-        showToast('Demo reset to the original sample data on this device.');
+        persistenceFeedback(saved, 'Demo reset to the original sample data on this device.');
       }
     });
   }
