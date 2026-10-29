@@ -62,3 +62,6 @@ body{background:var(--wash);color:var(--ink)}
 @media(max-width:620px){.community-trust-strip{grid-template-columns:1fr;padding:4px 18px}.community-trust-strip>span,.community-trust-strip>span:first-child{padding:9px 0;border-left:0;border-bottom:1px solid var(--line)}.community-trust-strip>span:last-child{border-bottom:0}}
 
 .hero-watermark{font-family:Georgia,serif;color:rgba(226,193,125,.14)}
+
+@media(max-width:1190px){.shares-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.shares-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brand-mark{width:39px;height:39px}.brand-mark svg{width:27px;height:27px}}
