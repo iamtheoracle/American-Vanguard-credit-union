@@ -101,7 +101,7 @@ export async function queueOperationsEmail(client, {
   recipient = process.env.AVCU_OPERATIONS_EMAIL
 }) {
   const email = String(recipient || '').trim();
-  if (!email || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)) {
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return { status: 'skipped', reason: 'operations_email_not_configured' };
   }
   const { rows } = await client.query(
