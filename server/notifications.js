@@ -66,34 +66,35 @@ async function sendGmail({ to, subject, text }) {
  * Persist in-app and email work before delivery. Callers should pass a stable
  * eventKey derived from the business record and state transition for dedupe.
  */
-export async function notifyMember({
+export async function queueMemberNotification(client, {
   memberId, eventType, title, body, subject = title, emailText = body,
   eventKey = `${eventType}:${memberId}:${randomUUID()}`
 }) {
   if (typeof memberId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(memberId)) {
     return { status: 'skipped', reason: 'invalid_member_id' };
   }
-  const result = await withTx(async client => {
-    const { rows } = await client.query('SELECT email FROM members WHERE id = $1 FOR SHARE', [memberId]);
-    const recipient = rows[0]?.email;
-    if (!recipient) return { status: 'skipped', reason: 'member_email_unavailable' };
+  const { rows } = await client.query('SELECT email FROM members WHERE id = $1 FOR SHARE', [memberId]);
+  const recipient = rows[0]?.email;
+  if (!recipient) return { status: 'skipped', reason: 'member_email_unavailable' };
 
-    const inserted = await client.query(
-      `INSERT INTO notification_outbox
-        (event_key, member_id, event_type, recipient, title, body, email_subject, email_text)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (event_key) DO NOTHING
-       RETURNING id`,
-      [eventKey, memberId, eventType, recipient, title, body, subject, emailText]);
-    if (inserted.rows.length) {
-      await client.query('INSERT INTO notifications (member_id, title, body) VALUES ($1,$2,$3)',
-        [memberId, title, body]);
-      return { status: 'queued', outboxId: inserted.rows[0].id, duplicate: false };
-    }
-    const existing = await client.query('SELECT id, status FROM notification_outbox WHERE event_key = $1', [eventKey]);
-    return { status: 'queued', outboxId: existing.rows[0]?.id ?? null, duplicate: true };
-  });
-  return result;
+  const inserted = await client.query(
+    `INSERT INTO notification_outbox
+      (event_key, member_id, event_type, recipient, title, body, email_subject, email_text)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (event_key) DO NOTHING
+     RETURNING id`,
+    [eventKey, memberId, eventType, recipient, title, body, subject, emailText]);
+  if (inserted.rows.length) {
+    await client.query('INSERT INTO notifications (member_id, title, body) VALUES ($1,$2,$3)',
+      [memberId, title, body]);
+    return { status: 'queued', outboxId: inserted.rows[0].id, duplicate: false };
+  }
+  const existing = await client.query('SELECT id, status FROM notification_outbox WHERE event_key = $1', [eventKey]);
+  return { status: 'queued', outboxId: existing.rows[0]?.id ?? null, duplicate: true };
+}
+
+export async function notifyMember(options) {
+  return withTx(client => queueMemberNotification(client, options));
 }
 
 /**
