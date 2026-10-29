@@ -6,8 +6,8 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const MAX_ATTEMPTS = 5;
 const BATCH_SIZE = 10;
 
-function base64Url(value) {
-  return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');
+export function base64Url(value) {
+  return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
 function configured() {
@@ -41,12 +41,12 @@ async function sendGmail({ to, subject, text }) {
   const raw = [
     `From: American Vantoris Credit Union <${process.env.AVCU_GMAIL_FROM}>`,
     `To: ${to}`,
-    `Subject: ${subject.replace(/[\\r\\n]/g, ' ')}`,
+    `Subject: ${subject.replace(/[\r\n]/g, ' ')}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=UTF-8',
     '',
     text
-  ].join('\\r\\n');
+  ].join('\r\n');
   const response = await fetch(API_BASE, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
