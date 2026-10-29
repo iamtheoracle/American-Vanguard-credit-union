@@ -38,7 +38,16 @@
     $('total-balance').textContent = dollars(accounts.reduce((sum, a) => sum + Number(a.balanceCents || 0), 0));
     const tier = tierData.membership;
     $('membership-tier').textContent = tier?.label || 'New Member';
-    $('tier-detail').textContent = `${tier?.activity90Days ?? 0} qualifying transactions in 90 days`;
+    const tierProgress = tierData.progress;
+    $('tier-detail').textContent = tierData.membership?.tier === 'review_required'
+      ? 'Verification required before tier progress can be earned.'
+      : tierProgress?.nextTier
+        ? `${tierProgress.percent}% toward ${tierProgress.nextTier} · ${tier?.activity90Days ?? 0} qualifying transactions in 90 days`
+        : `${tier?.activity90Days ?? 0} qualifying transactions in 90 days · Highest activity tier`;
+    $('tier-detail').setAttribute('title', [
+      tierProgress?.note,
+      ...(tierProgress?.requirements || []).map(item => `${item.label}: ${item.current}/${item.required}${item.remaining ? ` (${item.remaining} remaining)` : ' (complete)'}`)
+    ].filter(Boolean).join(' | '));
     $('card-status').textContent = 'Not connected';
     $('card-last4').textContent = 'Card details unavailable';
     $('accounts-list').innerHTML = accounts.length ? accounts.map(a => `<article class="account-row"><span class="account-symbol">AV</span><span class="account-info"><strong>${escapeHtml(a.name)}</strong><small>${escapeHtml(a.kind)} · •••• ${escapeHtml(a.suffix)}</small></span><strong>${dollars(a.balanceCents)}</strong></article>`).join('') : '<p class="muted">No open share accounts yet. Membership approval is required.</p>';
