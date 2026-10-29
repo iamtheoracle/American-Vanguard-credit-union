@@ -167,7 +167,7 @@
   async function loadAll(){
     applyRoleAccess();
     if(operator?.role==='auditor'){
-      $('queue-approvals').textContent='Read-only';$('queue-members').textContent='—';$('queue-cases').textContent='—';$('queue-loan-alerts').textContent='—';
+      $('queue-approvals').textContent='Read-only';$('queue-members').textContent='—';$('queue-cases').textContent='—';$('queue-loan-alerts').textContent='—';$('queue-money-requests').textContent='—';
       await loadMigrations();await loadAudit();return;
     }
     const queue=await api('/operator/queue');
@@ -175,6 +175,7 @@
     $('queue-members').textContent=queue.membershipPending??0;
     $('queue-cases').textContent=queue.cases?.open??0;
     $('queue-loan-alerts').textContent=queue.loanAlertsPending??0;
+    $('queue-money-requests').textContent=queue.moneyRequestsPending??0;
     await loadLoanAlerts();
     await loadApprovals();
     await loadTiers();
