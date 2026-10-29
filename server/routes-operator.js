@@ -1,4 +1,5 @@
 import express from 'express';
+import { createHash } from 'node:crypto';
 import { query, withTx, audit } from './db.js';
 import {
   operatorAuth, requireOperatorRole, applySessionCookie, clearAuthCookie,
@@ -9,6 +10,7 @@ import { decideApproval, reversePostedTransaction } from './approvals.js';
 import { integrationHealth } from './integrations/index.js';
 import { notifyMember } from './notifications.js';
 import { MEMBERSHIP_TIERS, recalculateMemberTier, overrideMemberTier, clearMemberTierOverride } from './membership-tiers.js';
+import { validateLegacyTransactions } from './migration-validation.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -470,6 +472,109 @@ router.post('/operator/loan-alerts/:id/acknowledge', ...guard('management', 'ope
       metadata: { alertType: rows[0].alertType }
     });
     res.json({ alert: rows[0] });
+  } catch (error) { next(error); }
+});
+
+// ---- legacy migration staging -------------------------------------------------
+router.get('/operator/migrations', ...guard('management', 'operator', 'auditor'), async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const { rows } = await query(
+      `SELECT id, source_system AS "sourceSystem", source_file_name AS "sourceFileName",
+              source_payload_sha256 AS "sourcePayloadSha256", status,
+              source_count AS "sourceCount", accepted_count AS "acceptedCount",
+              exception_count AS "exceptionCount", created_at AS "createdAt",
+              validated_at AS "validatedAt", approved_at AS "approvedAt", imported_at AS "importedAt"
+       FROM migration_batches ORDER BY created_at DESC LIMIT $1 OFFSET $2`, [limit, offset]);
+    res.json({ batches: rows });
+  } catch (error) { next(error); }
+});
+
+router.post('/operator/migrations/validate', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const sourceSystem = String(req.body?.sourceSystem || '').trim();
+    const sourceFileName = String(req.body?.sourceFileName || 'authorized-export.json').split(/[\\/]/).pop().slice(0, 255);
+    const rows = req.body?.rows;
+    if (!sourceSystem || !Array.isArray(rows) || rows.length < 1 || rows.length > 1000) {
+      return res.status(400).json({ error: 'Provide a source system and between 1 and 1000 transaction rows', code: 'invalid_migration_payload' });
+    }
+    const normalizedInput = rows.map(row => row && typeof row === 'object' && !Array.isArray(row)
+      ? { ...row, sourceSystem } : row);
+    const result = validateLegacyTransactions(normalizedInput, sourceSystem);
+    const payloadHash = createHash('sha256').update(JSON.stringify({ sourceSystem, sourceFileName, rows: normalizedInput })).digest('hex');
+    const status = result.exceptionCount ? 'blocked' : 'validated';
+    const batch = await withTx(async client => {
+      const inserted = await client.query(
+        `INSERT INTO migration_batches
+          (source_system, source_file_name, source_payload_sha256, created_by, status,
+           source_count, accepted_count, exception_count, source_totals, exception_summary, validated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()) RETURNING id, created_at`,
+        [sourceSystem, sourceFileName || 'authorized-export.json', payloadHash, req.operator.id, status,
+          result.sourceCount, result.acceptedCount, result.exceptionCount,
+          JSON.stringify(result.totals), JSON.stringify(result.exceptions)]);
+      const batchId = inserted.rows[0].id;
+      const acceptedByRow = new Map(result.accepted.map(item => [item.rowNumber, item]));
+      const exceptionByRow = new Map(result.exceptions.map(item => [item.rowNumber, item]));
+      for (let index = 0; index < normalizedInput.length; index += 1) {
+        const rowNumber = index + 1;
+        const raw = normalizedInput[index];
+        const row = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+        const accepted = acceptedByRow.get(rowNumber);
+        const exception = exceptionByRow.get(rowNumber);
+        await client.query(
+          `INSERT INTO migration_staged_transactions
+            (batch_id, row_number, source_system, source_transaction_id, source_account_id,
+             occurred_at, original_timestamp, amount_minor, currency, status, description, reference,
+             validation_status, exception_code, exception_fields, raw_record)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          [batchId, rowNumber, sourceSystem,
+            typeof row.sourceTransactionId === 'string' ? row.sourceTransactionId.slice(0, 250) : null,
+            typeof row.sourceAccountId === 'string' ? row.sourceAccountId.slice(0, 250) : null,
+            accepted ? accepted.occurredAt : null,
+            typeof row.occurredAt === 'string' ? row.occurredAt.slice(0, 100) : null,
+            Number.isSafeInteger(row.amountMinor) ? row.amountMinor : null,
+            typeof row.currency === 'string' && /^[A-Z]{3}$/.test(row.currency) ? row.currency : null,
+            typeof row.status === 'string' && ['pending','posted','settled','failed','reversed'].includes(row.status) ? row.status : null,
+            typeof row.description === 'string' ? row.description.slice(0, 2000) : '',
+            typeof row.reference === 'string' ? row.reference.slice(0, 250) : null,
+            accepted ? 'accepted' : 'exception', exception?.code || 'unknown_exception',
+            JSON.stringify(exception?.fields || []), JSON.stringify(row)]);
+      }
+      await audit(client, {
+        actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
+        action: 'migration.batch_validated', entityType: 'migration_batch', entityId: batchId,
+        metadata: { sourceSystem, payloadSha256: payloadHash, sourceCount: result.sourceCount,
+          acceptedCount: result.acceptedCount, exceptionCount: result.exceptionCount, status }
+      });
+      return { id: batchId, createdAt: inserted.rows[0].created_at };
+    });
+    res.status(201).json({
+      batch: { ...batch, sourceSystem, sourceFileName, sourcePayloadSha256: payloadHash,
+        status, sourceCount: result.sourceCount, acceptedCount: result.acceptedCount,
+        exceptionCount: result.exceptionCount, totals: result.totals, exceptions: result.exceptions },
+      cutoverAllowed: false,
+      message: 'Records are staged only. Reconciliation, authorized approval, and a verified source export are still required before any import or cutover.'
+    });
+  } catch (error) { next(error); }
+});
+
+router.get('/operator/migrations/:id', ...guard('management', 'operator', 'auditor'), async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, source_system AS "sourceSystem", source_file_name AS "sourceFileName",
+              source_payload_sha256 AS "sourcePayloadSha256", status,
+              source_count AS "sourceCount", accepted_count AS "acceptedCount",
+              exception_count AS "exceptionCount", source_totals AS "sourceTotals",
+              exception_summary AS "exceptionSummary", reconciliation_result AS "reconciliationResult",
+              created_at AS "createdAt", validated_at AS "validatedAt", approved_at AS "approvedAt", imported_at AS "importedAt"
+       FROM migration_batches WHERE id = $1`, [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Migration batch not found' });
+    const exceptions = await query(
+      `SELECT row_number AS "rowNumber", exception_code AS code, exception_fields AS fields, raw_record AS "rawRecord"
+       FROM migration_staged_transactions WHERE batch_id = $1 AND validation_status = 'exception'
+       ORDER BY row_number LIMIT 100`, [req.params.id]);
+    res.json({ batch: rows[0], exceptions: exceptions.rows, cutoverAllowed: false });
   } catch (error) { next(error); }
 });
 
