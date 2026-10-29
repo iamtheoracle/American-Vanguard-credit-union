@@ -310,6 +310,7 @@
       onConfirm: () => {
         state = cloneSeed();
         saveState();
+        window.dispatchEvent(new CustomEvent('avcu:reset-workflow'));
         renderAll();
         renderAllTransactions();
         showToast('Local account workspace reset.');
