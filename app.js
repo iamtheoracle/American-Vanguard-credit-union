@@ -113,8 +113,8 @@
     });
     const copy = {
       home: ['MEMBER OVERVIEW', 'Welcome to AVCU'],
-      move: ['MOVE MONEY', 'Move money'],
-      deposit: ['DEPOSIT', 'Deposit a sample check'],
+      move: ['MOVE MONEY', 'Payment requests'],
+      deposit: ['DEPOSIT', 'Deposit a check'],
       card: ['CARD CONTROLS', 'Your debit card'],
       operations: ['PAYMENT WORKSPACE', 'Payments & approvals'],
       more: ['MEMBER RESOURCES', 'More from AVCU']
@@ -171,12 +171,12 @@
     $('#freeze-overlay').classList.toggle('hidden', !state.frozen);
     $('#large-demo-card').setAttribute('aria-label', state.frozen ? 'Demo debit card, frozen' : 'Demo debit card, active');
     $('#card-state-indicator').classList.toggle('frozen', state.frozen);
-    $('#card-state-heading').textContent = state.frozen ? 'Your card is frozen' : 'Your card is active';
+    $('#card-state-heading').textContent = state.frozen ? 'Card frozen locally' : 'Issuer not connected';
     $('#card-state-description').textContent = state.frozen ? 'New purchase authorizations will be declined locally.' : 'Purchase authorizations can be recorded locally.';
     $('#freeze-toggle').textContent = state.frozen ? 'Unfreeze card' : 'Freeze card';
     $('#freeze-toggle').classList.toggle('danger-button', !state.frozen);
     $('#card-status-dot').classList.toggle('frozen', state.frozen);
-    $('#card-status-text').textContent = state.frozen ? 'Card is frozen in this demo' : 'Card is active in this demo';
+    $('#card-status-text').textContent = state.frozen ? 'Card frozen locally' : 'Issuer not connected';
     $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Active';
   }
 
@@ -271,100 +271,19 @@
     renderAccountGuidance();
   }
 
-  function submitTransfer(form) {
-    const data = new FormData(form);
-    const kind = data.get('kind') || 'share';
-    if (!['share', 'bill'].includes(kind)) { showToast('Choose a supported demo action.', 'error'); return; }
-    const from = kind === 'bill' ? 'draft' : String(data.get('from'));
-    const to = String(data.get('to'));
-    const amount = Number(data.get('amount'));
-    const memo = String(data.get('memo') || '').trim();
-    const payee = String(data.get('payee') || '').trim();
-    if (!accounts[from] || (kind === 'share' && (!accounts[to] || to === from))) {
-      showToast('Choose two different accounts for a transfer.', 'error');
-      return;
-    }
-    if (!safeMoneyInput(amount) || !Number.isSafeInteger(cents(amount))) {
-      showToast('Enter a valid amount with no more than two decimal places.', 'error');
-      return;
-    }
-    const amountCents = cents(amount);
-    if (state.balances[from] < amountCents) {
-      showToast(`Not enough available funds in ${accounts[from].name} for this request.`, 'error');
-      return;
-    }
-    if (kind === 'bill' && (!payee || payee.length > 80)) {
-      showToast('Enter a biller or payee name.', 'error');
-      $('#bill-payee').focus();
-      return;
-    }
-    const title = kind === 'bill' ? `Bill payment · ${payee}` : 'Account transfer';
-    const destination = kind === 'share' ? accounts[to].name : payee;
-    showConfirm({
-      title: kind === 'bill' ? 'Review bill payment request' : 'Review account transfer request',
-      description: 'This request will be routed for operator approval before any account posting. External payment execution requires a connected provider.',
-      summary: `<div>From <strong>${escapeHtml(accounts[from].name)}</strong></div>${kind === 'share' ? `<div>To <strong>${escapeHtml(destination)}</strong></div>` : `<div>Payee <strong>${escapeHtml(payee)}</strong></div>`}<div>Amount <strong>${money(amountCents)}</strong></div>${memo ? `<div>Memo <strong>${escapeHtml(memo)}</strong></div>` : ''}`,
-      confirmText: 'Submit for approval',
-      onConfirm: () => {
-        if (state.balances[from] < amountCents) {
-          showToast('The available demo balance changed. Review the transfer again.', 'error');
-          return;
-        }
-        state.balances[from] -= amountCents;
-        addTransaction(from, title, -amountCents, kind === 'bill' ? 'Bill payment' : 'Share transfer');
-        if (kind === 'share') {
-          state.balances[to] += amountCents;
-          addTransaction(to, 'Transfer received', amountCents, 'Share transfer');
-        }
-        saveState();
-        renderAll();
-        form.reset();
-        $('#transfer-kind').value = 'share';
-        $('#transfer-from').disabled = false;
-        $('#transfer-to').value = 'primary';
-        updateTransferMode();
-        showToast(kind === 'bill' ? 'Bill payment request recorded.' : 'Account transfer request recorded.');
-      }
-    });
+  function submitTransfer() {
+    showToast('Payment workflow is unavailable. No transaction was posted.', 'error');
   }
 
-  function submitDeposit(form) {
-    const data = new FormData(form);
-    const account = String(data.get('account'));
-    const amount = Number(data.get('amount'));
-    const description = String(data.get('description') || '').trim();
-    if (!accounts[account] || !safeMoneyInput(amount) || amount > 100000 || !Number.isSafeInteger(cents(amount))) {
-      showToast('Choose a share and enter a valid positive check amount.', 'error');
-      return;
-    }
-    if (!description || description.length > 80) {
-      showToast('Enter a deposit description.', 'error');
-      return;
-    }
-    const amountCents = cents(amount);
-    showConfirm({
-      title: 'Submit check deposit request?',
-      description: 'This request will enter the review queue. The check must be captured and processed by an authorized deposit service before funds are posted.',
-      summary: `<div>Share <strong>${escapeHtml(accounts[account].name)}</strong></div><div>Description <strong>${escapeHtml(description)}</strong></div><div>Deposit <strong>+${money(amountCents)}</strong></div>`,
-      confirmText: 'Submit for approval',
-      onConfirm: () => {
-        state.balances[account] += amountCents;
-        addTransaction(account, description, amountCents, 'Sample check deposit');
-        saveState();
-        renderAll();
-        form.reset();
-        $('#deposit-description').value = 'Sample check deposit';
-        $('#check-preview-amount').textContent = '$0.00';
-        showToast('Check deposit request submitted for approval.');
-      }
-    });
+  function submitDeposit() {
+    showToast('Deposit workflow is unavailable. No account was credited.', 'error');
   }
 
   function toggleFreeze() {
     const next = !state.frozen;
     showConfirm({
-      title: next ? 'Freeze this card?' : 'Unfreeze this card?',
-      description: next ? 'Simulated purchases will decline until you unfreeze the card.' : 'Simulated purchases can be approved again while the card is active.',
+      title: next ? 'Freeze local card controls?' : 'Unfreeze local card controls?',
+      description: next ? 'New local purchase authorization requests will be blocked.' : 'Local purchase authorization requests can be submitted for review. This does not change an external card issuer status.',
       summary: `<div>Card <strong>•••• 4826</strong></div><div>New status <strong>${next ? 'Frozen' : 'Active'}</strong></div>`,
       confirmText: next ? 'Freeze card' : 'Unfreeze card',
       onConfirm: () => {
@@ -378,34 +297,7 @@
   }
 
   function simulatePurchase() {
-    const amount = Number($('#purchase-amount').value);
-    const merchant = String($('#purchase-merchant').value || '').trim();
-    const result = $('#purchase-result');
-    result.classList.remove('hidden', 'approved', 'declined');
-    if (!safeMoneyInput(amount) || amount > 10000 || !Number.isSafeInteger(cents(amount)) || !merchant || merchant.length > 80) {
-      result.classList.add('declined');
-      result.textContent = 'Not processed: enter a valid amount and merchant name.';
-      return;
-    }
-    const amountCents = cents(amount);
-    if (state.frozen) {
-      result.classList.add('declined');
-      result.innerHTML = `<strong>DECLINED · CARD FROZEN</strong><br>The simulated ${money(amountCents)} purchase at ${escapeHtml(merchant)} was declined. No balance changed.`;
-      showToast('Demo purchase declined because the card is frozen.', 'error');
-    } else if (state.balances.draft < amountCents) {
-      result.classList.add('declined');
-      result.innerHTML = `<strong>DECLINED · INSUFFICIENT FUNDS</strong><br>The simulated ${money(amountCents)} purchase at ${escapeHtml(merchant)} exceeds the available Share Draft balance of ${money(state.balances.draft)}. No balance changed.`;
-      showToast('Demo purchase declined: insufficient Share Draft funds.', 'error');
-    } else {
-      state.balances.draft -= amountCents;
-      addTransaction('draft', merchant, -amountCents, 'Card purchase');
-      saveState();
-      renderAll();
-      result.classList.add('approved');
-      result.innerHTML = `<strong>APPROVED · DEMO ONLY</strong><br>The simulated ${money(amountCents)} purchase at ${escapeHtml(merchant)} was approved. Share Draft was reduced by ${money(amountCents)} and the demo ledger was updated.`;
-      showToast('Demo purchase approved and recorded in the local sample ledger.');
-    }
-    announce(result.textContent);
+    showToast('Purchase authorization workflow is unavailable. No merchant authorization or account debit occurred.', 'error');
   }
 
   function resetDemo() {
