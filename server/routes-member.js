@@ -126,11 +126,19 @@ router.get('/accounts', memberAuth, async (req, res, next) => {
 
 router.get('/transactions', memberAuth, async (req, res, next) => {
   try {
-    const { search, type, limit = '50' } = req.query;
-    const capped = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const { search, type, status, from, to, limit = '30', offset = '0' } = req.query;
+    const capped = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
+    const pageOffset = Math.min(Math.max(parseInt(offset, 10) || 0, 0), 100000);
+    const validDate = value => !value || (typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)));
+    if (!validDate(from) || !validDate(to) || (from && to && from > to)) {
+      return res.status(400).json({ error: 'Use valid from/to dates in YYYY-MM-DD format; from must not be after to.' });
+    }
     const params = [req.member.id];
     let where = 'a.member_id = $1';
-    if (type) { params.push(String(type)); where += ` AND t.type = $${params.length}`; }
+    if (type) { params.push(String(type).slice(0, 40)); where += ` AND t.type = ${params.length}`; }
+    if (status) { params.push(String(status).slice(0, 40)); where += ` AND t.status = ${params.length}`; }
+    if (from) { params.push(from); where += ` AND t.created_at >= ${params.length}::date`; }
+    if (to) { params.push(to); where += ` AND t.created_at < (${params.length}::date + INTERVAL '1 day')`; }
     if (search) {
       params.push(`%${String(search).slice(0, 80)}%`);
       where += ` AND (t.memo ILIKE $${params.length} OR t.payee ILIKE $${params.length} OR t.reference ILIKE $${params.length})`;
@@ -144,8 +152,11 @@ router.get('/transactions', memberAuth, async (req, res, next) => {
        LEFT JOIN accounts fa ON fa.id = t.from_account_id
        LEFT JOIN accounts ta ON ta.id = t.to_account_id
        WHERE ${where}
-       ORDER BY t.created_at DESC LIMIT ${capped}`, params);
-    res.json({ transactions: rows.map(row => ({ ...row, amountCents: Number(row.amountCents) })) });
+       ORDER BY t.created_at DESC, t.id DESC LIMIT ${capped + 1} OFFSET ${pageOffset}`, params);
+    const hasMore = rows.length > capped;
+    if (hasMore) rows.pop();
+    res.json({ transactions: rows.map(row => ({ ...row, amountCents: Number(row.amountCents) })),
+      pagination: { limit: capped, offset: pageOffset, hasMore, nextOffset: hasMore ? pageOffset + rows.length : null } });
   } catch (error) { next(error); }
 });
 
