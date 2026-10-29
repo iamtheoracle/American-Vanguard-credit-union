@@ -10,7 +10,7 @@ import { submitMemberTransfer, createSupportCase, lookupIdempotent } from './ser
 import { runChat, renderReply, activeProvider } from './ai/index.js';
 import { submitMemberTransfer as svcTransfer } from './services-member.js';
 import { notifyMember } from './notifications.js';
-import { recalculateMemberTier } from './membership-tiers.js';
+import { recalculateMemberTier, MEMBERSHIP_TIERS, TIER_POLICY } from './membership-tiers.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -76,10 +76,40 @@ router.get('/auth/me', memberAuth, (req, res) => {
 
 router.get('/membership-tier', memberAuth, async (req, res, next) => {
   try {
-    const tier = await recalculateMemberTier(req.member.id);
-    res.json({ membership: tier });
-  } catch (error) { next(error); }
+    const membership = await recalculateMemberTier(req.member.id);
+    if (!membership) return res.status(404).json({ error: 'Membership record not found' });
 
+    // Progress is informational only: it does not promise credit, account access,
+    // or any financial benefit. Requirements come from the same centralized tier policy.
+    const order = ['new_member', 'active_member', 'established_member', 'priority_service'];
+    const currentIndex = order.indexOf(membership.tier);
+    const nextTier = currentIndex >= 0 && currentIndex < order.length - 1 ? order[currentIndex + 1] : null;
+    const nextRequirements = nextTier === 'active_member'
+      ? [{ key: 'transactions', label: 'Qualifying transactions in the last 90 days', current: membership.activity90Days, required: TIER_POLICY.activeTransactions90Days }]
+      : nextTier === 'established_member'
+        ? [
+            { key: 'transactions', label: 'Qualifying transactions in the last 90 days', current: membership.activity90Days, required: TIER_POLICY.establishedTransactions90Days },
+            { key: 'age', label: 'Membership age in days', current: membership.accountAgeDays, required: TIER_POLICY.establishedMinimumAgeDays }
+          ]
+        : nextTier === 'priority_service'
+          ? [
+              { key: 'transactions', label: 'Qualifying transactions in the last 90 days', current: membership.activity90Days, required: TIER_POLICY.priorityTransactions90Days },
+              { key: 'age', label: 'Membership age in days', current: membership.accountAgeDays, required: TIER_POLICY.priorityMinimumAgeDays }
+            ] : [];
+    const progressPercent = nextRequirements.length
+      ? Math.round(nextRequirements.reduce((sum, item) => sum + Math.min(item.current / item.required, 1), 0) / nextRequirements.length * 100)
+      : 100;
+    res.json({ membership, progress: {
+      currentTier: membership.label,
+      nextTier: nextTier ? MEMBERSHIP_TIERS[nextTier] : null,
+      requirements: nextRequirements.map(item => ({ ...item, remaining: Math.max(0, item.required - item.current) })),
+      percent: membership.tier === 'review_required' ? 0 : progressPercent,
+      note: membership.tier === 'review_required'
+        ? 'Membership verification is required before activity-based tier progress can be earned.'
+        : nextTier ? 'Progress is based on recorded activity and membership age; it does not guarantee approval for any financial product.'
+          : 'You are at the highest activity-based service tier.'
+    }});
+  } catch (error) { next(error); }
 });
 
 // ---- accounts & transactions ------------------------------------------------
