@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { validateRequest } from '../netlify/functions/workflow.mjs';
+import { validateRequest, handleWorkflowRequest } from '../netlify/functions/workflow.mjs';
 import { rolesForSignup } from '../netlify/functions/identity.mjs';
 
 test('backend validates internal transfer requests without trusting a client member ID', () => {
@@ -34,6 +34,32 @@ test('backend rejects FX and check deposit until trusted provider and document s
   assert.ok(fx.unavailable?.includes('Live FX'));
   const check = validateRequest({ ...base, type:'check-deposit' });
   assert.ok(check.unavailable?.includes('Secure check-image storage'));
+});
+
+test('workflow API rejects unauthenticated access before database access', async () => {
+  const response = await handleWorkflowRequest(new Request('https://avcu.example/api/workflow'), {
+    getUser: async () => null,
+    getDatabase: () => { throw new Error('database must not be touched for unauthenticated requests'); }
+  });
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error, 'Sign in is required.');
+});
+
+test('member role cannot read the operator queue and staff-only role cannot submit as a member', async () => {
+  const databaseMustNotRun = () => { throw new Error('database must not be touched before role authorization'); };
+  const queueResponse = await handleWorkflowRequest(new Request('https://avcu.example/api/workflow?scope=queue'), {
+    getUser: async () => ({ id:'member-1', roles:['member'] }),
+    getDatabase: databaseMustNotRun
+  });
+  assert.equal(queueResponse.status, 403);
+  const submitResponse = await handleWorkflowRequest(new Request('https://avcu.example/api/workflow', {
+    method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({type:'internal-transfer'})
+  }), {
+    getUser: async () => ({ id:'operator-1', roles:['operator'] }),
+    getDatabase: databaseMustNotRun,
+    verifyRequestOrigin: () => {}
+  });
+  assert.equal(submitResponse.status, 403);
 });
 
 test('backend schema has audit history, idempotency, and no seeded account balances', async () => {
