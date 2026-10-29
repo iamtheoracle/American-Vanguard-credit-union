@@ -13,6 +13,7 @@ import { runChat, renderReply, activeProvider } from './ai/index.js';
 import { submitMemberTransfer as svcTransfer } from './services-member.js';
 import { notifyMember, queueMemberNotification, queueOperationsEmail } from './notifications.js';
 import { recalculateMemberTier } from './membership-tiers.js';
+import { verifyPrivyAccessToken, fetchPrivyUser, privyConfigured } from './integrations/privy.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -769,6 +770,93 @@ router.post('/ai/retry', memberAuth, async (req, res, next) => {
     });
     res.json({ taskId: updated.id, status: rendered.status, message: rendered.message,
       toolCalls: rendered.toolCalls || [], provider: activeProvider() });
+  } catch (error) { next(error); }
+});
+
+
+/**
+ * Privy identity + linked-wallet synchronization.
+ * The member must already be authenticated to AVCU. Privy access tokens are
+ * verified server-side and are never persisted. This endpoint does not sign,
+ * submit, or broadcast transactions and does not provision custody wallets.
+ */
+router.get('/wallets/privy/status', memberAuth, async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT l.privy_user_id, l.linked_at,
+              COALESCE(json_agg(json_build_object(
+                'address', w.wallet_address, 'chainType', w.chain_type,
+                'walletClientType', w.wallet_client_type
+              )) FILTER (WHERE w.wallet_address IS NOT NULL), '[]'::json) AS wallets
+       FROM member_privy_links l
+       LEFT JOIN member_privy_wallets w ON w.member_id = l.member_id
+       WHERE l.member_id = $1
+       GROUP BY l.privy_user_id, l.linked_at`, [req.member.id]);
+    res.json({ configured: privyConfigured(), linked: Boolean(rows[0]), account: rows[0] || null,
+      transfersEnabled: false });
+  } catch (error) { next(error); }
+});
+
+router.post('/wallets/privy/link', memberAuth, async (req, res, next) => {
+  try {
+    if (!privyConfigured()) return res.status(503).json({ error: 'Privy is not configured' });
+    const token = String(req.get('X-Privy-Access-Token') || req.body?.accessToken || '');
+    if (!token || token.length > 8192) return res.status(400).json({ error: 'A valid Privy access token is required' });
+    const claims = verifyPrivyAccessToken(token);
+    const user = await fetchPrivyUser(claims.sub);
+    if (!user || user.id !== claims.sub) return res.status(401).json({ error: 'Privy identity could not be verified' });
+    const wallets = (Array.isArray(user.linked_accounts) ? user.linked_accounts : [])
+      .filter(account => account && account.type === 'wallet' &&
+        typeof account.address === 'string' && account.address.length <= 200)
+      .map(account => ({
+        address: account.address,
+        chainType: String(account.chain_type || 'unknown').slice(0, 40),
+        walletClientType: String(account.wallet_client_type || 'unknown').slice(0, 60)
+      }));
+    await withTx(async client => {
+      await client.query(
+        `INSERT INTO member_privy_links (member_id, privy_user_id, linked_at, updated_at)
+         VALUES ($1,$2,now(),now())
+         ON CONFLICT (member_id) DO UPDATE
+         SET privy_user_id = EXCLUDED.privy_user_id, updated_at = now()`,
+        [req.member.id, claims.sub]);
+      await client.query('DELETE FROM member_privy_wallets WHERE member_id = $1', [req.member.id]);
+      for (const wallet of wallets) {
+        await client.query(
+          `INSERT INTO member_privy_wallets
+             (member_id, privy_user_id, wallet_address, chain_type, wallet_client_type)
+           VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (member_id, wallet_address) DO UPDATE SET
+             privy_user_id = EXCLUDED.privy_user_id,
+             chain_type = EXCLUDED.chain_type,
+             wallet_client_type = EXCLUDED.wallet_client_type,
+             updated_at = now()`,
+          [req.member.id, claims.sub, wallet.address, wallet.chainType, wallet.walletClientType]);
+      }
+      await audit(client, {
+        actorType: 'member', actorId: req.member.id, action: 'wallet.privy.linked',
+        entityType: 'privy_identity', entityId: claims.sub,
+        metadata: { linkedWalletCount: wallets.length }
+      });
+    });
+    res.json({ linked: true, walletCount: wallets.length, wallets, transfersEnabled: false });
+  } catch (error) {
+    if (['privy_not_configured','privy_token_invalid','privy_identity_unavailable'].includes(error.code)) {
+      return res.status(error.code === 'privy_identity_unavailable' ? 502 : 401)
+        .json({ error: 'Privy identity verification failed' });
+    }
+    next(error);
+  }
+});
+
+router.delete('/wallets/privy/link', memberAuth, async (req, res, next) => {
+  try {
+    await withTx(async client => {
+      await client.query('DELETE FROM member_privy_links WHERE member_id = $1', [req.member.id]);
+      await audit(client, { actorType: 'member', actorId: req.member.id,
+        action: 'wallet.privy.unlinked', entityType: 'privy_identity', entityId: req.member.id });
+    });
+    res.json({ linked: false, transfersEnabled: false });
   } catch (error) { next(error); }
 });
 
