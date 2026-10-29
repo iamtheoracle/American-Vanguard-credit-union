@@ -19,6 +19,17 @@ const routing = {
 const respond = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control':'no-store, private', 'x-content-type-options':'nosniff' } });
 const isOperator = user => Array.isArray(user?.roles) && (user.roles.includes('operator') || user.roles.includes('admin'));
 const isMember = user => Array.isArray(user?.roles) && (user.roles.includes('member') || user.roles.includes('admin'));
+function publicRequest(row) {
+  if (!row) return null;
+  return {
+    id:row.id,type:row.type,source_account:row.source_account,destination_account:row.destination_account,
+    recipient:row.recipient,destination_details:row.destination_details,currency:row.currency,
+    amount_cents:row.amount_cents,purpose:row.purpose,status:row.status,assigned_team:row.assigned_team,
+    assigned_role:row.assigned_role,operator_note:row.operator_note,provider_state:row.provider_state,
+    recipient_verified:row.recipient_verified,created_at:row.created_at,updated_at:row.updated_at,
+    audit:Array.isArray(row.audit)?row.audit:[]
+  };
+}
 
 export function validateRequest(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { error:'A request object is required.' };
@@ -64,9 +75,9 @@ export default async function handler(request) {
     if (!queue && !isMember(user) && !isOperator(user)) return respond({ error:'Member role required.' },403);
     try {
       const rows = queue
-        ? await db.sql`SELECT r.*, COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor_id',a.actor_id,'action',a.action) ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.status IN ('pending-approval','needs-information') ORDER BY r.created_at ASC LIMIT 200`
-        : await db.sql`SELECT r.*, COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor_id',a.actor_id,'action',a.action) ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.created_by = ${user.id} ORDER BY r.created_at DESC LIMIT 200`;
-      return respond({ requests:rows });
+        ? await db.sql`SELECT r.id,r.type,r.source_account,r.destination_account,r.recipient,r.destination_details,r.currency,r.amount_cents,r.purpose,r.status,r.assigned_team,r.assigned_role,r.operator_note,r.provider_state,r.recipient_verified,r.created_at,r.updated_at,COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor',CASE WHEN a.actor_id=r.created_by THEN 'Member' ELSE 'Authorized operator' END,'action',a.action) ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.status IN ('pending-approval','needs-information') ORDER BY r.created_at ASC LIMIT 200`
+        : await db.sql`SELECT r.id,r.type,r.source_account,r.destination_account,r.recipient,r.destination_details,r.currency,r.amount_cents,r.purpose,r.status,r.assigned_team,r.assigned_role,r.operator_note,r.provider_state,r.recipient_verified,r.created_at,r.updated_at,COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor',CASE WHEN a.actor_id=r.created_by THEN 'Member' ELSE 'Authorized operator' END,'action',a.action) ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.created_by = ${user.id} ORDER BY r.created_at DESC LIMIT 200`;
+      return respond({ requests:rows.map(publicRequest) });
     } catch { return respond({ error:'The shared workflow queue is unavailable.' },503); }
   }
 
@@ -94,11 +105,11 @@ export default async function handler(request) {
         const prior = await client.query('SELECT * FROM avcu_workflow_requests WHERE created_by=$1 AND idempotency_key=$2', [user.id,idempotencyKey]);
         row = prior.rows[0];
         await client.query('COMMIT');
-        return respond({ request:row, idempotentReplay:true });
+        return respond({ request:publicRequest(row), idempotentReplay:true });
       }
       await audit(client,row.id,user.id,'Submitted for approval',{type:v.type,amountCents:v.amountCents});
       await client.query('COMMIT');
-      return respond({ request:row },201);
+      return respond({ request:publicRequest(row) },201);
     } catch {
       await client.query('ROLLBACK').catch(()=>{});
       return respond({ error:'The request could not be saved to the shared queue.' },503);
@@ -168,7 +179,7 @@ export default async function handler(request) {
       );
       await audit(client,row.id,user.id,nextStatus,{note:nextNote});
       await client.query('COMMIT');
-      return respond({ request:updated.rows[0] });
+      return respond({ request:publicRequest(updated.rows[0]) });
     } catch {
       await client.query('ROLLBACK').catch(()=>{});
       return respond({ error:'The review decision failed safely. Recheck the queue before retrying.' },503);
