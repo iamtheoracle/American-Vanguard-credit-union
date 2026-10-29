@@ -177,7 +177,7 @@
     $('#freeze-toggle').classList.toggle('danger-button', !state.frozen);
     $('#card-status-dot').classList.toggle('frozen', state.frozen);
     $('#card-status-text').textContent = state.frozen ? 'Card frozen locally' : 'Issuer not connected';
-    $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Active';
+    $('#ledger-card-status').textContent = state.frozen ? 'Frozen locally' : 'Not connected';
   }
 
   function renderAll() {
