@@ -35,6 +35,21 @@ For an **external bank wire**, do not credit a recipient wallet/account merely b
 
 These are future production requirements only. This repository currently has no connected banking core or authoritative account ledger, so the present scenario remains planned demo data and must not create either side of a real posting.
 
+## Receiving institution: Goldenwest Credit Union
+
+The recipient's destination institution for this scenario is **Goldenwest Credit Union** (user-supplied). This is an external-bank wire, not an internal American Vanguard wallet transfer. Do not create or display a local Goldenwest account balance in this application and do not claim that Judith's account has been credited based only on sender-side submission or an outgoing-wire receipt.
+
+### Required external-wire lifecycle
+
+1. Validate Kate's authority to initiate the wire and verify the beneficiary and destination instructions through the authorized originating-bank workflow. Do not assume previously mentioned account details belong to Judith.
+2. Submit only through an approved originating-bank wire provider after currency, fees, limits, step-up authentication, fraud checks, and explicit confirmation are complete.
+3. Record the originating-side instruction and provider reference with states sourced from the provider (for example submitted, processing, completed, rejected, or returned). A sender-side completed/settled state must follow the provider's defined settlement semantics.
+4. Show an incoming credit on Judith's Goldenwest account only when Goldenwest or an authorized receiving-bank/settlement integration confirms the receiving account was credited and provides a trusted posting reference. Otherwise show the recipient-side state as **awaiting receiving-bank confirmation**, not credited.
+5. Reconcile amount and currency, beneficiary, both provider references, timestamps, fees, and final outcome. Handle returns, reversals, and investigations as separate audited events; never silently rewrite history.
+6. Keep the sender's outgoing wire record and recipient's confirmed incoming record linked by a shared correlation/reference ID where the institutions provide one. Never invent a Goldenwest confirmation or recipient transaction.
+
+This repository currently has no connection to American Vanguard's core ledger, an originating wire provider, or Goldenwest Credit Union. Therefore this scenario remains illustrative and no live wire or receiving-account credit can be performed from this application.
+
 ## Acceptance criteria
 
 - Demo UI labels all amounts as illustrative and the transfer as not initiated.
@@ -44,7 +59,9 @@ These are future production requirements only. This repository currently has no 
 - A real transfer cannot be submitted without verified sender authority, beneficiary details, currency, and explicit confirmation.
 - For an internal transfer, sender debit and recipient credit commit atomically under one transfer ID; both histories reflect the same amount, currency, reference, and final status.
 - A retry cannot create a second debit or recipient credit; a failed posting leaves neither side committed.
-- For an external wire, the recipient side is not marked credited until the receiving institution or trusted settlement integration confirms receipt.
+- For an external wire to Goldenwest Credit Union, Judith's receiving-account side is not marked credited until Goldenwest or an authorized receiving-bank/settlement integration confirms the actual posting.
+- The UI clearly distinguishes originating-bank submission/settlement from receiving-bank credit confirmation and preserves both references where available.
+- No local American Vanguard balance is invented for Judith's Goldenwest account.
 - The UI distinguishes draft, submitted, processing, completed, rejected, and failed states based only on trusted server/provider responses.
 - Tests cover arithmetic, missing currency, missing or unverified beneficiary details, duplicate submissions, unauthorized access, and no ledger mutation during preview.
 
