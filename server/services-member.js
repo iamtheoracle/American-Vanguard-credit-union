@@ -59,6 +59,12 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
     if (!to || to.id === from.id) throw new LedgerError('Choose two different shares', 400, 'invalid_destination');
   }
 
+  // Reject impossible transfers before queueing them for review. The ledger
+  // rechecks funds under row locks when a transfer is actually posted.
+  if (Number(from.balance_cents) < amountCents) {
+    throw new LedgerError(`Insufficient available funds in ${from.name}`, 400, 'insufficient_funds');
+  }
+
   if (kind === 'bill') {
     // Bill payments go through the payment adapter (sandbox until authorized).
     const result = await withTx(async client => {

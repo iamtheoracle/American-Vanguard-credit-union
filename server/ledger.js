@@ -38,23 +38,29 @@ async function postEntry(client, accountId, direction, amountCents, balanceAfter
  * transactionId must exist with status 'pending_approval' or 'pending_review'.
  */
 export async function postTwoSided(client, { transactionId, fromAccountId, toAccountId, amountCents, memo }) {
-  if (!validAmountCents(amountCents, { maxCents: POLICY.SINGLE_TRANSFER_MAX_CENTS })) {
+  const normalizedAmountCents = Number(amountCents);
+  if (!validAmountCents(normalizedAmountCents, { maxCents: POLICY.SINGLE_TRANSFER_MAX_CENTS })) {
     throw new LedgerError('Amount outside permitted range');
   }
   const accounts = await loadAccountsForUpdate(client, fromAccountId && toAccountId
     ? [fromAccountId, toAccountId] : [fromAccountId || toAccountId]);
   const from = fromAccountId ? accounts.get(fromAccountId) : null;
   const to = toAccountId ? accounts.get(toAccountId) : null;
-  if (from && from.balance_cents < amountCents) {
+  const fromBalance = from ? Number(from.balance_cents) : null;
+  const toBalance = to ? Number(to.balance_cents) : null;
+  if (from && (!Number.isSafeInteger(fromBalance) || fromBalance < normalizedAmountCents)) {
     throw new LedgerError(`Insufficient available funds in ${from.name}`, 400, 'insufficient_funds');
   }
   if (from) {
-    await client.query('UPDATE accounts SET balance_cents = balance_cents - $1 WHERE id = $2', [amountCents, fromAccountId]);
-    await postEntry(client, fromAccountId, 'debit', amountCents, from.balance_cents - amountCents, transactionId, memo);
+    await client.query('UPDATE accounts SET balance_cents = balance_cents - $1 WHERE id = $2', [normalizedAmountCents, fromAccountId]);
+    await postEntry(client, fromAccountId, 'debit', normalizedAmountCents, fromBalance - normalizedAmountCents, transactionId, memo);
+  }
+  if (to && (!Number.isSafeInteger(toBalance) || !Number.isSafeInteger(toBalance + normalizedAmountCents))) {
+    throw new LedgerError('Account balance is outside the supported integer range', 409, 'balance_out_of_range');
   }
   if (to) {
-    await client.query('UPDATE accounts SET balance_cents = balance_cents + $1 WHERE id = $2', [amountCents, toAccountId]);
-    await postEntry(client, toAccountId, 'credit', amountCents, to.balance_cents + amountCents, transactionId, memo);
+    await client.query('UPDATE accounts SET balance_cents = balance_cents + $1 WHERE id = $2', [normalizedAmountCents, toAccountId]);
+    await postEntry(client, toAccountId, 'credit', normalizedAmountCents, toBalance + normalizedAmountCents, transactionId, memo);
   }
   await client.query(
     `UPDATE transactions SET status = 'posted', updated_at = now() WHERE id = $1`, [transactionId]);

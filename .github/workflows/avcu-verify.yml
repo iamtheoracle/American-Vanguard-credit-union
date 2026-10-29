@@ -1,0 +1,46 @@
+name: AVCU verification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: avcu
+          POSTGRES_PASSWORD: avcu
+          POSTGRES_DB: avcu
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U avcu -d avcu"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://avcu:avcu@127.0.0.1:5432/avcu
+      AVCU_TEST_ADMIN_URL: postgres://avcu:avcu@127.0.0.1:5432/avcu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Syntax and unit checks
+        run: npm run check && npm test
+      - name: PostgreSQL API and integration tests
+        run: npm run test:api

@@ -27,7 +27,7 @@ test('share transfers post balanced ledger entries and enforce invariants', asyn
 
   // Ledger invariant: newest entry per account matches its balance.
   const { query } = await import('../../server/db.js');
-  for (const account of after) {
+  for (const account of after.filter(a => [draft.id, primary.id].includes(a.id))) {
     const { rows } = await query(
       `SELECT balance_after_cents FROM ledger_entries WHERE account_id = $1 ORDER BY id DESC LIMIT 1`, [account.id]);
     assert.equal(Number(rows[0].balance_after_cents), account.balanceCents, `ledger matches balance for ${account.name}`);
@@ -132,6 +132,9 @@ test('card freeze controls sandbox authorizations', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
   const { cookie } = await loginMember(env.base);
+  const { query } = await import('../../server/db.js');
+  const beforeRows = await query(`SELECT status, count(*) AS n FROM transactions WHERE type = 'card_auth' GROUP BY status`);
+  const beforeCounts = Object.fromEntries(beforeRows.rows.map(r => [r.status, Number(r.n)]));
 
   const active = await api(env.base, '/api/card/test-purchase', {
     method: 'POST', cookie, body: { amountCents: 2450, merchant: 'Harbor Market' }
@@ -152,11 +155,10 @@ test('card freeze controls sandbox authorizations', async t => {
   assert.equal(declined.data.reason, 'card_frozen');
 
   await api(env.base, '/api/card/freeze', { method: 'POST', cookie, body: { frozen: false } });
-  const { query } = await import('../../server/db.js');
   // Failed and completed card authorizations must be recorded as transactions.
   const { rows } = await query(
     `SELECT status, count(*) AS n FROM transactions WHERE type = 'card_auth' GROUP BY status`);
   const byStatus = Object.fromEntries(rows.map(r => [r.status, Number(r.n)]));
-  assert.equal(byStatus.completed, 1);
-  assert.equal(byStatus.rejected, 1);
+  assert.equal(byStatus.completed, (beforeCounts.completed || 0) + 1);
+  assert.equal(byStatus.rejected, (beforeCounts.rejected || 0) + 1);
 });

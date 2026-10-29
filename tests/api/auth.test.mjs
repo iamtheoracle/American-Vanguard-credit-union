@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startTestServer, api, loginMember, setCookieFrom } from './helpers.mjs';
+import { startTestServer, api, loginMember, setCookieFrom, MEMBER_PASSWORD } from './helpers.mjs';
 
 test('authentication and session lifecycle', async t => {
   const env = await startTestServer();
@@ -12,6 +12,7 @@ test('authentication and session lifecycle', async t => {
   });
   assert.equal(reg.status, 201);
   assert.equal(reg.data.member.status, 'pending');
+  assert.match(reg.data.member.memberNumber, /^\d{10}$/, 'registration assigns a 10-digit numeric member ID');
 
   // 2. Registration validation.
   const bad = await api(env.base, '/api/auth/register', {
@@ -31,7 +32,13 @@ test('authentication and session lifecycle', async t => {
   const { response: login, cookie } = await loginMember(env.base);
   assert.equal(login.status, 200);
   assert.equal(login.data.member.status, 'verified');
+  assert.match(login.data.member.memberNumber, /^\d{10}$/);
   assert.ok(cookie);
+  const numericLogin = await api(env.base, '/api/auth/login', {
+    method: 'POST', body: { identifier: login.data.member.memberNumber, password: MEMBER_PASSWORD }
+  });
+  assert.equal(numericLogin.status, 200, 'member number should work independently from email');
+  assert.equal(numericLogin.data.member.id, login.data.member.id);
 
   // 4. Session works, logout invalidates it.
   const me = await api(env.base, '/api/auth/me', { cookie });

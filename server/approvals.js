@@ -171,7 +171,7 @@ async function executeApprovedMembership(client, approval, operator) {
   await client.query(
     `INSERT INTO notifications (member_id, title, body) VALUES ($1,$2,$3)`,
     [memberId, 'Membership verified',
-     'Your Atchison Village membership has been approved. Your share accounts are now open.']);
+     'Your American Vantoris Credit Union membership has been approved. Your share accounts are now open.']);
   await client.query(
     `INSERT INTO cards (member_id, last4, status, expires, provider_ref)
      VALUES ($1,$2,'active',$3,$4)`,

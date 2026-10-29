@@ -3,13 +3,15 @@ import { query, withTx } from './db.js';
 import {
   memberAuth, operatorAuth, applySessionCookie, clearAuthCookie,
   createMemberSession, createOperatorSession, destroySession, hashPassword, verifyPassword,
-  findMemberByEmail, findOperatorByEmail
+  findMemberByEmail, findMemberByLogin, findOperatorByEmail
 } from './auth.js';
 import { rateLimiter, clientKey, validEmail, validPassword, PASSWORD_MIN, COOKIE_MEMBER, COOKIE_OPERATOR } from './util.js';
 import { submitMemberTransfer, submitMemberDeposit, freezeCard, testCardPurchase,
   createSupportCase, lookupIdempotent } from './services-member.js';
 import { runChat, renderReply, activeProvider } from './ai/index.js';
 import { submitMemberTransfer as svcTransfer } from './services-member.js';
+import { notifyMember } from './notifications.js';
+import { recalculateMemberTier } from './membership-tiers.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -28,14 +30,18 @@ router.post('/auth/register', async (req, res, next) => {
     const hash = await hashPassword(password);
     const { rows } = await query(
       `INSERT INTO members (email, password_hash, full_name, status, application)
-       VALUES (lower($1),$2,$3,'pending',$4) RETURNING id, email, full_name, status, created_at`,
+       VALUES (lower($1),$2,$3,'pending',$4) RETURNING id, member_number AS "memberNumber", email, full_name, status, created_at`,
       [email, hash, name, JSON.stringify({ channel: 'web', submittedAt: new Date().toISOString() })]);
     const member = rows[0];
     await query(
       `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
        VALUES ('membership', $1, $2, 'pending', 'operator', $1, 'member')`, [member.id,
       JSON.stringify({ memberId: member.id, email: member.email, fullName: member.full_name })]);
-    res.status(201).json({ member: { id: member.id, email: member.email, fullName: member.full_name, status: member.status },
+    await recalculateMemberTier(member.id).catch(error => console.error('[avcu] initial tier calculation failed:', error.code || error.name));
+    await notifyMember({ memberId: member.id, eventType: 'membership.application_received',
+      title: 'Membership application received', body: 'Your membership application has been received and is awaiting review.',
+      subject: 'We received your AVCU membership application' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
+    res.status(201).json({ member: { id: member.id, memberNumber: String(member.memberNumber), email: member.email, fullName: member.full_name, status: member.status },
       message: 'Application received. Sign in to track its status.' });
   } catch (error) { next(error); }
 });
@@ -45,13 +51,15 @@ router.post('/auth/login', async (req, res, next) => {
     if (!loginLimiter(clientKey(req))) {
       return res.status(429).json({ error: 'Too many sign-in attempts. Wait a minute and try again.' });
     }
-    const { email, password } = req.body || {};
-    const member = await findMemberByEmail(String(email || ''));
+    const { identifier, email, password } = req.body || {};
+    const member = await findMemberByLogin(String(identifier || email || ''));
     const ok = member && await verifyPassword(String(password || ''), member.password_hash);
     if (!ok) return res.status(401).json({ error: 'Email or password is incorrect' });
     const session = await createMemberSession(member.id);
     applySessionCookie(req, res, 'member', session);
-    res.json({ member: { id: member.id, email: member.email, fullName: member.full_name, status: member.status } });
+    const tier = await recalculateMemberTier(member.id).catch(() => null);
+    res.json({ member: { id: member.id, memberNumber: String(member.member_number), email: member.email, fullName: member.full_name, status: member.status,
+      membershipTier: tier?.tier || member.membership_tier || 'new_member' } });
   } catch (error) { next(error); }
 });
 
@@ -67,13 +75,21 @@ router.get('/auth/me', memberAuth, (req, res) => {
   res.json({ member: req.member });
 });
 
+router.get('/membership-tier', memberAuth, async (req, res, next) => {
+  try {
+    const tier = await recalculateMemberTier(req.member.id);
+    res.json({ membership: tier });
+  } catch (error) { next(error); }
+
+});
+
 // ---- accounts & transactions ------------------------------------------------
 router.get('/accounts', memberAuth, async (req, res, next) => {
   try {
     const { rows } = await query(
       `SELECT id, kind, name, suffix, balance_cents AS "balanceCents", status
        FROM accounts WHERE member_id = $1 AND status = 'open' ORDER BY created_at`, [req.member.id]);
-    res.json({ accounts: rows });
+    res.json({ accounts: rows.map(row => ({ ...row, balanceCents: Number(row.balanceCents) })) });
   } catch (error) { next(error); }
 });
 
@@ -98,7 +114,7 @@ router.get('/transactions', memberAuth, async (req, res, next) => {
        LEFT JOIN accounts ta ON ta.id = t.to_account_id
        WHERE ${where}
        ORDER BY t.created_at DESC LIMIT ${capped}`, params);
-    res.json({ transactions: rows });
+    res.json({ transactions: rows.map(row => ({ ...row, amountCents: Number(row.amountCents) })) });
   } catch (error) { next(error); }
 });
 
@@ -112,6 +128,10 @@ router.post('/transfers', memberAuth, async (req, res, next) => {
     const result = await submitMemberTransfer({ member: req.member, body: req.body || {}, idempotencyKey });
     const tx = result.transaction;
     if (result.replayed) return res.json({ replayed: true, transaction: result.transaction });
+    await recalculateMemberTier(req.member.id).catch(() => {});
+    await notifyMember({ memberId: req.member.id, eventType: 'transaction.transfer_submitted',
+      title: 'Transfer status update', body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
+      subject: 'AVCU transfer status update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
     res.status(result.approvalId ? 202 : 201).json({
       transaction: { id: tx.id, reference: tx.reference, status: tx.status, amountCents: tx.amount_cents },
       approvalId: result.approvalId,
@@ -128,6 +148,10 @@ router.post('/deposits', memberAuth, async (req, res, next) => {
   try {
     const idempotencyKey = req.header('Idempotency-Key') || null;
     const result = await submitMemberDeposit({ member: req.member, body: req.body || {}, idempotencyKey });
+    await recalculateMemberTier(req.member.id).catch(() => {});
+    await notifyMember({ memberId: req.member.id, eventType: 'transaction.deposit_submitted',
+      title: 'Deposit status update', body: `Your deposit ${result.transaction.reference} is ${result.transaction.status.replaceAll('_', ' ')}.`,
+      subject: 'AVCU deposit status update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
     res.status(result.approvalId ? 202 : 201).json({
       transaction: { id: result.transaction.id, reference: result.transaction.reference, status: result.transaction.status },
       message: result.status === 'pending_review'
@@ -270,9 +294,9 @@ router.post('/ai/chat', memberAuth, async (req, res, next) => {
       [req.member.id, activeProvider(), message.slice(0, 500)]);
     const taskId = rows[0].id;
 
-    const { task, rendered } = await runAiChat({ req, message, taskId });
+    const { task, rendered, completion } = await runAiChat({ req, message, taskId });
     res.json({ taskId: task.id, status: rendered.status, message: rendered.message,
-      toolCalls: rendered.toolCalls || [], provider: rendered.provider || undefined });
+      toolCalls: rendered.toolCalls || [], provider: completion.provider || activeProvider() });
   } catch (error) { next(error); }
 });
 
@@ -292,7 +316,7 @@ router.post('/ai/retry', memberAuth, async (req, res, next) => {
       req, message: task.input_excerpt, taskId
     });
     res.json({ taskId: updated.id, status: rendered.status, message: rendered.message,
-      toolCalls: rendered.toolCalls || [] });
+      toolCalls: rendered.toolCalls || [], provider: activeProvider() });
   } catch (error) { next(error); }
 });
 
