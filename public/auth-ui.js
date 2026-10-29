@@ -4,7 +4,7 @@
   const state = { ready:false, user:null, roles:[], identityAvailable:false, inviteToken:null, error:null };
   window.AVCUAuthState = state;
   const button = $('auth-button');
-  const status = $('auth-status');
+  const status = $('auth-status-text');
   const dialog = $('auth-dialog');
   const form = $('auth-form');
   const error = $('auth-error');
