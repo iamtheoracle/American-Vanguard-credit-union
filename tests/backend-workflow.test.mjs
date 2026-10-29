@@ -59,7 +59,8 @@ test('backend requires Identity roles and prevents operators from reviewing thei
   assert.ok(source.includes("if (row.created_by === user.id)"));
   assert.ok(source.includes('function publicRequest(row)'), 'API responses must be explicitly allow-listed');
   assert.ok(source.includes("'actor',CASE WHEN a.actor_id=r.created_by THEN 'Member' ELSE 'Authorized operator' END"), 'audit output must not expose user IDs');
-  assert.ok(!source.includes("SELECT * FROM avcu_workflow_requests WHERE created_by"), 'member API must not return raw database rows');
+  assert.ok(source.includes('requests:rows.map(publicRequest)'), 'member API must sanitize request rows before returning them');
+  assert.ok(!source.includes('return respond({ requests:rows });'), 'raw request rows must not be returned directly');
   assert.ok(source.includes("Approval blocked: verified account records and sufficient available funds are required"));
   assert.ok(source.includes("nextStatus = external.has(row.type) ? 'approved-awaiting-provider'"));
   assert.ok(!source.includes("nextStatus = 'settled'"));
