@@ -6,6 +6,7 @@ import memberRoutes from './routes-member.js';
 import operatorRoutes from './routes-operator.js';
 import { verifyWebhookSignature, webhookSecret, integrationHealth } from './integrations/index.js';
 import { query } from './db.js';
+import { startNotificationWorker, stopNotificationWorker } from './notifications.js';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -81,6 +82,7 @@ async function webhookHandler(req, res) {
 
 export async function startServer({ port = process.env.PORT || 3000 } = {}) {
   await migrate();
+  startNotificationWorker();
   const app = createApp();
   const server = app.listen(port, '0.0.0.0');
   await new Promise(resolve => server.once('listening', resolve));
@@ -90,6 +92,7 @@ export async function startServer({ port = process.env.PORT || 3000 } = {}) {
 export async function shutdown(server) {
   await new Promise(resolve => server.close(resolve));
   if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+  stopNotificationWorker();
   await close();
 }
 
