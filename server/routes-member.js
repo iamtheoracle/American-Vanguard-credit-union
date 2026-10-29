@@ -129,7 +129,7 @@ router.get('/transactions', memberAuth, async (req, res, next) => {
     const { search, type, status, from, to, limit = '30', offset = '0' } = req.query;
     const capped = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
     const pageOffset = Math.min(Math.max(parseInt(offset, 10) || 0, 0), 100000);
-    const validDate = value => !value || (typeof value === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)));
+    const validDate = value => !value || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)));
     if (!validDate(from) || !validDate(to) || (from && to && from > to)) {
       return res.status(400).json({ error: 'Use valid from/to dates in YYYY-MM-DD format; from must not be after to.' });
     }
