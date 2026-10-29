@@ -24,3 +24,7 @@ jobs:
           node-version: 20
       - name: Validate JavaScript syntax and workflow regression tests
         run: npm run check
+      - name: Install Chromium for browser audit
+        run: cd tests/browser && npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Run member and operator browser audit on desktop and mobile
+        run: cd tests/browser && npx playwright test
