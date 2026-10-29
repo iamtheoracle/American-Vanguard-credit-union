@@ -446,10 +446,12 @@ router.get('/operator/loan-alerts', ...guard('management', 'operator'), async (r
               la.requested_amount_cents AS "requestedAmountCents", la.currency,
               la.requested_term_months AS "requestedTermMonths", la.status AS "applicationStatus",
               la.submitted_at AS "submittedAt", m.id AS "memberId",
-              m.full_name AS "memberName", m.email AS "memberEmail"
+              m.full_name AS "memberName", m.email AS "memberEmail",
+              COALESCE(outbox.status, 'not_configured') AS "emailStatus"
        FROM operations_alerts oa
        JOIN loan_applications la ON la.id = oa.loan_application_id
        JOIN members m ON m.id = la.member_id
+       LEFT JOIN notification_outbox outbox ON outbox.event_key = 'loan-application-operations:' || la.id::text || ':submitted'
        WHERE ${where}
        ORDER BY CASE oa.status WHEN 'pending' THEN 0 ELSE 1 END, oa.created_at DESC
        LIMIT ${params.length}`, params);
