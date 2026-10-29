@@ -91,9 +91,9 @@
     try {
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       state.recoveryToken = hash.get('recovery_token') || null;
+      const callback = await window.AVCUIdentity.handleAuthCallback();
       const settings = await window.AVCUIdentity.getSettings();
       if (!settings) throw new Error('Identity is not enabled for this site');
-      const callback = await window.AVCUIdentity.handleAuthCallback();
       state.identityAvailable = true;
       if (callback?.type === 'invite' && callback.token) {
         state.inviteToken = callback.token;
