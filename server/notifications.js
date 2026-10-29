@@ -70,7 +70,7 @@ export async function notifyMember({
   memberId, eventType, title, body, subject = title, emailText = body,
   eventKey = `${eventType}:${memberId}:${randomUUID()}`
 }) {
-  if (!Number.isSafeInteger(Number(memberId)) || Number(memberId) <= 0) {
+  if (typeof memberId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(memberId)) {
     return { status: 'skipped', reason: 'invalid_member_id' };
   }
   const result = await withTx(async client => {
