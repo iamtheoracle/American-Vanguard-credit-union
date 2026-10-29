@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestServer, api, loginMember, setCookieFrom, MEMBER_PASSWORD } from './helpers.mjs';
+import { stopNotificationWorker } from '../../server/notifications.js';
 
 test('authentication and session lifecycle', async t => {
   const env = await startTestServer();
@@ -15,6 +16,7 @@ test('authentication and session lifecycle', async t => {
   assert.match(reg.data.member.memberNumber, /^\d{10}$/, 'registration assigns a 10-digit numeric member ID');
   assert.equal(reg.data.member.username, 'alex_rivera');
   process.env.AVCU_PUBLIC_BASE_URL = 'https://avcu.test';
+  stopNotificationWorker(); // Keep the test outbox stable while extracting the synthetic reset link.
   const resetRequest = await api(env.base, '/api/auth/password-reset/request', {
     method: 'POST', body: { identifier: reg.data.member.username }
   });
