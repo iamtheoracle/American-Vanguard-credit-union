@@ -54,8 +54,8 @@ export function getTierProgress({ tier, calculatedTier, activity90Days = 0, acco
     priority_service: null
   };
   const definition = definitions[current];
+  if (current === 'priority_service') return { nextTier: null, percent: 100, requirements: [], note: 'You are at the highest configured activity tier.' };
   if (!definition) return { nextTier: null, percent: 0, requirements: [], note: 'No next tier is configured.' };
-  if (!definition) return { nextTier: null, percent: 100, requirements: [], note: 'You are at the highest configured activity tier.' };
   const requirements = definition.requirements.map(item => {
     const currentValue = Math.max(0, Number(item.current) || 0);
     const required = Number(item.required);
