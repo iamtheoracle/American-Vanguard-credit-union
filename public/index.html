@@ -7,6 +7,8 @@
   <meta name="description" content="Atchison Village Credit Union member services and payment request workflows.">
   <title>Atchison Village Credit Union | Member Services</title>
   <link rel="stylesheet" href="./styles.css">
+  <script src="./auth-client.bundle.js" defer></script>
+  <script src="./auth-ui.js" defer></script>
   <script src="./app.js" defer></script>
   <script src="./providers.js" defer></script>
   <script src="./review-assistant.js" defer></script>
@@ -38,7 +40,7 @@
     <main id="main-content" class="main-content" tabindex="-1">
       <header class="topbar">
         <div><p class="eyebrow" id="top-eyebrow">MEMBER OVERVIEW</p><h1 id="page-title">Welcome to AVCU<span class="title-period">.</span></h1></div>
-        <div class="top-actions"><span class="local-badge"><span></span> Standalone mode</span><button class="icon-button" id="help-button" aria-label="About this workspace" title="About this workspace">?</button><div class="avatar avatar-top" aria-label="Member account">AV</div></div>
+        <div class="top-actions"><span class="local-badge" id="auth-status" aria-live="polite"><span class="auth-status-dot"></span><span id="auth-status-text">Local mode · not signed in</span></span><button class="secondary-button auth-button" id="auth-button" type="button">Sign in</button><button class="icon-button" id="help-button" aria-label="About this workspace" title="About this workspace">?</button><div class="avatar avatar-top" aria-label="Member account">AV</div></div>
       </header>
       <div class="content-wrap">
         <section class="page-view" id="view-home" data-view="home">
@@ -145,6 +147,17 @@
     <button class="mobile-nav-item" data-nav="operations"><span>▤</span><small>Ops</small></button>
     <button class="mobile-nav-item" data-nav="more"><span>⋯</span><small>More</small></button>
   </nav>
+  <dialog id="auth-dialog" class="app-dialog" aria-labelledby="auth-title">
+    <form id="auth-form" class="dialog-card" method="dialog">
+      <p class="eyebrow">SECURE ACCESS</p>
+      <h2 id="auth-title">Sign in to AVCU</h2>
+      <p class="muted">Use your institution-issued account. Operator access is assigned by an administrator and checked by the server.</p>
+      <div id="auth-email-wrap"><label for="auth-email">Email address</label><input id="auth-email" type="email" autocomplete="username" required></div>
+      <label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="current-password" minlength="8" required>
+      <p id="auth-error" class="form-note" role="status" aria-live="polite"></p>
+      <div class="dialog-actions"><button class="secondary-button" id="auth-cancel" type="button">Cancel</button><button class="primary-button" id="auth-submit" type="submit">Sign in</button></div>
+    </form>
+  </dialog>
   <dialog id="confirm-dialog" class="app-dialog" aria-labelledby="dialog-title"><form method="dialog" class="dialog-card"><button class="dialog-close" value="cancel" aria-label="Close dialog">×</button><p class="eyebrow" id="dialog-eyebrow">CONFIRM ACTION</p><h2 id="dialog-title">Review this request</h2><p id="dialog-description"></p><div id="dialog-summary" class="dialog-summary"></div><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" id="dialog-confirm" value="confirm">Confirm request</button></div></form></dialog>
   <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
   <div class="screen-reader-only" id="live-announcer" aria-live="polite"></div>
