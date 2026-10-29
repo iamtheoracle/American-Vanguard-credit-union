@@ -125,7 +125,7 @@
   });
   $('register-form').addEventListener('submit', async event => {
     event.preventDefault(); showMessage('auth-message','Submitting application…');
-    try { const data = await post('/auth/register',{fullName:$('register-name').value,email:$('register-email').value,password:$('register-password').value}); switchAuth(false); $('login-identifier').value=$('register-email').value; const memberNumber = data.member?.memberNumber ? ` Your member number is ${data.member.memberNumber}; save it for future sign-in.` : ''; showMessage('auth-message',(data.message || 'Application received. You can sign in to track it.') + memberNumber); }
+    try { const data = await post('/auth/register',{fullName:$('register-name').value,username:$('register-username').value,email:$('register-email').value,password:$('register-password').value}); switchAuth(false); $('login-identifier').value=data.member?.username || $('register-email').value; const memberNumber = data.member?.memberNumber ? ` Your member number is ${data.member.memberNumber}; save it separately from your username.` : '';  showMessage('auth-message',(data.message || 'Application received. You can sign in to track it.') + memberNumber); }
     catch(error) { showMessage('auth-message',error.message,true); }
   });
   $('logout-button').addEventListener('click', async () => {
