@@ -4,7 +4,7 @@ const RK='avcu.workflow.v1', MK='avcu.member.v1';
 const A={draft:'Share Draft (Checking)',primary:'Primary Share (Savings)',market:'Money Market',holiday:'Holiday Club',business:'Business Operating Account',ira:'Traditional IRA',certificate:'Share Certificate',retirement401k:'401(k) Retirement'};
 const T={'internal-transfer':'Internal account transfer','bill-payment':'Bill payment','wire-transfer':'Wire transfer',zelle:'Zelle payment request',fx:'Foreign exchange (FX)',withdrawal:'Withdrawal',ira:'IRA contribution / withdrawal','401k':'401(k) rollover / retirement request','check-deposit':'Check deposit','card-authorization':'Card purchase authorization'};
 const external=new Set(['bill-payment','wire-transfer','zelle','fx','withdrawal','ira','401k','check-deposit','card-authorization']);
-let requests=load(), files=new Map();
+let requests=load(), files=new Map(), zelleVerified=new Map();
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>window.crypto?.randomUUID?.()||('AV-'+Date.now()+'-'+Math.random().toString(16).slice(2,8));
@@ -23,7 +23,7 @@ function create(d,f){
  if(['bill-payment','wire-transfer','zelle','withdrawal','fx','ira','401k','card-authorization'].includes(type)&&!recipient)return {error:'Enter the recipient, payee, or institution name.'};
  if(['wire-transfer','withdrawal'].includes(type)&&!destination)return {error:'Enter the destination details required for review.'};
  if(type==='check-deposit'&&(!f?.front||!f?.back))return {error:'Capture or select both the front and back of the check.'};
- const now=new Date().toISOString(),r={id:uid(),type,typeLabel:T[type],from,to:type==='internal-transfer'?to:'',recipient,destination,currency:String(d.currency||'USD'),amountCents:Math.round(amount*100),note,status:'pending-approval',createdAt:now,updatedAt:now,operatorNote:'',providerState:'not-connected',providerLookup:type==='zelle'?'unavailable-without-provider':null,checkImages:type==='check-deposit'?{frontName:f.front.name,backName:f.back.name}:null,audit:[{at:now,actor:'Member',action:'Submitted for approval'}]};
+ const now=new Date().toISOString(),r={id:uid(),type,typeLabel:T[type],from,to:type==='internal-transfer'?to:'',recipient,destination,currency:String(d.currency||'USD'),amountCents:Math.round(amount*100),note,status:'pending-approval',createdAt:now,updatedAt:now,operatorNote:'',providerState:'not-connected',providerLookup:type==='zelle'?(zelleVerified.has(recipient.toLowerCase())?'verified':'unavailable-without-provider'):null,checkImages:type==='check-deposit'?{frontName:f.front.name,backName:f.back.name}:null,audit:[{at:now,actor:'Member',action:'Submitted for approval'}]};
  requests.unshift(r);requests=requests.slice(0,500);if(!save()){requests.shift();return {error:'Request could not be saved.'}}if(f?.front&&f?.back)files.set(r.id,f);return {request:r};
 }
 function postTransfer(r){
@@ -50,9 +50,9 @@ function render(){
  if($('workflow-pending-count'))$('workflow-pending-count').textContent=p.length+' pending';
 }
 function fields(){
- const t=$('workflow-type')?.value;if(!t)return;const internal=t==='internal-transfer',check=t==='check-deposit';
+ const t=$('workflow-type')?.value;if(!t)return;const internal=t==='internal-transfer',check=t==='check-deposit',isZelle=t==='zelle';
  $('workflow-to-wrap')?.classList.toggle('hidden',!internal);$('workflow-recipient-wrap')?.classList.toggle('hidden',internal||check);
- $('workflow-destination-wrap')?.classList.toggle('hidden',!['wire-transfer','withdrawal'].includes(t));$('workflow-currency-wrap')?.classList.toggle('hidden',t!=='fx');$('workflow-check-wrap')?.classList.toggle('hidden',!check);
+ $('workflow-destination-wrap')?.classList.toggle('hidden',!['wire-transfer','withdrawal'].includes(t));$('workflow-currency-wrap')?.classList.toggle('hidden',t!=='fx');$('workflow-check-wrap')?.classList.toggle('hidden',!check);$('zelle-lookup')?.classList.toggle('hidden',!isZelle);$('zelle-lookup-note')?.classList.toggle('hidden',!isZelle);$('zelle-lookup-result')?.classList.add('hidden');
  if($('workflow-recipient'))$('workflow-recipient').required=!internal&&!check;
  if($('workflow-destination'))$('workflow-destination').required=['wire-transfer','withdrawal'].includes(t);
  if($('workflow-to'))$('workflow-to').required=internal;
