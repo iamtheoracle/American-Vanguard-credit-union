@@ -218,12 +218,12 @@ test('funding pool participation stays disabled until authorized provider contro
   const env = await startTestServer();
   t.after(() => env.close());
   const { cookie } = await loginMember(env.base);
-  const catalogue = await api(env.base, '/funding-pools', { cookie });
+  const catalogue = await api(env.base, '/api/funding-pools', { cookie });
   assert.equal(catalogue.status, 200);
   assert.equal(catalogue.data.liveContributionsEnabled, false);
   assert.deepEqual(catalogue.data.pools, []);
 
-  const attempt = await api(env.base, '/funding-pools/00000000-0000-4000-8000-000000000001/contributions', {
+  const attempt = await api(env.base, '/api/funding-pools/00000000-0000-4000-8000-000000000001/contributions', {
     method: 'POST', cookie, body: { amountCents: 10000 }
   });
   assert.equal(attempt.status, 503);
