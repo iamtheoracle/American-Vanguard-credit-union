@@ -61,7 +61,15 @@
           <button id="loan-submit" class="primary" type="submit">Submit loan application</button>
           <p id="loan-form-note" class="muted small">Applications are reviewed by management. Approval does not disburse funds or guarantee a rate.</p>
         </form></section>
-        <section class="panel wide"><div class="section-head"><h2>Funding pools</h2><span class="tag">PARTICIPATION DISABLED</span></div><p class="muted small">Published pool details are shown only when configured. No live contributions or investment orders can be placed from this prototype.</p><div id="funding-pools-list" class="funding-pools-list"></div></section>
+        <section class="panel"><h2>Money request</h2><form id="money-request-form" class="stack">
+          <label for="money-request-type">Request type</label><select id="money-request-type" required><option value="withdrawal">Withdrawal request</option><option value="transfer">Transfer request</option><option value="account_service">Account service request</option><option value="other">Other</option></select>
+          <label for="money-request-amount">Requested amount (USD)</label><input id="money-request-amount" type="number" min="0.01" step="0.01" required>
+          <label for="money-request-note">Details</label><textarea id="money-request-note" minlength="5" maxlength="2000" rows="4" required></textarea>
+          <button id="money-request-submit" class="primary" type="submit">Submit request</button>
+          <p id="money-request-form-note" class="muted small">This creates a review request only. It does not initiate a transfer or settlement.</p>
+        </form></section>
+        <section class="panel wide"><div class="section-head"><h2>Money requests</h2><button class="text-button" id="refresh-money-requests" type="button">Refresh</button></div><div id="money-requests-list" class="notification-list"></div></section>
+<section class="panel wide"><div class="section-head"><h2>Funding pools</h2><span class="tag">PARTICIPATION DISABLED</span></div><p class="muted small">Published pool details are shown only when configured. No live contributions or investment orders can be placed from this prototype.</p><div id="funding-pools-list" class="funding-pools-list"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Loan applications</h2><button class="text-button" id="refresh-loans" type="button">Refresh</button></div><div id="loan-applications-list" class="notification-list"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Recent transactions</h2><span class="tag">API DATA</span></div><div id="transactions-list" class="table-wrap"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Notifications</h2><button id="read-notifications" class="text-button" type="button">Mark all read</button></div><div id="notifications-list" class="notification-list"></div></section>
