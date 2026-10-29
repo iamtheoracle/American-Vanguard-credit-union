@@ -43,4 +43,3 @@ The backend foundation is now in the branch, but the shared queue is not product
 
 
 
-Before real financial use, add a trusted backend, authenticated members and operators, server-enforced roles and separation of duties, immutable audit logs, idempotency and replay protection, a provider adapter layer, verified account balances, secure check-image storage, signed webhooks, reconciliation, risk controls, privacy retention policies, and institution/legal/compliance validation. Keep request state separate from settlement state; only provider-confirmed outcomes may be marked settled.
