@@ -106,7 +106,7 @@ router.get('/operator/approvals', ...guard('management', 'operator'), async (req
        LEFT JOIN transactions t ON t.id = a.transaction_id
        LEFT JOIN loan_applications l ON l.approval_id = a.id
        LEFT JOIN money_requests mr ON mr.approval_id = a.id
-       LEFT JOIN members m ON m.id = a.member_id
+       LEFT JOIN members m ON (m.id = a.member_id OR (a.item_type = 'transaction' AND a.submitted_by_type = 'member' AND a.submitted_by::text = m.id::text))
        WHERE ${where}`, params);
     const pageParams = [...params, limit, (page - 1) * limit];
     const { rows } = await query(
