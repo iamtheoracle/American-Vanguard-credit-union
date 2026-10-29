@@ -14,7 +14,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -29,4 +29,28 @@ jobs:
       - name: Install Chromium for browser audit
         run: cd tests/browser && npm install --no-audit --no-fund && npx playwright install --with-deps chromium
       - name: Run member and operator browser audit on desktop and mobile
+        run: cd tests/browser && npx playwright test
+      - name: Wait for the matching Netlify deploy preview
+        if: github.event_name == 'pull_request'
+        env:
+          PREVIEW_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for attempt in $(seq 1 36); do
+            state=$(curl --silent --show-error --fail "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${PREVIEW_SHA}/status" | jq -r '[.statuses[]? | select(.context == "netlify/avcu/deploy-preview")][0].state // empty' 2>/dev/null || true)
+            if [ "$state" = "success" ]; then
+              echo "Matching Netlify preview is ready."
+              exit 0
+            fi
+            if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
+              echo "Netlify preview deployment failed."
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for the Netlify preview status."
+          exit 1
+      - name: Audit the deployed Netlify preview in Chromium
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_URL: https://deploy-preview-12--avcu.netlify.app
         run: cd tests/browser && npx playwright test
