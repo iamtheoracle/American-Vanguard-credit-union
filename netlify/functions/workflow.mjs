@@ -95,7 +95,8 @@ export default async function handler(request) {
     if (validated.error) return respond({ error:validated.error },400);
     if (validated.unavailable) return respond({ error:validated.unavailable },503);
     const v = validated.value;
-    const client = await db.pool.connect();
+    let client;
+    try { client = await db.pool.connect(); } catch { return respond({ error:'The shared workflow database is unavailable.' },503); }
     try {
       await client.query('BEGIN');
       const inserted = await client.query(
