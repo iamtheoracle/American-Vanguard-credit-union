@@ -117,8 +117,33 @@ test('financial rejection, audit, and member notification are committed together
 
 
 test('loan application review, information request, operations alert, and final decision work end to end', async t => {
+  const oldEnv = {
+    operationsEmail: process.env.AVCU_OPERATIONS_EMAIL,
+    gmailClientId: process.env.AVCU_GMAIL_CLIENT_ID,
+    gmailClientSecret: process.env.AVCU_GMAIL_CLIENT_SECRET,
+    gmailRefreshToken: process.env.AVCU_GMAIL_REFRESH_TOKEN,
+    gmailFrom: process.env.AVCU_GMAIL_FROM
+  };
+  process.env.AVCU_OPERATIONS_EMAIL = 'operations@avcu.demo';
+  delete process.env.AVCU_GMAIL_CLIENT_ID;
+  delete process.env.AVCU_GMAIL_CLIENT_SECRET;
+  delete process.env.AVCU_GMAIL_REFRESH_TOKEN;
+  delete process.env.AVCU_GMAIL_FROM;
   const env = await startTestServer();
-  t.after(() => env.close());
+  t.after(async () => {
+    await env.close();
+    const restore = {
+      AVCU_OPERATIONS_EMAIL: oldEnv.operationsEmail,
+      AVCU_GMAIL_CLIENT_ID: oldEnv.gmailClientId,
+      AVCU_GMAIL_CLIENT_SECRET: oldEnv.gmailClientSecret,
+      AVCU_GMAIL_REFRESH_TOKEN: oldEnv.gmailRefreshToken,
+      AVCU_GMAIL_FROM: oldEnv.gmailFrom
+    };
+    for (const [key, value] of Object.entries(restore)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
   const { cookie: memberCookie } = await loginMember(env.base);
   const submitted = await api(env.base, '/api/loans/applications', {
     method: 'POST',
@@ -133,6 +158,12 @@ test('loan application review, information request, operations alert, and final 
   assert.equal(submitted.status, 201);
   assert.equal(submitted.data.application.status, 'submitted');
   assert.match(submitted.data.application.reference, /^AVCU-LA-[A-F0-9]{12}$/);
+  const { rows: opsEmails } = await query(
+    'SELECT recipient, status FROM notification_outbox WHERE event_key = $1',
+    [`loan-application-operations:${submitted.data.application.id}:submitted`]
+  );
+  assert.equal(opsEmails.length, 1, 'the operations email is durably queued with the application');
+  assert.equal(opsEmails[0].recipient, 'operations@avcu.demo');
 
   const { cookie: operatorCookie } = await loginOperator(env.base, 'teller@avcu.demo');
   const alerts = await api(env.base, '/api/operator/loan-alerts?status=pending', { cookie: operatorCookie });
