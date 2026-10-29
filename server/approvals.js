@@ -1,6 +1,7 @@
 import { query, withTx, audit } from './db.js';
 import { POLICY, requiredApprovalRoleForAmount } from './policy.js';
 import { postTwoSided, reverseTransaction } from './ledger.js';
+import { queueMemberNotification } from './notifications.js';
 
 /**
  * Approval engine. Approvals are the only path through which pending money
@@ -126,6 +127,56 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
       [nextStatus, operator.id, reason || null, action === 'request_info' ? (reason || 'Additional information requested') : null, approvalId]);
     if (updated.rowCount === 0) throw new ApprovalError('Item already decided', 409, 'already_decided');
 
+    // Persist terminal business state and notification work in the same
+    // transaction as the approval decision, so a process crash cannot lose it.
+    if (action === 'reject' && approval.item_type === 'transaction') {
+      const rejected = await client.query(
+        `UPDATE transactions
+         SET status = 'rejected', processed_by = $1, decision_reason = $2, updated_at = now()
+         WHERE id = $3 AND status IN ('pending_approval','pending_review')
+         RETURNING id`,
+        [operator.id, String(reason).trim(), approval.txn_id]);
+      if (!rejected.rowCount) throw new ApprovalError('Transaction is no longer pending review', 409, 'already_processed');
+    }
+
+    if (action === 'reject' && approval.item_type === 'membership') {
+      const rejected = await client.query(
+        `UPDATE members SET status = 'rejected', updated_at = now()
+         WHERE id = $1 AND status = 'pending' RETURNING id`,
+        [approval.member_id]);
+      if (!rejected.rowCount) throw new ApprovalError('Membership is no longer pending review', 409, 'already_processed');
+    }
+
+    if (nextStatus === 'approved' || nextStatus === 'rejected') {
+      const decisionLabel = nextStatus === 'approved' ? 'approved' : 'rejected';
+      if (approval.item_type === 'membership' && approval.member_id) {
+        await queueMemberNotification(client, {
+          memberId: approval.member_id,
+          eventType: 'membership.application_decided',
+          eventKey: `membership-approval:${approvalId}:${nextStatus}`,
+          title: 'Membership application update',
+          body: `Your membership application was ${decisionLabel}.`,
+          subject: 'AVCU membership application update'
+        });
+      } else if (approval.item_type === 'transaction' && approval.txn_id) {
+        const owners = await client.query(
+          `SELECT DISTINCT a.member_id
+           FROM accounts a
+           JOIN transactions t ON t.from_account_id = a.id OR t.to_account_id = a.id
+           WHERE t.id = $1`, [approval.txn_id]);
+        for (const owner of owners.rows) {
+          await queueMemberNotification(client, {
+            memberId: owner.member_id,
+            eventType: 'transaction.approval_decided',
+            eventKey: `transaction-approval:${approvalId}:${nextStatus}:${owner.member_id}`,
+            title: 'Transaction status update',
+            body: `A transaction review was ${decisionLabel}. Reference: ${approvalId}.`,
+            subject: 'AVCU transaction status update'
+          });
+        }
+      }
+    }
+
     await audit(client, {
       actorType: 'operator', actorId: operator.id, actorRole: operator.role,
       action: `approval.${action}`, entityType: 'approval', entityId: approvalId,
@@ -168,10 +219,6 @@ async function executeApprovedMembership(client, approval, operator) {
     `INSERT INTO accounts (member_id, kind, name, suffix) VALUES
        ($1,'EVERYDAY','Share Draft',$2), ($1,'SAVINGS','Primary Share',$3)`,
     [memberId, String(1000 + Math.floor(Math.random() * 9000)), String(1000 + Math.floor(Math.random() * 9000))]);
-  await client.query(
-    `INSERT INTO notifications (member_id, title, body) VALUES ($1,$2,$3)`,
-    [memberId, 'Membership verified',
-     'Your American Vantoris Credit Union membership has been approved. Your share accounts are now open.']);
   await client.query(
     `INSERT INTO cards (member_id, last4, status, expires, provider_ref)
      VALUES ($1,$2,'active',$3,$4)`,
