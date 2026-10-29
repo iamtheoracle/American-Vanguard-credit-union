@@ -29,8 +29,8 @@
     $('dashboard').classList.toggle('hidden', !value);
   }
   async function loadDashboard() {
-    const [accountData, transactionData, cardData, notificationData, tierData] = await Promise.all([
-      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier')
+    const [accountData, transactionData, cardData, notificationData, tierData, loanData] = await Promise.all([
+      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier'), api('/loans/applications')
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
@@ -53,6 +53,20 @@
     }
     $('transactions-list').innerHTML = transactionData.transactions?.length ? `<table><thead><tr><th>Date</th><th>Type / description</th><th>Status</th><th>Amount</th></tr></thead><tbody>${transactionData.transactions.map(t => `<tr><td>${escapeHtml(new Date(t.createdAt).toLocaleDateString())}</td><td><strong>${escapeHtml(t.memo || t.type)}</strong><small>${escapeHtml(t.reference)}</small></td><td><span class="status-pill">${escapeHtml(String(t.status).replaceAll('_',' '))}</span></td><td>${dollars(t.amountCents)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No API transactions yet.</p>';
     $('notifications-list').innerHTML = notificationData.notifications?.length ? notificationData.notifications.map(n => `<article class="notification-row ${n.read ? '' : 'unread'}"><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.body)}</p><small>${escapeHtml(new Date(n.createdAt).toLocaleString())}</small></article>`).join('') : '<p class="muted">No notifications yet.</p>';
+    $('loan-submit').disabled = member?.status !== 'verified';
+    $('loan-form-note').textContent = member?.status === 'verified'
+      ? 'Applications are reviewed by management. Approval does not disburse funds or guarantee a rate.'
+      : 'Membership verification is required before applying for a loan.';
+    const applications = loanData.applications || [];
+    $('loan-applications-list').innerHTML = applications.length ? applications.map(app => \`<article class="notification-row">
+      <strong>\${escapeHtml(app.reference)} · \${dollars(app.requestedAmountCents)}</strong>
+      <p>Status: <span class="status-pill">\${escapeHtml(String(app.status).replaceAll('_',' '))}</span>\${app.requestedTermMonths ? \` · \${escapeHtml(app.requestedTermMonths)} months requested\` : ''}</p>
+      <p>\${escapeHtml(app.purpose)}</p>
+      \${app.decisionReason ? \`<p class="muted">Decision note: \${escapeHtml(app.decisionReason)}</p>\` : ''}
+      <small>Submitted \${escapeHtml(new Date(app.submittedAt).toLocaleString())} · USD</small>
+      \${app.status === 'information_required' ? \`<form class="loan-response-form stack top-gap" data-loan-id="\${escapeHtml(app.id)}"><label>Additional information requested</label><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>\` : ''}
+    </article>\`).join('') : '<p class="muted">No loan applications yet.</p>';
+
   }
   async function refresh() {
     try { await loadDashboard(); showMessage('dashboard-message','Account information refreshed.'); }
@@ -99,6 +113,46 @@
     event.preventDefault();
     try { const result = await post('/card/test-purchase',{merchant:$('purchase-merchant').value,amountCents:Math.round(Number($('purchase-amount').value)*100)}); showMessage('dashboard-message',result.message); }
     catch(error) { showMessage('dashboard-message',error.message,true); }
+  });
+
+  $('loan-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = $('loan-submit');
+    button.disabled = true;
+    try {
+      const body = {
+        requestedAmountCents: Math.round(Number($('loan-amount').value) * 100),
+        currency: 'USD',
+        requestedTermMonths: $('loan-term').value ? Number($('loan-term').value) : null,
+        purpose: $('loan-purpose').value
+      };
+      const result = await post('/loans/applications', body);
+      $('loan-form').reset();
+      showMessage('dashboard-message', result.message || 'Loan application submitted for review.');
+      await refresh();
+    } catch (error) {
+      showMessage('dashboard-message', error.message, true);
+    } finally {
+      button.disabled = member?.status !== 'verified';
+    }
+  });
+  $('refresh-loans').addEventListener('click', refresh);
+  $('loan-applications-list').addEventListener('submit', async event => {
+    const form = event.target.closest('.loan-response-form');
+    if (!form) return;
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await post(\`/loans/applications/\${form.dataset.loanId}/information\`, {
+        response: form.elements.response.value
+      });
+      showMessage('dashboard-message', 'Your additional information was submitted for review.');
+      await refresh();
+    } catch (error) {
+      showMessage('dashboard-message', error.message, true);
+      button.disabled = false;
+    }
   });
   $('read-notifications').addEventListener('click', async () => {
     try { await post('/notifications/mark-read',{}); await refresh(); }
