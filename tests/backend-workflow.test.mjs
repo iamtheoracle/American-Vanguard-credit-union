@@ -22,7 +22,9 @@ test('backend rejects invalid account pairs, amount values, and client-supplied 
     { type:'internal-transfer', sourceAccount:'draft', destinationAccount:'primary', amountCents:0, purpose:'Zero amount' },
     { type:'internal-transfer', sourceAccount:'draft', destinationAccount:'primary', amountCents:1.5, purpose:'Fractional cents' },
     { type:'bill-payment', sourceAccount:'draft', destinationAccount:'primary', amountCents:100, purpose:'Wrong destination', recipient:'Utility' },
-    { type:'bill-payment', sourceAccount:'draft', amountCents:100, purpose:'Missing recipient' }
+    { type:'bill-payment', sourceAccount:'draft', amountCents:100, purpose:'Missing recipient' },
+    { type:'internal-transfer', sourceAccount:'draft', destinationAccount:'primary', amountCents:100, purpose:'Long recipient', recipient:'r'.repeat(101) },
+    { type:'bill-payment', sourceAccount:'draft', amountCents:100, purpose:'Long destination', recipient:'Utility', destinationDetails:'d'.repeat(161) }
   ]) assert.ok(validateRequest(body).error, JSON.stringify(body));
 });
 
