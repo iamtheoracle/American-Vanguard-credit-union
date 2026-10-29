@@ -19,9 +19,10 @@ export async function createTransactionApproval(client, transaction, { submitted
   }
   const requiredRole = requiredApprovalRoleForAmount(amountCents);
   const { rows } = await client.query(
-    `INSERT INTO approvals (item_type, transaction_id, payload, status, required_role, submitted_by, submitted_by_type)
-     VALUES ('transaction', $1, $2, 'pending', $3, $4, $5) RETURNING id`,
-    [transaction.id,
+    `INSERT INTO approvals (item_type, member_id, transaction_id, payload, status, required_role, submitted_by, submitted_by_type)
+     VALUES ('transaction', $1, $2, $3, 'pending', $4, $5, $6) RETURNING id`,
+    [submittedByType === 'member' ? submittedBy : null,
+     transaction.id,
      JSON.stringify({ type: transaction.type, amountCents,
        memo: transaction.memo, payee: transaction.payee, reference: transaction.reference }),
      requiredRole, submittedBy || null, submittedByType]);
