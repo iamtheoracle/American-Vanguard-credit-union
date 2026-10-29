@@ -219,6 +219,27 @@
     }
   }
 
+  function renderAccountGuidance() {
+    const selected = [$('#transfer-from')?.value, $('#transfer-to')?.value, $('#deposit-account')?.value].filter(Boolean);
+    const messages = {
+      ira: 'Traditional IRA is illustrative only. This demo does not model tax, contribution, eligibility, or withdrawal rules.',
+      certificate: 'Share Certificate is illustrative only. This demo does not model maturity dates, early-withdrawal penalties, or actual certificate terms.',
+      business: 'Business Operating Account is a sample category only; no business verification or business-banking services are provided.'
+    };
+    const uniqueMessages = [...new Set(selected.map(key => messages[key]).filter(Boolean))];
+    const transferNote = $('#account-guidance');
+    if (transferNote) {
+      transferNote.textContent = uniqueMessages.length ? uniqueMessages.join(' ') : 'Account types and movement rules are illustrative; no real account terms apply.';
+      transferNote.classList.toggle('hidden', uniqueMessages.length === 0);
+    }
+    const depositNote = $('#deposit-account-guidance');
+    if (depositNote) {
+      const key = $('#deposit-account')?.value;
+      depositNote.textContent = messages[key] || 'This is a simulated deposit into sample data only.';
+      depositNote.classList.toggle('hidden', !messages[key]);
+    }
+  }
+
   function updateTransferMode() {
     const kind = $('#transfer-kind')?.value || 'share';
     const isBill = kind === 'bill';
@@ -245,11 +266,13 @@
         to.value = other || 'primary';
       }
     }
+    renderAccountGuidance();
   }
 
   function submitTransfer(form) {
     const data = new FormData(form);
     const kind = data.get('kind') || 'share';
+    if (!['share', 'bill'].includes(kind)) { showToast('Choose a supported demo action.', 'error'); return; }
     const from = kind === 'bill' ? 'draft' : String(data.get('from'));
     const to = String(data.get('to'));
     const amount = Number(data.get('amount'));
@@ -268,7 +291,7 @@
       showToast(`Not enough available funds in ${accounts[from].name} for this demo transfer.`, 'error');
       return;
     }
-    if (kind === 'bill' && !payee) {
+    if (kind === 'bill' && (!payee || payee.length > 80)) {
       showToast('Enter a biller or payee name.', 'error');
       $('#bill-payee').focus();
       return;
@@ -308,11 +331,11 @@
     const account = String(data.get('account'));
     const amount = Number(data.get('amount'));
     const description = String(data.get('description') || '').trim();
-    if (!accounts[account] || !safeMoneyInput(amount) || !Number.isSafeInteger(cents(amount))) {
+    if (!accounts[account] || !safeMoneyInput(amount) || amount > 100000 || !Number.isSafeInteger(cents(amount))) {
       showToast('Choose a share and enter a valid positive check amount.', 'error');
       return;
     }
-    if (!description) {
+    if (!description || description.length > 80) {
       showToast('Enter a deposit description.', 'error');
       return;
     }
@@ -362,14 +385,23 @@
       result.textContent = 'Not processed: enter a valid amount and merchant name.';
       return;
     }
+    const amountCents = cents(amount);
     if (state.frozen) {
       result.classList.add('declined');
-      result.innerHTML = `<strong>DECLINED · CARD FROZEN</strong><br>The simulated ${money(cents(amount))} purchase at ${escapeHtml(merchant)} was declined. No balance changed.`;
-      showToast('Demo purchase declined because the card is frozen.');
+      result.innerHTML = `<strong>DECLINED · CARD FROZEN</strong><br>The simulated ${money(amountCents)} purchase at ${escapeHtml(merchant)} was declined. No balance changed.`;
+      showToast('Demo purchase declined because the card is frozen.', 'error');
+    } else if (state.balances.draft < amountCents) {
+      result.classList.add('declined');
+      result.innerHTML = `<strong>DECLINED · INSUFFICIENT FUNDS</strong><br>The simulated ${money(amountCents)} purchase at ${escapeHtml(merchant)} exceeds the available Share Draft balance of ${money(state.balances.draft)}. No balance changed.`;
+      showToast('Demo purchase declined: insufficient Share Draft funds.', 'error');
     } else {
+      state.balances.draft -= amountCents;
+      addTransaction('draft', merchant, -amountCents, 'Card purchase');
+      saveState();
+      renderAll();
       result.classList.add('approved');
-      result.innerHTML = `<strong>APPROVED · DEMO ONLY</strong><br>The simulated ${money(cents(amount))} purchase at ${escapeHtml(merchant)} was approved for demonstration. No balance changed.`;
-      showToast('Demo purchase approved. No money was moved.');
+      result.innerHTML = `<strong>APPROVED · DEMO ONLY</strong><br>The simulated ${money(amountCents)} purchase at ${escapeHtml(merchant)} was approved. Share Draft was reduced by ${money(amountCents)} and the demo ledger was updated.`;
+      showToast('Demo purchase approved and recorded in the local sample ledger.');
     }
     announce(result.textContent);
   }
@@ -427,6 +459,8 @@
     });
     $('#transfer-kind').addEventListener('change', updateTransferMode);
     $('#transfer-from').addEventListener('change', updateTransferMode);
+    $('#transfer-to').addEventListener('change', renderAccountGuidance);
+    $('#deposit-account').addEventListener('change', renderAccountGuidance);
     $('#swap-shares').addEventListener('click', () => {
       const from = $('#transfer-from');
       const to = $('#transfer-to');
@@ -465,6 +499,7 @@
   function init() {
     bindEvents();
     renderAll();
+    renderAccountGuidance();
     const date = $('#today-label');
     if (date) date.textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
     if (!('showModal' in HTMLDialogElement.prototype)) {
