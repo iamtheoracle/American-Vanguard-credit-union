@@ -13,6 +13,7 @@ test('authentication and session lifecycle', async t => {
   assert.equal(reg.status, 201);
   assert.equal(reg.data.member.status, 'pending');
   assert.match(reg.data.member.memberNumber, /^\d{10}$/, 'registration assigns a 10-digit numeric member ID');
+  assert.equal(reg.data.member.username, 'alex_rivera');
 
   // 2. Registration validation.
   const bad = await api(env.base, '/api/auth/register', {
