@@ -57,6 +57,25 @@ function fields(){
  if($('workflow-destination'))$('workflow-destination').required=['wire-transfer','withdrawal'].includes(t);
  if($('workflow-to'))$('workflow-to').required=internal;
 }
+async function lookupZelle(){
+ const name=String($('workflow-recipient')?.value||'').trim(),out=$('zelle-lookup-result');
+ if(!name){alert('Enter the recipient name before checking.');return}
+ if(out){out.classList.remove('hidden');out.textContent='Checking recipient directory…'}
+ if(!window.AVCUProviders?.supports?.('lookupZelleRecipient')){if(out)out.textContent='Recipient verification is unavailable: the authorized Zelle provider is not connected. This name is not verified.';return}
+ try{
+  const result=await window.AVCUProviders.lookupZelleRecipient(name);
+  if(result?.verified===true){zelleVerified.set(name.toLowerCase(),result);if(out)out.textContent='Recipient verified by the connected provider. Review the returned recipient details before submitting.'}
+  else{zelleVerified.delete(name.toLowerCase());if(out)out.textContent=result?.message||'No verified recipient match was returned.'}
+ }catch{zelleVerified.delete(name.toLowerCase());if(out)out.textContent='Recipient verification failed. No payment was sent.'}
+}
+function dispatchProvider(r){
+ if(!window.AVCUProviders?.isConfigured?.())return;
+ window.AVCUProviders.initiatePayment(r).then(result=>{
+  if(result?.status==='accepted'){r.status='processing';r.providerState='accepted';r.audit.push({at:new Date().toISOString(),actor:'Payment provider',action:'Accepted for processing; settlement not confirmed'});}
+  else{r.providerState=result?.code||'provider-error';r.operatorNote=(r.operatorNote+' Provider response: '+(result?.message||'Acceptance was not confirmed.')).trim();r.audit.push({at:new Date().toISOString(),actor:'Payment provider',action:'Provider did not confirm acceptance'});}
+  r.updatedAt=new Date().toISOString();save();render();
+ }).catch(()=>{r.providerState='provider-error';r.updatedAt=new Date().toISOString();r.audit.push({at:r.updatedAt,actor:'Payment provider',action:'Provider request failed'});save();render()});
+}
 function preview(inputId,targetId,label){
  const file=$(inputId)?.files?.[0],target=$(targetId);if(!target)return;if(!file){target.textContent=label+' image not selected.';return}
  if(!file.type.startsWith('image/')||file.size>12*1024*1024){target.textContent='Choose an image smaller than 12 MB.';return}
@@ -79,15 +98,15 @@ function review(e){
  if(b.dataset.review!=='approve'&&note.length<4){alert('Add a review note of at least four characters.');return}
  if(r.type==='check-deposit'&&!files.has(r.id)){alert('Check images are unavailable for review. Reattach both images or keep the request pending until secure document storage is connected.');return}
  if(b.dataset.review==='approve'&&r.type==='internal-transfer'){const err=postTransfer(r);if(err){alert(err);return}r.status='approved';r.operatorNote=note||'Approved after local review; internal ledger updated.'}
- else if(b.dataset.review==='approve'){r.status=external.has(r.type)?'approved-awaiting-provider':'approved';r.operatorNote=note||'Approved for next processing step. External settlement requires provider confirmation.'}
+ else if(b.dataset.review==='approve'){if(r.type==='zelle'&&r.providerLookup!=='verified'){alert('Approval blocked: verify the recipient with the connected Zelle provider first.');return}r.status=external.has(r.type)?'approved-awaiting-provider':'approved';r.operatorNote=note||'Approved for next processing step. External settlement requires provider confirmation.'}
  else if(b.dataset.review==='reject'){r.status='rejected';r.operatorNote=note}else{r.status='needs-information';r.operatorNote=note}
- r.decisionBy='Local operator workspace';r.updatedAt=new Date().toISOString();r.audit.push({at:r.updatedAt,actor:'Operator workspace',action:status(r.status)+(note?': '+note:'')});save();render();if($('live-announcer'))$('live-announcer').textContent='Request '+r.id+': '+status(r.status);return}
+ r.decisionBy='Local operator workspace';r.updatedAt=new Date().toISOString();r.audit.push({at:r.updatedAt,actor:'Operator workspace',action:status(r.status)+(note?': '+note:'')});save();render();if(r.status==='approved-awaiting-provider')dispatchProvider(r);if($('live-announcer'))$('live-announcer').textContent='Request '+r.id+': '+status(r.status);return}
  const p=e.target.closest('[data-preview]');if(p){const f=files.get(p.dataset.preview);if(!f)return alert('Images are not available in this session.');const urls=[URL.createObjectURL(f.front),URL.createObjectURL(f.back)];const w=window.open('','_blank');if(!w){urls.forEach(URL.revokeObjectURL);return alert('Allow the image review window and retry.')}w.document.write('<title>Check review</title><h1>Front of check</h1><img style="max-width:95%" src="'+urls[0]+'"><h1>Back of check</h1><img style="max-width:95%" src="'+urls[1]+'"><p>Session-only images.</p>');w.document.close()}
 }
 function init(){
  document.addEventListener('click',e=>{const b=e.target.closest('#simulate-purchase');if(!b)return;e.preventDefault();e.stopImmediatePropagation();const amount=$('purchase-amount')?.value,merchant=String($('purchase-merchant')?.value||'').trim();let s=null;try{s=JSON.parse(localStorage.getItem(MK)||'null')}catch{}if(s?.frozen){alert('This card is frozen. The authorization request was not submitted.');return}const out=create({type:'card-authorization',from:'draft',recipient:merchant,amount,note:'Card purchase authorization request for '+merchant});if(out.error){alert(out.error);return}render();if($('live-announcer'))$('live-announcer').textContent='Card authorization request submitted for approval.';if($('toast-region'))$('toast-region').textContent='Purchase authorization request submitted for approval. No merchant authorization has occurred.';window.setAVCUView?.('operations')},true);
  ['workflow-form','transfer-form','deposit-form'].forEach(k=>$(k)?.addEventListener('submit',submit,true));
- $('workflow-type')?.addEventListener('change',fields);$('check-front')?.addEventListener('change',()=>preview('check-front','check-front-preview','Front'));$('check-back')?.addEventListener('change',()=>preview('check-back','check-back-preview','Back'));
+ $('workflow-type')?.addEventListener('change',fields);$('zelle-lookup')?.addEventListener('click',lookupZelle);$('check-front')?.addEventListener('change',()=>preview('check-front','check-front-preview','Front'));$('check-back')?.addEventListener('change',()=>preview('check-back','check-back-preview','Back'));
  $('workflow-member-queue')?.addEventListener('click',review);$('workflow-operator-queue')?.addEventListener('click',review);fields();render();window.renderWorkflowWorkspace=render;
  window.setAVCUView=v=>document.querySelector('[data-nav="'+v+'"]')?.click();window.addEventListener('avcu:member-state-updated',()=>window.renderAll?.());
 }
