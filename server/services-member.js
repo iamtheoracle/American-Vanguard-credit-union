@@ -3,6 +3,7 @@ import { POLICY } from './policy.js';
 import { createTransactionApproval } from './approvals.js';
 import { postTwoSided, createTransaction, LedgerError } from './ledger.js';
 import { validAmountCents } from './util.js';
+import { queueMemberNotification } from './notifications.js';
 import { cardIssuerAdapter, paymentsAdapter, outbound } from './integrations/index.js';
 
 /**
@@ -80,6 +81,13 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
         entityType: 'transaction', entityId: tx.id,
         metadata: { amountCents, payee: String(body.payee).trim(), kind }
       });
+      await queueMemberNotification(client, {
+        memberId: member.id, eventType: 'transaction.transfer_submitted',
+        eventKey: `transaction:${tx.id}:transfer-submitted`,
+        title: 'Transfer status update',
+        body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
+        subject: 'AVCU transfer status update'
+      });
       return { transaction: tx, approvalId };
     });
     await consumeIdempotencyOutsideTx(idempotencyKey, `transfer:${member.id}`, serializeTransfer(result.transaction));
@@ -107,6 +115,13 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
       actorType: 'member', actorId: member.id, action: aiContext ? 'ai.transfer_proposed' : 'transaction.submitted',
       entityType: 'transaction', entityId: tx.id,
       metadata: { amountCents, kind, needsApproval }
+    });
+    await queueMemberNotification(client, {
+      memberId: member.id, eventType: 'transaction.transfer_submitted',
+      eventKey: `transaction:${tx.id}:transfer-submitted`,
+      title: 'Transfer status update',
+      body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
+      subject: 'AVCU transfer status update'
     });
     return { transaction: tx, approvalId };
   });
@@ -148,6 +163,13 @@ export async function submitMemberDeposit({ member, body, idempotencyKey }) {
     await audit(client, {
       actorType: 'member', actorId: member.id, action: 'deposit.submitted',
       entityType: 'transaction', entityId: tx.id, metadata: { amountCents, needsReview }
+    });
+    await queueMemberNotification(client, {
+      memberId: member.id, eventType: 'transaction.deposit_submitted',
+      eventKey: `transaction:${tx.id}:deposit-submitted`,
+      title: 'Deposit status update',
+      body: `Your deposit ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
+      subject: 'AVCU deposit status update'
     });
     await consumeIdempotency(client, idempotencyKey, `deposit:${member.id}`,
       { reference: tx.reference, status: tx.status });
