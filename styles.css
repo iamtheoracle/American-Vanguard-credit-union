@@ -65,3 +65,29 @@ body{background:var(--wash);color:var(--ink)}
 
 @media(max-width:1190px){.shares-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.shares-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brand-mark{width:39px;height:39px}.brand-mark svg{width:27px;height:27px}}
+
+/* Payment request and review workspace */
+.standalone-notice{display:flex;flex-direction:column;gap:6px;margin:0 0 18px;padding:15px 17px;border:1px solid #d6e3d8;border-left:4px solid #2d6b50;border-radius:12px;background:#f4f8f2;color:#334b40;font-size:12px;line-height:1.65}
+.standalone-notice strong{font-size:13px;color:#1c513c}
+.workflow-queue-panel{margin-top:18px}
+.workflow-list{display:flex;flex-direction:column;gap:12px}
+.workflow-request{padding:17px;border:1px solid var(--line);border-radius:13px;background:var(--paper);display:flex;flex-direction:column;gap:12px;min-width:0}
+.workflow-request-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.workflow-request-top>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.workflow-request-top strong{font-size:13px;color:var(--ink);overflow-wrap:anywhere}
+.workflow-request-top small{font-size:10px;color:var(--muted);overflow-wrap:anywhere}
+.workflow-status{display:inline-flex;align-items:center;justify-content:center;max-width:180px;padding:6px 9px;border-radius:999px;background:#f6ecd7;color:#78591d;font-size:10px;font-weight:800;text-align:center}
+.workflow-meta{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}
+.workflow-meta b{color:var(--ink)}
+.workflow-warning{margin:0;padding:10px 12px;border-radius:9px;background:#fff4e4;color:#80551a;font-size:11px;line-height:1.6}
+.workflow-note{margin:0;padding:10px 12px;border-radius:9px;background:#f1f5f2;color:#344b3f;font-size:11px;line-height:1.6}
+.workflow-audit{font-size:10px;color:var(--muted)}
+.workflow-audit summary{cursor:pointer;font-weight:700}
+.workflow-audit ul{padding-left:20px;line-height:1.6}
+.workflow-actions{display:flex;flex-wrap:wrap;align-items:end;gap:8px;padding-top:10px;border-top:1px solid var(--line)}
+.workflow-actions label{display:flex;flex-direction:column;gap:5px;flex:1 1 100%;font-size:11px;font-weight:700}
+.workflow-actions input{min-height:38px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;width:100%}
+.check-upload-preview{display:flex;align-items:center;gap:10px;min-height:48px;margin:6px 0 12px;padding:9px;border:1px dashed #cbd8cf;border-radius:9px;background:#fafbf8;color:var(--muted);font-size:10px;overflow-wrap:anywhere}
+.check-upload-preview img{width:82px;height:60px;object-fit:contain;border-radius:5px;background:#e8ece8}
+#workflow-check-wrap input[type=file],#deposit-form input[type=file]{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:11px}
+@media(max-width:620px){.mobile-nav{grid-template-columns:repeat(6,minmax(0,1fr))}.mobile-nav-item small{font-size:8px}.workflow-request{padding:12px}.workflow-request-top{flex-direction:column}.workflow-actions .primary-button,.workflow-actions .secondary-button{flex:1 1 100%}.workflow-meta{flex-direction:column;gap:4px}}
