@@ -10,13 +10,13 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>window.crypto?.randomUUID?.()||('AV-'+Date.now()+'-'+Math.random().toString(16).slice(2,8));
 const money=c=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(c/100);
-const status=s=>({'pending-approval':'Pending Approval',approved:'Approved','approved-awaiting-provider':'Approved · Awaiting Provider',rejected:'Rejected','needs-information':'Needs Information'}[s]||s);
+const status=s=>({'pending-approval':'Pending Approval',approved:'Approved','approved-awaiting-provider':'Approved · Awaiting Provider',processing:'Processing · Provider Accepted',settled:'Settled · Provider Confirmed',rejected:'Rejected','needs-information':'Needs Information'}[s]||s);
 function load(){try{const x=JSON.parse(localStorage.getItem(RK)||'[]');return Array.isArray(x)?x:[]}catch{return []}}
 function save(){try{localStorage.setItem(RK,JSON.stringify(requests));return true}catch{alert('Could not save this request in browser storage.');return false}}
 function member(){try{return JSON.parse(localStorage.getItem(MK)||'null')}catch{return null}}
 function validAmount(v){let n=Number(v);return Number.isFinite(n)&&n>0&&n<=1000000&&Math.abs(n*100-Math.round(n*100))<1e-7}
 function create(d,f){
- const type=String(d.type||''),from=String(d.from||''),to=String(d.to||''),recipient=String(d.recipient||'').trim(),destination=String(d.destination||'').trim(),note=String(d.note||'').trim(),amount=Number(d.amount);
+ const type=String(d.type||''),from=String(d.from||''),to=String(d.to||''),recipient=String(d.recipient||'').trim(),destination=String(d.destination||'').trim(),note=String(d.note||'').trim(),amount=Number(d.amount),currency=String(d.currency||'USD');
  if(!T[type]||!A[from])return {error:'Choose a valid request type and source account.'};
  if(!validAmount(amount))return {error:'Enter a positive amount with no more than two decimal places.'};
  if(!note||note.length>180)return {error:'Enter a purpose or reference (maximum 180 characters).'};
@@ -25,18 +25,20 @@ function create(d,f){
  if(['wire-transfer','withdrawal'].includes(type)&&!destination)return {error:'Enter the destination details required for review.'};
  if(type==='fx'){const q=fxQuotes.get(currency+'|'+Math.round(amount*100));if(!q||!Number.isFinite(Date.parse(q.expiresAt))||Date.now()>=Date.parse(q.expiresAt))return {error:'Get a current live FX quote from the connected provider before submitting this request.'};}
  if(type==='check-deposit'&&(!f?.front||!f?.back))return {error:'Capture or select both the front and back of the check.'};
- const now=new Date().toISOString(),r={id:uid(),type,typeLabel:T[type],from,to:type==='internal-transfer'?to:'',recipient,destination,currency:String(d.currency||'USD'),amountCents:Math.round(amount*100),note,status:'pending-approval',createdAt:now,updatedAt:now,operatorNote:'',providerState:'not-connected',providerLookup:type==='zelle'?(zelleVerified.has(recipient.toLowerCase())?'verified':'unavailable-without-provider'):null,fxQuote:type==='fx'?fxQuotes.get(currency+'|'+Math.round(amount*100)):null,assignedTeam:routing[type][0],assignedRole:routing[type][1],checkImages:type==='check-deposit'?{frontName:f.front.name,backName:f.back.name}:null,audit:[{at:now,actor:'Member',action:'Submitted for approval'}]};
+ if(type==='check-deposit'&&[f.front,f.back].some(file=>!String(file.type||'').startsWith('image/')||file.size>12*1024*1024))return {error:'Both check images must be image files smaller than 12 MB each.'};
+ const now=new Date().toISOString(),r={id:uid(),type,typeLabel:T[type],from,to:type==='internal-transfer'?to:'',recipient,destination,currency,amountCents:Math.round(amount*100),note,status:'pending-approval',createdAt:now,updatedAt:now,operatorNote:'',providerState:'not-connected',providerLookup:type==='zelle'?(zelleVerified.has(recipient.toLowerCase())?'verified':'unavailable-without-provider'):null,fxQuote:type==='fx'?fxQuotes.get(currency+'|'+Math.round(amount*100)):null,assignedTeam:routing[type][0],assignedRole:routing[type][1],checkImages:type==='check-deposit'?{frontName:f.front.name,backName:f.back.name}:null,audit:[{at:now,actor:'Member',action:'Submitted for approval'}]};
  r.automatedReview=window.AVCUReviewAssistant?.assessLocally?.(r,requests)||{mode:'local-rules',flags:['Automated review assistant not configured.'],advisoryOnly:true};
  requests.unshift(r);requests=requests.slice(0,500);if(!save()){requests.shift();return {error:'Request could not be saved.'}}if(f?.front&&f?.back)files.set(r.id,f);
  if(window.AVCUReviewAssistant?.assess){window.AVCUReviewAssistant.assess(r,requests.filter(item=>item.id!==r.id)).then(result=>{r.automatedReview=result;save();render()}).catch(()=>{})}
  return {request:r};
 }
 function postTransfer(r){
- const s=member();if(!s?.balances||!Array.isArray(s.transactions))return 'Local account records are unavailable; connect the core account service before posting.';
- if(!Number.isSafeInteger(r.amountCents)||r.amountCents<=0||s.balances[r.from]<r.amountCents)return 'Approval blocked: source account does not have sufficient available funds.';
- s.balances[r.from]-=r.amountCents;s.balances[r.to]+=r.amountCents;const now=new Date().toISOString();
+ const s=member();if(!s?.balances||typeof s.balances!=='object'||!Array.isArray(s.transactions))return 'Local account records are unavailable; connect the core account service before posting.';
+ const fromBalance=s.balances[r.from],toBalance=s.balances[r.to];
+ if(!Number.isSafeInteger(r.amountCents)||r.amountCents<=0||!Number.isSafeInteger(fromBalance)||!Number.isSafeInteger(toBalance)||fromBalance<r.amountCents)return 'Approval blocked: valid account balances and sufficient available funds are required.';
+ s.balances[r.from]=fromBalance-r.amountCents;s.balances[r.to]=toBalance+r.amountCents;const now=new Date().toISOString();
  s.transactions.unshift({id:uid(),account:r.from,title:'Approved account transfer',amount:-r.amountCents,date:now,detail:'Approved internal transfer'},{id:uid(),account:r.to,title:'Transfer received',amount:r.amountCents,date:now,detail:'Approved internal transfer'});
- s.transactions=s.transactions.slice(0,100);localStorage.setItem(MK,JSON.stringify(s));window.dispatchEvent(new CustomEvent('avcu:member-state-updated'));return '';
+ s.transactions=s.transactions.slice(0,100);try{localStorage.setItem(MK,JSON.stringify(s))}catch{return 'Approval blocked: account records could not be saved. No transfer was posted.'}window.dispatchEvent(new CustomEvent('avcu:member-state-updated'));return '';
 }
 function card(r,operator){
  const recipient=r.type==='internal-transfer'?A[r.to]:(r.recipient||r.destination||r.currency||'Provider required');
