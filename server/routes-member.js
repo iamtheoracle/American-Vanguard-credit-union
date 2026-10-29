@@ -1,5 +1,5 @@
 import express from 'express';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { query, withTx, audit } from './db.js';
 import {
   memberAuth, operatorAuth, applySessionCookie, clearAuthCookie,
@@ -16,6 +16,8 @@ import { recalculateMemberTier } from './membership-tiers.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
+const passwordResetLimiter = rateLimiter({ windowMs: 60 * 60_000, max: 5 });
+const passwordResetCompleteLimiter = rateLimiter({ windowMs: 60 * 60_000, max: 10 });
 const aiLimiter = rateLimiter({ windowMs: 60_000, max: 20 });
 
 // ---- auth -------------------------------------------------------------------
@@ -59,6 +61,94 @@ router.post('/auth/register', async (req, res, next) => {
       message: 'Application received. Sign in to track its status.' });
   } catch (error) {
     if (error.code === '23505' && String(error.constraint || '').includes('username')) return res.status(409).json({ error: 'That username is already taken' });
+    next(error);
+  }
+});
+
+router.post('/auth/password-reset/request', async (req, res, next) => {
+  try {
+    if (!passwordResetLimiter(clientKey(req))) {
+      return res.status(202).json({ message: 'If an account matches that identifier, reset instructions will be sent to its verified email address.' });
+    }
+    const identifier = String(req.body?.identifier || '').trim().slice(0, 250);
+    const member = identifier ? await findMemberByLogin(identifier) : null;
+    let publicBase = null;
+    try {
+      const parsed = new URL(process.env.AVCU_PUBLIC_BASE_URL || '');
+      if (parsed.protocol === 'https:' || ['localhost','127.0.0.1'].includes(parsed.hostname)) publicBase = parsed;
+    } catch { /* A public URL is required to create a useful reset link. */ }
+
+    if (member && publicBase) {
+      const token = randomBytes(32).toString('base64url');
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      const resetUrl = new URL('/member-portal.html', publicBase);
+      resetUrl.searchParams.set('resetToken', token);
+      await withTx(async client => {
+        await client.query(
+          `UPDATE password_reset_tokens SET used_at = now()
+           WHERE member_id = $1 AND used_at IS NULL`, [member.id]);
+        const { rows } = await client.query(
+          `INSERT INTO password_reset_tokens (member_id, token_hash, expires_at)
+           VALUES ($1,$2,now() + interval '30 minutes')
+           RETURNING id, expires_at`, [member.id, tokenHash]);
+        await client.query(
+          `INSERT INTO notification_outbox
+            (event_key, member_id, event_type, recipient, title, body, email_subject, email_text)
+           VALUES ($1,$2,'auth.password_reset',$3,'Password reset instructions',$4,'AVCU password reset instructions',$4)
+           ON CONFLICT (event_key) DO NOTHING`,
+          [`password-reset:${rows[0].id}`, member.id, member.email,
+            `Use this link within 30 minutes to reset your AVCU password: ${resetUrl.toString()}\nIf you did not request this, ignore this email. No funds or account details are included in this message.`]);
+        await audit(client, {
+          actorType: 'system', actorId: member.id, action: 'auth.password_reset_requested',
+          entityType: 'member', entityId: member.id,
+          metadata: { resetTokenId: rows[0].id, expiresAt: rows[0].expires_at }
+        });
+      });
+    }
+    res.status(202).json({ message: 'If an account matches that identifier, reset instructions will be sent to its verified email address.' });
+  } catch (error) { next(error); }
+});
+
+router.post('/auth/password-reset/complete', async (req, res, next) => {
+  try {
+    if (!passwordResetCompleteLimiter(clientKey(req))) {
+      return res.status(429).json({ error: 'Too many reset attempts. Try again later.' });
+    }
+    const token = String(req.body?.token || '').trim();
+    const password = String(req.body?.password || '');
+    if (!/^[A-Za-z0-9_-]{40,60}$/.test(token) || !validPassword(password)) {
+      return res.status(400).json({ error: 'The reset link is invalid or expired, or the new password does not meet the password policy.' });
+    }
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const passwordHash = await hashPassword(password);
+    const memberId = await withTx(async client => {
+      const { rows } = await client.query(
+        `SELECT id, member_id FROM password_reset_tokens
+         WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+         FOR UPDATE`, [tokenHash]);
+      const reset = rows[0];
+      if (!reset) {
+        const error = new Error('The reset link is invalid or expired');
+        error.status = 400;
+        throw error;
+      }
+      await client.query('UPDATE members SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, reset.member_id]);
+      await client.query('UPDATE password_reset_tokens SET used_at = now() WHERE id = $1', [reset.id]);
+      await client.query(
+        `UPDATE member_sessions SET revoked_at = now()
+         WHERE member_id = $1 AND revoked_at IS NULL`, [reset.member_id]);
+      await client.query(
+        `UPDATE password_reset_tokens SET used_at = now()
+         WHERE member_id = $1 AND id <> $2 AND used_at IS NULL`, [reset.member_id, reset.id]);
+      await audit(client, {
+        actorType: 'system', actorId: reset.member_id, action: 'auth.password_reset_completed',
+        entityType: 'member', entityId: reset.member_id
+      });
+      return reset.member_id;
+    });
+    res.json({ success: true, message: 'Password reset complete. Sign in using your username, email, or member number.' });
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
     next(error);
   }
 });
