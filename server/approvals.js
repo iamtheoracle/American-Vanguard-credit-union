@@ -31,7 +31,7 @@ export async function createTransactionApproval(client, transaction, { submitted
 export async function createMembershipApproval(client, member, { submittedByType, submittedBy }) {
   const { rows } = await client.query(
     `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
-     VALUES ('membership', $1, $2, 'pending', 'operator', $3, $4) RETURNING id`,
+     VALUES ('membership', $1, $2, 'pending', 'management', $3, $4) RETURNING id`,
     [member.id, JSON.stringify({ memberId: member.id, email: member.email, fullName: member.full_name }),
      submittedBy || null, submittedByType || 'member']);
   return rows[0].id;
