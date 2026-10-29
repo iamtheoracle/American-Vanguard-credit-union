@@ -39,6 +39,14 @@
     const tier = tierData.membership;
     $('membership-tier').textContent = tier?.label || 'New Member';
     $('tier-detail').textContent = `${tier?.activity90Days ?? 0} qualifying transactions in 90 days`;
+    const tierProgress = tierData.progress || tier?.progress;
+    $('tier-progress-note').textContent = tierProgress?.note || 'Tier requirements are informational and use persisted account activity.';
+    $('tier-progress-list').innerHTML = tierProgress?.requirements?.length
+      ? tierProgress.requirements.map(item => {
+          const percent = Math.max(0, Math.min(100, Number(item.percent) || 0));
+          return `<article class="tier-requirement"><div class="tier-requirement-head"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.current)} / ${escapeHtml(item.required)}</span></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="${escapeHtml(item.label)}"><span style="width:${percent}%"></span></div><small>${item.satisfied ? 'Requirement satisfied' : `${escapeHtml(item.remaining)} more needed`}</small></article>`;
+        }).join('')
+      : `<p class="muted">${escapeHtml(tierProgress?.note || 'No next-tier requirements are currently available.')}</p>`;
     const card = cardData.card;
     $('card-status').textContent = card?.status || 'Not issued';
     $('card-last4').textContent = card ? `Sandbox card ending ${card.last4}` : 'Card appears after membership approval';
