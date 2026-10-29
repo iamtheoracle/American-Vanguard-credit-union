@@ -29,7 +29,7 @@ test('high-value transfers require approval and approvals execute the posting', 
   const { cookie: teller } = await loginOperator(env.base, 'teller@avcu.demo');
   // Normal operator lacks the required management role.
   const denied = await api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
-    method: 'POST', cookie: teller, body: { action: 'approve' }
+    method: 'POST', cookie: manager, body: { action: 'approve' }
   });
   assert.equal(denied.status, 403);
   assert.equal(denied.data.code, 'insufficient_role');
@@ -138,8 +138,8 @@ test('membership applications flow through the approval queue', async t => {
   await api(env.base, '/api/auth/register', {
     method: 'POST', body: { email: 'applicant@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Sam Lee' }
   });
-  const { cookie: teller } = await loginOperator(env.base, 'teller@avcu.demo');
-  const queue = await api(env.base, '/api/operator/approvals?status=pending', { cookie: teller });
+  const { cookie: manager } = await loginOperator(env.base, 'manager@avcu.demo');
+  const queue = await api(env.base, '/api/operator/approvals?status=pending', { cookie: manager });
   const membership = queue.data.approvals.find(a => a.itemType === 'membership');
   assert.ok(membership, 'expected a pending membership approval');
 
