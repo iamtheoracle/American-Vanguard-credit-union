@@ -139,10 +139,10 @@
   }
 
   function renderHome() {
-    $('#total-balance').textContent = money(total());
+    $('#total-balance').textContent = 'Not connected';
     $$('[data-balance]').forEach(el => {
       const account = el.dataset.balance;
-      if (accounts[account]) el.textContent = money(state.balances[account]);
+      if (accounts[account]) el.textContent = 'Not connected';
     });
     const recent = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4);
     $('#recent-transactions').innerHTML = recent.length ? recent.map(transactionMarkup).join('') : '<p class="empty-state">No account activity yet. Start a payment or deposit request.</p>';
@@ -155,7 +155,7 @@
 
   function renderMoveBalances() {
     $('#move-balances').innerHTML = Object.keys(accounts).map(key =>
-      `<div class="balance-list-row"><span>${escapeHtml(accounts[key].name)}</span><strong>${money(state.balances[key])}</strong></div>`
+      `<div class="balance-list-row"><span>${escapeHtml(accounts[key].name)}</span><strong>Not connected</strong></div>`
     ).join('');
     updateTransferMode();
   }
