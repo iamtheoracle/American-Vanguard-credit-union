@@ -33,3 +33,24 @@ The demo stores its sample ledger in this browser's `localStorage` under `avcu.m
 ## Not production banking software
 
 This preview has no authentication, backend, ledger authority, fraud monitoring, compliance controls, deposit insurance, or payment integrations. It must not be used to accept deposits, process payments, issue cards, or represent real financial products. Any future production build requires a separate, security-reviewed architecture and appropriately authorized financial-institution relationships.
+
+
+## Production-readiness work in progress
+
+The `feat/production-readiness-workflows` branch contains an initial backend/domain foundation:
+
+- `db/schema.sql`: relational tables for members, accounts, immutable transaction history, money requests, loan applications, funding pools, notification outbox, staff roles, audit events, and migration batches.
+- `src/domain/workflows.mjs`: explicit loan/request state-transition authorization and deterministic notification event keys.
+- `src/domain/membership-tiers.mjs`: server-reusable tier qualification and progress calculations.
+- `src/domain/migration-validation.mjs`: import validation that preserves original timestamp strings and integer minor-unit amounts, flags duplicates/invalid rows, and compares source/target reconciliation totals.
+- `tests/`: unit coverage for workflow permissions, tier progress, and migration reconciliation.
+
+These are foundations, not a deployed backend. The current static app does not call these modules, no production database or authentication provider is configured, no Gmail/OAuth sender is connected, and no payment/core-banking provider is configured. Do not use the prototype to collect real member credentials or financial information. Do not remove the demo disclosure or enable contributions/disbursements until authorized infrastructure, security review, reconciliation, and release approval are complete.
+
+### Before enabling production integrations
+
+1. Provision a dedicated PostgreSQL database and apply/review `db/schema.sql`.
+2. Implement authenticated server endpoints using a verified identity provider and enforce role checks server-side.
+3. Wire state changes and notification-outbox inserts in a single database transaction; send emails asynchronously with provider credentials held only in server environment secrets.
+4. Add integration tests against a disposable database and an email sandbox, then run `npm run check`.
+5. Validate migration against an authorized export, resolve every exception, and obtain independent reconciliation sign-off before cutover.
