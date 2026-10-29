@@ -58,7 +58,7 @@ const TIERS = {
 
 router.get('/operator/queue', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const [approvals, cases, aiFailed, membership, alerts, health] = await Promise.all([
+    const [approvals, cases, aiFailed, membership, alerts, moneyRequests, health] = await Promise.all([
       query(`SELECT count(*) FILTER (WHERE status = 'pending') AS pending,
                     count(*) FILTER (WHERE status = 'escalated') AS escalated
              FROM approvals`),
@@ -68,6 +68,7 @@ router.get('/operator/queue', ...guard('management', 'operator'), async (req, re
       query(`SELECT count(*) AS failed FROM ai_tasks WHERE status = 'failed'`),
       query(`SELECT count(*) AS pending FROM members WHERE status = 'pending'`),
       query(`SELECT count(*) AS pending FROM operations_alerts WHERE status = 'pending'`),
+      query(`SELECT count(*) AS pending FROM approvals WHERE item_type = 'money_request' AND status IN ('pending','escalated','info_requested')`),
       integrationHealth()
     ]);
     res.json({
@@ -76,6 +77,7 @@ router.get('/operator/queue', ...guard('management', 'operator'), async (req, re
       aiFailed: Number(aiFailed.rows[0].failed),
       membershipPending: Number(membership.rows[0].pending),
       loanAlertsPending: Number(alerts.rows[0].pending),
+      moneyRequestsPending: Number(moneyRequests.rows[0].pending),
       integrations: health
     });
   } catch (error) { next(error); }
@@ -93,12 +95,13 @@ router.get('/operator/approvals', ...guard('management', 'operator'), async (req
               a.payload, a.created_at AS "createdAt", a.decided_at AS "decidedAt",
               a.decision_reason AS "decisionReason", a.assigned_to AS "assignedTo",
               a.submitted_by_type AS "submittedByType", a.submitted_by AS "submittedBy",
-              t.id AS "transactionId", COALESCE(t.reference, l.reference) AS reference, t.type AS "transactionType",
-              COALESCE(t.amount_cents, l.requested_amount_cents) AS "amountCents", t.status AS "transactionStatus",
+              t.id AS "transactionId", COALESCE(t.reference, l.reference, mr.reference) AS reference, t.type AS "transactionType",
+              mr.request_type AS "requestType", COALESCE(t.amount_cents, l.requested_amount_cents, mr.amount_cents) AS "amountCents", t.status AS "transactionStatus",
               m.full_name AS "memberName", m.email AS "memberEmail", m.id AS "memberId"
        FROM approvals a
        LEFT JOIN transactions t ON t.id = a.transaction_id
        LEFT JOIN loan_applications l ON l.approval_id = a.id
+       LEFT JOIN money_requests mr ON mr.approval_id = a.id
        LEFT JOIN members m ON m.id = a.member_id
        WHERE ${where}
        ORDER BY CASE a.status WHEN 'escalated' THEN 0 ELSE 1 END, a.created_at DESC
