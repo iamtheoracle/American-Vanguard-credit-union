@@ -267,9 +267,10 @@ router.post('/loans/applications', memberAuth, async (req, res, next) => {
         `INSERT INTO operations_alerts (alert_type, loan_application_id)
          VALUES ('loan_application_submitted',$1) ON CONFLICT (alert_type, loan_application_id) DO NOTHING`,
         [created.id]);
-      const reviewPath = process.env.AVCU_PUBLIC_BASE_URL
-        ? new URL('/operator-portal.html', process.env.AVCU_PUBLIC_BASE_URL).toString()
-        : '/operator-portal.html';
+      let reviewPath = '/operator-portal.html';
+      try {
+        if (process.env.AVCU_PUBLIC_BASE_URL) reviewPath = new URL('/operator-portal.html', process.env.AVCU_PUBLIC_BASE_URL).toString();
+      } catch { /* Missing/invalid public URL must not block application submission. */ }
       await queueOperationsEmail(client, {
         eventKey: `loan-application-operations:${created.id}:submitted`,
         eventType: 'loan.application_submitted',
