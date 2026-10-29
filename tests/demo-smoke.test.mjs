@@ -10,7 +10,7 @@ const [html, js, css, netlify] = await Promise.all([
 ]);
 
 test('initial member overview renders balances and demo disclaimer in HTML before JavaScript runs', () => {
-  assert.match(html, /id="total-balance"[^>]*>\$12,480\.65/);
+  assert.match(html, /id="total-balance"[^>]*>\$24,230\.65/);
   assert.match(html, /Share Draft[\s\S]*?\$3,240\.65/);
   assert.match(html, /Primary Share[\s\S]*?\$6,840\.00/);
   assert.match(html, /Money Market[\s\S]*?\$1,900\.00/);
@@ -18,7 +18,7 @@ test('initial member overview renders balances and demo disclaimer in HTML befor
   assert.match(html, /Business Operating Account[\s\S]*?\$4,750\.00/);
   assert.match(html, /Traditional IRA[\s\S]*?\$2,000\.00/);
   assert.match(html, /Share Certificate[\s\S]*?\$5,000\.00/);
-  assert.match(html, /DEMONSTRATION ONLY/);
+  assert.match(html, /LOCAL DEMONSTRATION ONLY/);
   assert.match(html, /not a real credit union account/i);
   assert.match(html, /NCUA insurance/i);
   assert.match(html, /Richmond &amp; San Pablo/i);
