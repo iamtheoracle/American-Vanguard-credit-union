@@ -4,6 +4,11 @@ import crypto from 'node:crypto';
 import { startTestServer, api, loginMember, loginOperator, getAccounts } from './helpers.mjs';
 import { outbound, IntegrationError } from '../../server/integrations/index.js';
 import { webhookSecret, verifyWebhookSignature } from '../../server/integrations/index.js';
+import { base64Url } from '../../server/notifications.js';
+
+test('Gmail message encoding uses Base64URL-safe characters', () => {
+  assert.equal(base64Url(Buffer.from([251, 255])), '-_8');
+});
 
 test('integration health reports sandbox mode and honors failure injection', async t => {
   const env = await startTestServer();
