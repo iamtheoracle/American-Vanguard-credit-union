@@ -77,3 +77,9 @@ The member API now supports `POST /api/loans/applications`, `GET /api/loans/appl
 The member portal reads published funding pools from `GET /api/funding-pools`. Funding progress is calculated only from contribution rows whose status is `verified`. Pools are not seeded or published by default, return assumptions and terms remain blank until approved configuration is supplied, and `POST /api/funding-pools/:id/contributions` deliberately returns a disabled response. No live contribution, custody, settlement, or investment functionality is enabled.
 
 Configure `AVCU_OPERATIONS_EMAIL` with an authorized operations mailbox and `AVCU_PUBLIC_BASE_URL` with the deployment's HTTPS origin to make the loan alert email actionable. If no operations email is configured, the database-backed operations alert still exists and remains visible in the operator console, but email delivery is not claimed.
+
+## Legacy migration staging
+
+Authorized staff can stage a JSON array of legacy transaction rows from the operator console or `POST /api/operator/migrations/validate`. Validation preserves original timestamp text and signed minor-unit amounts, records every raw row, identifies duplicate source references and invalid fields, stores exception reports, and groups totals by source account/currency/status. Each batch stores a SHA-256 fingerprint of the canonical parsed JSON payload; this is **not** a raw source-file byte hash because no source file upload/parser has been configured yet.
+
+Batches with validation exceptions are marked `blocked`; even clean batches are staging-only. No import, balance posting, account cutover, or production migration is exposed until an authorized source export, approved account mapping, target-side reconciliation, and separate release approval exist. Viewing migration exceptions and audit history is role-restricted and logged.
