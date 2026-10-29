@@ -78,7 +78,10 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
     }
 
     const requiredRole = approval.status === 'escalated' ? 'management' : approval.required_role;
-    if (!roleSatisfies(operator.role, requiredRole)) {
+    // Review actions (request information or escalate) are available to staff
+    // who can review the queue; only final approve/reject actions use the
+    // configured approval role and monetary policy.
+    if (['approve', 'reject'].includes(action) && !roleSatisfies(operator.role, requiredRole)) {
       throw new ApprovalError(`This decision requires the ${requiredRole} role`, 403, 'insufficient_role');
     }
 
