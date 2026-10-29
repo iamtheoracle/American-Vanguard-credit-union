@@ -69,3 +69,11 @@ Member endpoint: `GET /api/membership-tier`.
 Members receive a unique 10-digit numeric member ID at registration. They can sign in with that ID or their email address; neither is a substitute for the password. Google sign-in is not configured in this prototype.
 
 The API uses password hashing, expiring server-side sessions, role checks, audit events, approval workflows, integer cents, and a PostgreSQL ledger. These controls are useful development foundations, not a production security certification. Before any real use, the system still needs an independent security review, threat modeling, end-to-end frontend/API integration, operational monitoring, backups, privacy/legal review, fraud/AML controls as applicable, authorized banking/payment partners, and required licenses and regulatory approvals. No production deployment is included by this implementation branch.
+
+## Loan applications and funding-pool boundaries
+
+The member API now supports `POST /api/loans/applications`, `GET /api/loans/applications`, and a member response endpoint for requested information. Loan applications create a management approval record, an operations alert, a member notification, an audit event, and—when `AVCU_OPERATIONS_EMAIL` is configured—a durable operations email outbox event in the same database transaction. Operators can list and acknowledge alerts at `/api/operator/loan-alerts`; final decisions remain role-checked. An approved application is **not** a disbursement and creates no loan balance or movement of funds.
+
+The member portal reads published funding pools from `GET /api/funding-pools`. Funding progress is calculated only from contribution rows whose status is `verified`. Pools are not seeded or published by default, return assumptions and terms remain blank until approved configuration is supplied, and `POST /api/funding-pools/:id/contributions` deliberately returns a disabled response. No live contribution, custody, settlement, or investment functionality is enabled.
+
+Configure `AVCU_OPERATIONS_EMAIL` with an authorized operations mailbox and `AVCU_PUBLIC_BASE_URL` with the deployment's HTTPS origin to make the loan alert email actionable. If no operations email is configured, the database-backed operations alert still exists and remains visible in the operator console, but email delivery is not claimed.
