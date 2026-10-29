@@ -8,7 +8,7 @@ function makeToken(privateKey, appId, overrides = {}) {
   const now = Math.floor(Date.now() / 1000);
   const header = Buffer.from(JSON.stringify({ alg: 'ES256', typ: 'JWT' })).toString('base64url');
   const claims = Buffer.from(JSON.stringify({
-    aud: appId, sub: 'did:privy:test-user', iat: now, exp: now + 300, ...overrides
+    aud: appId, iss: 'privy.io', sub: 'did:privy:test-user', iat: now, exp: now + 300, ...overrides
   })).toString('base64url');
   const input = `${header}.${claims}`;
   const signature = crypto.sign('sha256', Buffer.from(input), {
