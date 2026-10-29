@@ -1,3 +1,3 @@
-import { getUser, login, logout, handleAuthCallback, acceptInvite, requestPasswordRecovery, recoverPassword } from '@netlify/identity';
+import { getUser, login, logout, handleAuthCallback, acceptInvite, requestPasswordRecovery, recoverPassword, getSettings } from '@netlify/identity';
 
-window.AVCUIdentity = Object.freeze({ getUser, login, logout, handleAuthCallback, acceptInvite, requestPasswordRecovery, recoverPassword });
+window.AVCUIdentity = Object.freeze({ getUser, login, logout, handleAuthCallback, acceptInvite, requestPasswordRecovery, recoverPassword, getSettings });
