@@ -1,5 +1,7 @@
 const { defineConfig, devices } = require('@playwright/test');
 
+const externalBaseURL = process.env.BASE_URL;
+
 module.exports = defineConfig({
   testDir: '.',
   testMatch: '**/*.spec.cjs',
@@ -10,7 +12,7 @@ module.exports = defineConfig({
   timeout: 30000,
   expect: { timeout: 5000 },
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: externalBaseURL || 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure'
   },
@@ -18,7 +20,7 @@ module.exports = defineConfig({
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile-chromium', use: { ...devices['iPhone 13'], browserName: 'chromium' } }
   ],
-  webServer: {
+  webServer: externalBaseURL ? undefined : {
     command: 'node server.mjs',
     cwd: __dirname,
     url: 'http://127.0.0.1:4173',
