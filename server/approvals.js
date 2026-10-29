@@ -92,6 +92,9 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
     }
 
     const financial = approval.item_type === 'transaction';
+    if (approval.item_type === 'loan' && ['approve', 'reject'].includes(action) && (!reason || !String(reason).trim())) {
+      throw new ApprovalError('A written decision reason is required for a loan application', 400, 'reason_required');
+    }
     if (action === 'reject' && financial && (!reason || !String(reason).trim())) {
       throw new ApprovalError('A written reason is required to reject a financial action', 400, 'reason_required');
     }
