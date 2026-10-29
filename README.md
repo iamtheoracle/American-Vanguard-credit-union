@@ -91,3 +91,7 @@ Members can submit and track withdrawal, transfer, account-service, and other mo
 ## Member identity
 
 New membership applications require a unique lowercase username (3–24 letters, digits, or underscores), a legal name, email, and password. The system keeps that username separate from the generated 10-digit numeric member number and account identifiers. Member sign-in accepts username, email, or numeric member number; credentials remain server-side and are never included in ordinary member records. Existing accounts without a username can continue using their email or member number until an authorized profile-update flow is provided.
+
+## Password recovery
+
+The authenticated API supports a generic password-reset request response to reduce account enumeration, rate-limited requests, a 30-minute random reset token stored only as a SHA-256 hash, single-use completion, and revocation of existing member sessions after a password change. Reset emails are queued through the durable outbox. A valid `AVCU_PUBLIC_BASE_URL` and configured Gmail OAuth are required for a member to receive a usable reset link; without them, the API does not create a reset token and the generic response remains unchanged.
