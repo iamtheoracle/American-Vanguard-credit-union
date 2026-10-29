@@ -15,6 +15,8 @@
   function setAuthed(value){$('operator-auth').classList.toggle('hidden',value);$('operator-dashboard').classList.toggle('hidden',!value);}
   let approvalRows = [];
   let selectedApproval = null;
+  let approvalPage = 1;
+  let approvalPagination = { page: 1, limit: 20, total: 0, pages: 0 };
   const money = cents => cents == null ? '—' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(cents)/100);
   async function loadMemberHistory(memberId, targetId='review-member-history'){
     if(!memberId){$(targetId).innerHTML='<p class="muted">No member is linked to this queue item.</p>';return;}
@@ -56,10 +58,19 @@
     if($('approval-status').value)params.set('status',$('approval-status').value);
     if($('approval-type').value)params.set('type',$('approval-type').value);
     if($('approval-search').value.trim())params.set('search',$('approval-search').value.trim());
+    params.set('page',String(approvalPage));params.set('limit','20');
     const data=await api('/operator/approvals?'+params.toString());
     approvalRows=data.approvals||[];
+    approvalPagination=data.pagination||{page:approvalPage,limit:20,total:approvalRows.length,pages:1};
     const rows=approvalRows;
     $('approval-list').innerHTML=rows.length?`<table><thead><tr><th>Submitted</th><th>Type / member</th><th>Reference / amount</th><th>Status</th><th>Required role</th><th>Review</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${esc(new Date(a.createdAt).toLocaleString())}</td><td><strong>${esc(a.itemType.replaceAll('_',' '))}</strong><small>${esc(a.memberName||a.memberEmail||'Member not linked')}</small></td><td>${esc(a.reference||a.id)}<small>${money(a.amountCents)}</small></td><td><span class="status-pill">${esc(a.status.replaceAll('_',' '))}</span></td><td>${esc(a.requiredRole)}</td><td><button class="mini-action" data-review-id="${esc(a.id)}">Review</button></td></tr>`).join('')}</tbody></table>`:'<p class="muted">No review items match these filters.</p>';
+    if(approvalPagination.pages>1){
+      $('approval-list').insertAdjacentHTML('beforeend',`<div class="pagination-row"><span>Page ${approvalPagination.page} of ${approvalPagination.pages} · ${approvalPagination.total} records</span><div><button type="button" class="secondary" id="approval-prev" ${approvalPagination.page<=1?'disabled':''}>Previous</button><button type="button" class="secondary" id="approval-next" ${approvalPagination.page>=approvalPagination.pages?'disabled':''}>Next</button></div></div>`);
+      $('approval-prev')?.addEventListener('click',async()=>{if(approvalPage>1){approvalPage--;try{await loadApprovals();}catch(error){notice('operator-message',error.message,true);}}});
+      $('approval-next')?.addEventListener('click',async()=>{if(approvalPage<approvalPagination.pages){approvalPage++;try{await loadApprovals();}catch(error){notice('operator-message',error.message,true);}}});
+    } else if(approvalPagination.total>0) {
+      $('approval-list').insertAdjacentHTML('beforeend',`<div class="pagination-row"><span>${approvalPagination.total} record${approvalPagination.total===1?'':'s'}</span></div>`);
+    }
     $('approval-list').querySelectorAll('[data-review-id]').forEach(button=>button.addEventListener('click',()=>{
       const item=rows.find(a=>String(a.id)===button.dataset.reviewId);
       renderReviewWorkspace(item);
@@ -210,7 +221,7 @@
       $('migration-result').textContent = error.message;
     } finally { button.disabled = false; }
   });
-  $('apply-approval-filter').addEventListener('click',async()=>{try{await loadApprovals();}catch(error){notice('operator-message',error.message,true);}});
+  $('apply-approval-filter').addEventListener('click',async()=>{approvalPage=1;try{await loadApprovals();}catch(error){notice('operator-message',error.message,true);}});
   $('approval-search').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('apply-approval-filter').click();}});
   $('member-search-form').addEventListener('submit',searchMembers);
   $('refresh-audit').addEventListener('click', async () => { try { await loadAudit(); } catch (error) { notice('operator-message', error.message, true); } });
