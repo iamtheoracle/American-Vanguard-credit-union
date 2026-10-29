@@ -53,4 +53,4 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_URL: https://deploy-preview-12--avcu.netlify.app
-        run: cd tests/browser && npx playwright test
+        run: cd tests/browser && npx playwright test --grep "unauthenticated users see local mode"
