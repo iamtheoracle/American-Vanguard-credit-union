@@ -38,6 +38,7 @@ test('member navigation works and mobile layout has no horizontal page overflow'
 
 test('preview access gate or unauthenticated sign-in boundary is enforced', async ({ page }) => {
   await page.goto('/');
+  if (process.env.BASE_URL) await page.waitForURL(/\/edge-access/, { timeout: 5000 }).catch(() => {});
   if (process.env.BASE_URL && page.url().includes('/edge-access')) {
     expect(page.url()).toContain('/edge-access');
     console.log('Netlify Edge Access protects this preview; app-level deployed testing requires an authorized preview session.');
