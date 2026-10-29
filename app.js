@@ -29,15 +29,15 @@ function setMode(next) {
   });
   const signupMode = mode === 'signup';
   const resetMode = mode === 'reset';
-  $('#form-title').textContent = signupMode ? 'Create your account' : resetMode ? 'Choose a new password' : 'Welcome back';
-  $('#form-description').textContent = signupMode ? 'Create secure sign-in credentials to begin onboarding.' : resetMode ? 'Set a new password for your account.' : 'Sign in to continue to your member space.';
+  $('#form-title').textContent = signupMode ? 'Start membership' : resetMode ? 'Choose a new password' : 'Member sign in';
+  $('#form-description').textContent = signupMode ? 'Register with email and password, then confirm your email. Your membership application is reviewed separately.' : resetMode ? 'Set a new password for your account.' : 'Use the email address and password registered to your member profile.';
   $('#name-label').hidden = !signupMode;
   $('#full-name').hidden = !signupMode;
   $('#full-name').required = signupMode;
   $('#password-label').textContent = resetMode ? 'New password' : 'Password';
   $('#password').autocomplete = signupMode || resetMode ? 'new-password' : 'current-password';
   $('#password-help').hidden = !(signupMode || resetMode);
-  $('#submit').textContent = signupMode ? 'Create account →' : resetMode ? 'Update password →' : 'Sign in securely →';
+  $('#submit').textContent = signupMode ? 'Register for membership →' : resetMode ? 'Update password →' : 'Sign in →';
   $('#forgot').hidden = signupMode || resetMode;
   document.querySelectorAll('[data-mode]').forEach(button => button.hidden = resetMode);
   notice.hidden = true;
@@ -45,7 +45,7 @@ function setMode(next) {
 function setBusy(value) {
   busy = value;
   $('#submit').disabled = value;
-  $('#submit').textContent = value ? 'Please wait…' : (mode === 'signup' ? 'Create account →' : mode === 'reset' ? 'Update password →' : 'Sign in securely →');
+  $('#submit').textContent = value ? 'Please wait…' : (mode === 'signup' ? 'Register for membership →' : mode === 'reset' ? 'Update password →' : 'Sign in →');
 }
 async function memberRequest(method = 'GET', body) {
   const headers = { Accept: 'application/json' };
@@ -61,16 +61,18 @@ async function memberRequest(method = 'GET', body) {
 function setAuthenticatedView(user) {
   $('#welcome').hidden = true;
   $('#member-panel').hidden = false;
+  $('.institution-strip').hidden = true;
   $('#admin-panel').hidden = true;
-  $('#member-heading').textContent = 'Your member space';
+  $('.institution-strip').hidden = true;
+  $('#member-heading').textContent = 'Member relationship';
   $('#member-copy').textContent = user.email || 'Signed-in member';
 }
 function statusCopy(status) {
   return ({
-    pending: ['Application pending review', 'Your application has been received. It is not approved yet.'],
-    approved: ['Membership application approved', 'The verification workflow marked this application approved. This does not connect or create a banking account.'],
-    rejected: ['Application not approved', 'Review the message from the credit union and contact support if you need clarification.'],
-    resubmission: ['More information requested', 'Update your statement and submit again for another review.']
+    pending: ['Membership application pending', 'Your application has been received and is waiting for operator review. It is not approved yet.'],
+    approved: ['Membership application approved', 'The operator review is complete. No share account or balance is implied; authoritative ledger data is not connected.'],
+    rejected: ['Application not approved', 'Your application was not approved. Review the operator note if available, or contact membership services.'],
+    resubmission: ['Resubmission requested', 'Update your application statement and submit again for another operator review.']
   })[status] || ['Application not submitted', 'Complete the application below to begin verification.'];
 }
 async function loadMemberStatus() {
@@ -91,7 +93,7 @@ async function loadMemberStatus() {
     if (app.applicant_statement) $('#application-statement').value = app.applicant_statement;
     formEl.hidden = !['rejected', 'resubmission'].includes(app.application_status);
     if (app.application_status === 'pending') {
-      $('#member-status-copy').textContent = 'Your request is recorded and waiting for staff review. You cannot approve yourself.';
+      $('#member-status-copy').textContent = 'Your request is recorded and waiting for an operator review. You cannot approve your own application.';
     }
   } catch (error) {
     formEl.hidden = true;
@@ -253,7 +255,7 @@ $('#application-form').addEventListener('submit', async event => {
   const submit = $('#application-submit'); submit.disabled = true;
   try {
     await memberRequest('POST', { fullName: $('#application-name').value.trim(), statement: $('#application-statement').value.trim() });
-    showNotice('Application submitted. It is pending review; you are not verified yet.', 'success', $('#member-notice'));
+    showNotice('Membership application submitted. It is pending operator review; you are not yet an approved member.', 'success', $('#member-notice'));
     await loadMemberStatus();
   } catch (error) { showNotice(error.message, 'error', $('#member-notice')); }
   finally { submit.disabled = false; }
