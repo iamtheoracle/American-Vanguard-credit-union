@@ -20,7 +20,7 @@ test('authentication and session lifecycle', async t => {
   });
   assert.equal(bad.status, 400);
   const dupe = await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'newmember@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
+    method: 'POST', body: { email: 'newmember@avcu.demo', username: 'alex_rivera', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
   });
   assert.equal(dupe.status, 409);
 
