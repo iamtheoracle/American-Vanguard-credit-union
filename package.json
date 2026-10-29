@@ -1,12 +1,14 @@
 {
-  "name": "american-vanguard-credit-union-demo",
-  "version": "0.1.0",
+  "name": "american-vanguard-credit-union-member-access",
+  "version": "0.2.0",
   "private": true,
-  "description": "Local-only fictional member banking demo",
+  "description": "Member authentication, onboarding and verification review workflow",
   "scripts": {
-    "check": "node --check app.js && node --test tests/*.test.mjs"
+    "check": "node --check app.js && node --check netlify/functions/member-api.mjs && node --check netlify/functions/admin-reviews.mjs && node --check netlify/functions/identity.mjs && node --test tests/*.test.mjs"
   },
-  "engines": {
-    "node": ">=20"
-  }
+  "dependencies": {
+    "@netlify/database": "^0.10.0",
+    "@netlify/identity": "^0.4.0"
+  },
+  "engines": { "node": ">=20" }
 }
