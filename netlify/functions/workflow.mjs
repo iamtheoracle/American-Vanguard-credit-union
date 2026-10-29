@@ -63,8 +63,8 @@ export default async function handler(request) {
     if (!queue && !isMember(user) && !isOperator(user)) return respond({ error:'Member role required.' },403);
     try {
       const rows = queue
-        ? await db.sql`SELECT * FROM avcu_workflow_requests WHERE status IN ('pending-approval','needs-information') ORDER BY created_at ASC LIMIT 200`
-        : await db.sql`SELECT * FROM avcu_workflow_requests WHERE created_by = ${user.id} ORDER BY created_at DESC LIMIT 200`;
+        ? await db.sql`SELECT r.*, COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor_id',a.actor_id,'action',a.action) ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.status IN ('pending-approval','needs-information') ORDER BY r.created_at ASC LIMIT 200`
+        : await db.sql`SELECT r.*, COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor_id',a.actor_id,'action',a.action) ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.created_by = ${user.id} ORDER BY r.created_at DESC LIMIT 200`;
       return respond({ requests:rows });
     } catch { return respond({ error:'The shared workflow queue is unavailable.' },503); }
   }
