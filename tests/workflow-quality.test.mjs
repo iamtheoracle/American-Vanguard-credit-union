@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const [html, app, workflow, providers, assistant, css, readme, pkg, netlify] = await Promise.all([
-  readFile(new URL('../index.html', import.meta.url), 'utf8'),
-  readFile(new URL('../app.js', import.meta.url), 'utf8'),
-  readFile(new URL('../workflow.js', import.meta.url), 'utf8'),
-  readFile(new URL('../providers.js', import.meta.url), 'utf8'),
-  readFile(new URL('../review-assistant.js', import.meta.url), 'utf8'),
-  readFile(new URL('../styles.css', import.meta.url), 'utf8'),
+  readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
+  readFile(new URL('../public/app.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/workflow.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/providers.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/review-assistant.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/styles.css', import.meta.url), 'utf8'),
   readFile(new URL('../README.md', import.meta.url), 'utf8'),
   readFile(new URL('../package.json', import.meta.url), 'utf8'),
   readFile(new URL('../netlify.toml', import.meta.url), 'utf8')
@@ -102,8 +102,8 @@ test('responsive layout and accessibility basics remain', () => {
 test('documentation and scripts describe standalone and provider boundaries', () => {
   for (const value of ['Pending Approval','Approved · Awaiting Provider','not protected by real staff authentication','provider-confirmed outcomes may be marked settled']) assert.ok(readme.includes(value));
   assert.ok(!readme.includes('sample balances'));
-  assert.ok(pkg.includes('node --check workflow.js'));
-  assert.ok(pkg.includes('node --check review-assistant.js'));
+  assert.ok(pkg.includes('node --check public/workflow.js'));
+  assert.ok(pkg.includes('node --check public/review-assistant.js'));
   assert.ok(netlify.includes("connect-src 'self'"));
   assert.ok(netlify.includes('camera=(self)'));
 });
