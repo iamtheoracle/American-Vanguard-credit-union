@@ -1,10 +1,13 @@
-import { query } from './db.js';
+import { randomUUID } from 'node:crypto';
+import { query, withTx } from './db.js';
 
 const API_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const MAX_ATTEMPTS = 5;
+const BATCH_SIZE = 10;
 
 function base64Url(value) {
-  return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');
 }
 
 function configured() {
@@ -38,12 +41,12 @@ async function sendGmail({ to, subject, text }) {
   const raw = [
     `From: American Vantoris Credit Union <${process.env.AVCU_GMAIL_FROM}>`,
     `To: ${to}`,
-    `Subject: ${subject.replace(/[\r\n]/g, ' ')}`,
+    `Subject: ${subject.replace(/[\\r\\n]/g, ' ')}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=UTF-8',
     '',
     text
-  ].join('\r\n');
+  ].join('\\r\\n');
   const response = await fetch(API_BASE, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -60,39 +63,124 @@ async function sendGmail({ to, subject, text }) {
 }
 
 /**
- * Stores an in-app notification and attempts email delivery. Email credentials
- * are environment-only. Missing credentials are recorded as skipped, never
- * reported as sent. Callers should await this best-effort operation after the
- * business transaction has committed.
+ * Persist in-app and email work before delivery. Callers should pass a stable
+ * eventKey derived from the business record and state transition for dedupe.
  */
-export async function notifyMember({ memberId, eventType, title, body, subject = title, emailText = body }) {
-  const { rows } = await query('SELECT email FROM members WHERE id = $1', [memberId]);
-  const recipient = rows[0]?.email;
-  if (!recipient) return { status: 'skipped', reason: 'member_email_unavailable' };
-
-  await query('INSERT INTO notifications (member_id, title, body) VALUES ($1,$2,$3)',
-    [memberId, title, body]);
-
-  let status = 'skipped';
-  let providerMessageId = null;
-  let errorCode = null;
-  if (configured()) {
-    try {
-      providerMessageId = await sendGmail({ to: recipient, subject, text: emailText });
-      status = 'sent';
-    } catch (error) {
-      status = 'failed';
-      errorCode = String(error.code || 'email_delivery_failed').slice(0, 100);
-      // Do not log tokens, credentials, message bodies, or recipient details.
-      console.error('[avcu] email delivery failed:', errorCode);
-    }
+export async function notifyMember({
+  memberId, eventType, title, body, subject = title, emailText = body,
+  eventKey = `${eventType}:${memberId}:${randomUUID()}`
+}) {
+  if (!Number.isSafeInteger(Number(memberId)) || Number(memberId) <= 0) {
+    return { status: 'skipped', reason: 'invalid_member_id' };
   }
+  const result = await withTx(async client => {
+    const { rows } = await client.query('SELECT email FROM members WHERE id = $1 FOR SHARE', [memberId]);
+    const recipient = rows[0]?.email;
+    if (!recipient) return { status: 'skipped', reason: 'member_email_unavailable' };
 
-  await query(
-    `INSERT INTO email_delivery_log (member_id, recipient, event_type, subject, status, provider_message_id, error_code)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    [memberId, recipient, eventType, subject, status, providerMessageId, errorCode]);
-  return { status };
+    const inserted = await client.query(
+      `INSERT INTO notification_outbox
+        (event_key, member_id, event_type, recipient, title, body, email_subject, email_text)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (event_key) DO NOTHING
+       RETURNING id`,
+      [eventKey, memberId, eventType, recipient, title, body, subject, emailText]);
+    if (inserted.rows.length) {
+      await client.query('INSERT INTO notifications (member_id, title, body) VALUES ($1,$2,$3)',
+        [memberId, title, body]);
+      return { status: 'queued', outboxId: inserted.rows[0].id, duplicate: false };
+    }
+    const existing = await client.query('SELECT id, status FROM notification_outbox WHERE event_key = $1', [eventKey]);
+    return { status: 'queued', outboxId: existing.rows[0]?.id ?? null, duplicate: true };
+  });
+  return result;
+}
+
+/**
+ * Claims due events with SKIP LOCKED so multiple app instances can share the
+ * queue. A crash leaves a recoverable processing lease; retries are bounded.
+ */
+export async function processNotificationOutbox() {
+  const claimed = await withTx(async client => {
+    await client.query(
+      `UPDATE notification_outbox
+       SET status = 'retry', locked_at = NULL, next_attempt_at = now(), updated_at = now()
+       WHERE status = 'processing' AND locked_at < now() - interval '2 minutes'`);
+    const { rows } = await client.query(
+      `SELECT * FROM notification_outbox
+       WHERE status IN ('pending','retry') AND next_attempt_at <= now()
+       ORDER BY id
+       FOR UPDATE SKIP LOCKED
+       LIMIT $1`, [BATCH_SIZE]);
+    for (const row of rows) {
+      await client.query(
+        `UPDATE notification_outbox
+         SET status = 'processing', attempts = attempts + 1, locked_at = now(), updated_at = now()
+         WHERE id = $1`, [row.id]);
+      row.attempts = Number(row.attempts) + 1;
+    }
+    return rows;
+  });
+
+  for (const row of claimed) {
+    let status = 'skipped';
+    let providerMessageId = null;
+    let errorCode = null;
+    if (configured()) {
+      try {
+        providerMessageId = await sendGmail({ to: row.recipient, subject: row.email_subject, text: row.email_text });
+        status = 'sent';
+      } catch (error) {
+        errorCode = String(error.code || 'email_delivery_failed').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 100) || 'email_delivery_failed';
+        status = row.attempts >= MAX_ATTEMPTS ? 'failed' : 'retry';
+        console.error('[avcu] email delivery failed:', errorCode);
+      }
+    }
+
+    const delaySeconds = Math.min(3600, 30 * (2 ** Math.max(0, row.attempts - 1)));
+    await withTx(async client => {
+      await client.query(
+        `UPDATE notification_outbox
+         SET status = $2, provider_message_id = $3, last_error_code = $4,
+             next_attempt_at = CASE WHEN $2 = 'retry' THEN now() + ($5 * interval '1 second') ELSE next_attempt_at END,
+             locked_at = NULL, updated_at = now(),
+             sent_at = CASE WHEN $2 = 'sent' THEN now() ELSE sent_at END
+         WHERE id = $1 AND status = 'processing'`,
+        [row.id, status, providerMessageId, errorCode, delaySeconds]);
+      await client.query(
+        `INSERT INTO email_delivery_log (member_id, recipient, event_type, subject, status, provider_message_id, error_code)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [row.member_id, row.recipient, row.event_type, row.email_subject, status, providerMessageId, errorCode]);
+    });
+  }
+  return { processed: claimed.length };
+}
+
+let workerTimer = null;
+let workerRunning = false;
+
+export function startNotificationWorker({ intervalMs = 3000 } = {}) {
+  if (workerTimer) return stopNotificationWorker;
+  const tick = async () => {
+    if (workerRunning) return;
+    workerRunning = true;
+    try {
+      await processNotificationOutbox();
+    } catch (error) {
+      console.error('[avcu] notification outbox worker failed:', String(error.code || error.name || 'worker_error'));
+    } finally {
+      workerRunning = false;
+    }
+  };
+  void tick();
+  workerTimer = setInterval(tick, intervalMs);
+  workerTimer.unref?.();
+  return stopNotificationWorker;
+}
+
+export function stopNotificationWorker() {
+  if (workerTimer) clearInterval(workerTimer);
+  workerTimer = null;
 }
 
 export function gmailConfigured() {
