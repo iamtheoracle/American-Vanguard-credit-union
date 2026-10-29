@@ -38,7 +38,7 @@ router.post('/auth/register', async (req, res, next) => {
       const created = rows[0];
       await client.query(
         `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
-         VALUES ('membership', $1, $2, 'pending', 'operator', $1, 'member')`,
+         VALUES ('membership', $1, $2, 'pending', 'management', $1, 'member')`,
         [created.id, JSON.stringify({ memberId: created.id, email: created.email, fullName: created.full_name })]);
       await queueMemberNotification(client, {
         memberId: created.id,
