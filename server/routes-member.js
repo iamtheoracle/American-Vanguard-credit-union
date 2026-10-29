@@ -132,7 +132,7 @@ router.post('/transfers', memberAuth, async (req, res, next) => {
     const idempotencyKey = req.header('Idempotency-Key') || null;
     if (idempotencyKey) {
       const prior = await lookupIdempotent(idempotencyKey, `transfer:${req.member.id}`);
-      if (prior) return res.json({ replayed: true, transaction: prior });
+      if (prior) return res.json({ replayed: true, transaction: prior, approvalId: prior.approvalId || null });
     }
     const result = await submitMemberTransfer({ member: req.member, body: req.body || {}, idempotencyKey });
     const tx = result.transaction;
@@ -158,6 +158,7 @@ router.post('/deposits', memberAuth, async (req, res, next) => {
   try {
     const idempotencyKey = req.header('Idempotency-Key') || null;
     const result = await submitMemberDeposit({ member: req.member, body: req.body || {}, idempotencyKey });
+    if (result.replayed) return res.json({ replayed: true, transaction: result.transaction, approvalId: result.approvalId || null });
     await recalculateMemberTier(req.member.id).catch(() => {});
     await notifyMember({ memberId: req.member.id, eventType: 'transaction.deposit_submitted',
       eventKey: `transaction:${result.transaction.id}:deposit-submitted`,
