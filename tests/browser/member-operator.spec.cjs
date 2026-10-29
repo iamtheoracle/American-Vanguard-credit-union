@@ -85,6 +85,43 @@ test('Zelle name is not treated as verified when provider is absent', async ({ p
   await expect(page.locator('#workflow-member-queue .workflow-request').first().locator('.workflow-status')).toHaveText('Pending Approval');
 });
 
+test('operator rejection is recorded with a review note', async ({ page }) => {
+  await openOperations(page);
+  await fillBaseRequest(page, { type: 'wire-transfer', recipient: 'Test recipient', destination: 'Receiving institution reference' });
+  await page.locator('#workflow-form button[type="submit"]').click();
+  const operatorRequest = page.locator('#workflow-operator-queue .workflow-request').first();
+  await operatorRequest.locator('input[data-note]').fill('Rejected pending identity review');
+  await operatorRequest.locator('[data-review="reject"]').click();
+  const memberRequest = page.locator('#workflow-member-queue .workflow-request').first();
+  await expect(memberRequest.locator('.workflow-status')).toHaveText('Rejected');
+  await expect(memberRequest).toContainText('Rejected pending identity review');
+  await expect(page.locator('#workflow-pending-count')).toHaveText('0 pending');
+});
+
+test('bill payment approval waits for provider and never claims settlement', async ({ page }) => {
+  await openOperations(page);
+  await fillBaseRequest(page, { type: 'bill-payment', recipient: 'Utility provider' });
+  await page.locator('#workflow-form button[type="submit"]').click();
+  const operatorRequest = page.locator('#workflow-operator-queue .workflow-request').first();
+  await operatorRequest.locator('[data-review="approve"]').click();
+  const memberRequest = page.locator('#workflow-member-queue .workflow-request').first();
+  await expect(memberRequest.locator('.workflow-status')).toHaveText('Approved · Awaiting Provider');
+  await expect(memberRequest).toContainText('no external funds have been sent or settled');
+});
+
+test('card freeze is clearly local-only and persists locally', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('[data-nav="card"]:visible').first().click();
+  await page.locator('#freeze-toggle').click();
+  await expect(page.locator('#confirm-dialog')).toBeVisible();
+  await page.locator('#dialog-confirm').click();
+  await expect(page.locator('#card-state-heading')).toHaveText('Card frozen locally');
+  await expect(page.locator('#ledger-card-status')).toHaveText('Frozen locally');
+  const frozen = await page.evaluate(() => JSON.parse(localStorage.getItem('avcu.member.v1')));
+  expect(frozen.frozen).toBe(true);
+  await expect(page.locator('#card-state-description')).toContainText('locally');
+});
+
 test('check deposit rejects missing front and back images', async ({ page }) => {
   await openOperations(page);
   await fillBaseRequest(page, { type: 'check-deposit' });
