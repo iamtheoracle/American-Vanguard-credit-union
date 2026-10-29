@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { validateRequest } from '../netlify/functions/workflow.mjs';
+import { rolesForSignup } from '../netlify/functions/identity.mjs';
 
 test('backend validates internal transfer requests without trusting a client member ID', () => {
   const result = validateRequest({
@@ -44,11 +45,11 @@ test('backend schema has audit history, idempotency, and no seeded account balan
   assert.ok(!/INSERT\s+INTO\s+avcu_account_balances/i.test(schema), 'migration must not fabricate account balances');
 });
 
-test('new Identity accounts receive member role by default, never operator role', async () => {
-  const identity = await readFile(new URL('../netlify/functions/identity.mjs', import.meta.url), 'utf8');
-  assert.ok(identity.includes("['member']"));
-  assert.ok(!identity.includes("['operator']"));
-  assert.ok(!identity.includes("['admin']"));
+test('Identity roles are granted only by server-side email allowlists', () => {
+  assert.deepEqual(rolesForSignup('member@example.com', [], '', ''), ['member']);
+  assert.deepEqual(rolesForSignup('OPERATOR@example.com', [], 'operator@example.com', ''), ['member','operator']);
+  assert.deepEqual(rolesForSignup('admin@example.com', [], '', 'admin@example.com'), ['member','operator','admin']);
+  assert.deepEqual(rolesForSignup('ordinary@example.com', ['member'], 'operator@example.com', ''), ['member']);
 });
 
 test('backend requires Identity roles and prevents operators from reviewing their own requests', async () => {
