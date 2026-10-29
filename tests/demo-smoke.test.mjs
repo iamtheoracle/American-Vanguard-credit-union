@@ -43,7 +43,7 @@ test('all member journeys expose controls and handlers', () => {
 });
 
 test('transfer and bill payment validation guard against invalid targets, amounts, and overdrafts', () => {
-  assert.match(js, /!\['share', 'bill'\]\.includes\(kind\)/);
+  assert.match(js, /!\['share',\s*'bill'\]\.includes\(kind\)/);
   assert.match(js, /to === from/);
   assert.match(js, /safeMoneyInput\(amount\)/);
   assert.match(js, /state\.balances\[from\] < amountCents/);
