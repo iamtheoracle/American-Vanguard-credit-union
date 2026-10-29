@@ -8,6 +8,7 @@
   <title>Atchison Village Credit Union | Member Services</title>
   <link rel="stylesheet" href="./styles.css">
   <script src="./app.js" defer></script>
+  <script src="./providers.js" defer></script>
   <script src="./workflow.js" defer></script>
 </head>
 <body>
@@ -100,7 +101,7 @@
                 <option value="draft">Share Draft (Checking)</option><option value="primary">Primary Share (Savings)</option><option value="market">Money Market</option><option value="holiday">Holiday Club</option><option value="business">Business Operating Account</option><option value="ira">Traditional IRA</option><option value="certificate">Share Certificate</option><option value="retirement401k">401(k) Retirement</option>
               </select>
               <div id="workflow-to-wrap"><label for="workflow-to">To account</label><select id="workflow-to" name="to"><option value="primary">Primary Share (Savings)</option><option value="draft">Share Draft (Checking)</option><option value="market">Money Market</option><option value="holiday">Holiday Club</option><option value="business">Business Operating Account</option><option value="ira">Traditional IRA</option><option value="certificate">Share Certificate</option><option value="401k">401(k) Retirement</option></select></div>
-              <div id="workflow-recipient-wrap" class="hidden"><label for="workflow-recipient">Recipient / payee name</label><input id="workflow-recipient" name="recipient" maxlength="100" autocomplete="off" placeholder="Enter recipient's legal or registered name"></div>
+              <div id="workflow-recipient-wrap" class="hidden"><label for="workflow-recipient">Recipient / payee name</label><input id="workflow-recipient" name="recipient" maxlength="100" autocomplete="off" placeholder="Enter recipient or institution name"><button id="zelle-lookup" class="secondary-button hidden" type="button">Check Zelle recipient</button><p id="zelle-lookup-note" class="form-note hidden" role="status">Live recipient lookup requires the authorized provider. A name typed here is not verified.</p><p id="zelle-lookup-result" class="workflow-warning hidden" role="status"></p></div>
               <div id="workflow-destination-wrap" class="hidden"><label for="workflow-destination">Destination details</label><input id="workflow-destination" name="destination" maxlength="160" placeholder="Routing / account / recipient identifier"></div>
               <div id="workflow-currency-wrap" class="hidden"><label for="workflow-currency">Exchange to</label><select id="workflow-currency" name="currency"><option value="USD">USD</option><option value="CAD">CAD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="NGN">NGN</option></select></div>
               <label for="workflow-amount">Amount (USD)</label><div class="amount-input"><span>$</span><input id="workflow-amount" name="amount" type="number" min="0.01" max="1000000" step="0.01" inputmode="decimal" required placeholder="0.00"></div>
