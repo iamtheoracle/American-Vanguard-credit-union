@@ -9,3 +9,24 @@
 .legacy-links{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;padding-top:14px;margin-top:8px;border-top:1px solid #edf0f4}
 .legacy-links a{font-size:11px;color:#315c88;text-decoration:none}
 .legacy-links a:hover{text-decoration:underline}
+
+
+/* Member activity history */
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.activity-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;flex-wrap:wrap}
+.activity-pagination>div{display:flex;gap:8px}
+.activity-pagination button{min-height:40px}
+#activity-message:empty{display:none}
+#transactions-list{min-width:0}
+#transactions-list table{min-width:560px}
+#transactions-list td small{display:block;overflow-wrap:anywhere;margin-top:4px}
+@media(max-width:760px){
+  .filter-row{display:grid;grid-template-columns:1fr 1fr}
+  .filter-row input,.filter-row select{min-width:0;width:100%;box-sizing:border-box}
+  .filter-row input[type=search]{grid-column:1/-1}
+  .filter-row button{min-height:42px}
+  .activity-pagination{align-items:flex-start}
+  .activity-pagination>div{width:100%}
+  .activity-pagination button{flex:1}
+}
+@media(max-width:420px){.filter-row{grid-template-columns:1fr}}
