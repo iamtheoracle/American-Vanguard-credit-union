@@ -59,24 +59,32 @@ async function audit(client, requestId, actorId, action, details = {}) {
   await client.query('INSERT INTO avcu_workflow_audit (request_id, actor_id, action, details) VALUES ($1,$2,$3,$4::jsonb)', [requestId,actorId,action,JSON.stringify(details)]);
 }
 
-export default async function handler(request) {
+export async function handleWorkflowRequest(request, dependencies = {}) {
+  const getUserFn = dependencies.getUser || getUser;
+  const getDatabaseFn = dependencies.getDatabase || getDatabase;
+  const verifyOrigin = dependencies.verifyRequestOrigin || verifyRequestOrigin;
   if (request.method === 'POST' || request.method === 'PATCH') {
-    try { verifyRequestOrigin(request); }
+    try { verifyOrigin(request); }
     catch { return respond({ error:'Cross-origin request blocked.' },403); }
   }
   let user;
-  try { user = await getUser(); }
+  try { user = await getUserFn(); }
   catch { return respond({ error:'Identity is not configured or could not validate this session.' },503); }
   if (!user) return respond({ error:'Sign in is required.' },401);
-  let db;
-  try { db = getDatabase(); }
-  catch { return respond({ error:'The secure workflow database is not configured.' },503); }
-
   const url = new URL(request.url);
   if (request.method === 'GET') {
     const queue = url.searchParams.get('scope') === 'queue';
     if (queue && !isOperator(user)) return respond({ error:'Operator role required.' },403);
     if (!queue && !isMember(user) && !isOperator(user)) return respond({ error:'Member role required.' },403);
+  }
+  if (request.method === 'POST' && !isMember(user)) return respond({ error:'Member role required to submit a request.' },403);
+  if (request.method === 'PATCH' && !isOperator(user)) return respond({ error:'Authorized operator role required.' },403);
+  let db;
+  try { db = getDatabaseFn(); }
+  catch { return respond({ error:'The secure workflow database is not configured.' },503); }
+
+  if (request.method === 'GET') {
+    const queue = url.searchParams.get('scope') === 'queue';
     try {
       const rows = queue
         ? await db.sql`SELECT r.id,r.type,r.source_account,r.destination_account,r.recipient,r.destination_details,r.currency,r.amount_cents,r.purpose,r.status,r.assigned_team,r.assigned_role,r.operator_note,r.provider_state,r.recipient_verified,r.created_at,r.updated_at,COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor',CASE WHEN a.actor_id=r.created_by THEN 'Member' ELSE 'Authorized operator' END,'action',a.action,'note',a.details->>'note') ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.status IN ('pending-approval','needs-information') ORDER BY r.created_at ASC LIMIT 200`
@@ -192,6 +200,10 @@ export default async function handler(request) {
   }
 
   return respond({ error:'Method not allowed.' },405);
+}
+
+export default async function handler(request) {
+  return handleWorkflowRequest(request);
 }
 
 export const config = { path:'/api/workflow', method:['GET','POST','PATCH'] };
