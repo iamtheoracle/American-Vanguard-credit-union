@@ -84,6 +84,9 @@ test('card authorization requests route to review and do not debit the account d
   assert.ok(workflow.includes("closest('#simulate-purchase')"));
   assert.ok(app.includes('No merchant authorization or account debit occurred'));
   assert.ok(!app.includes('state.balances.draft -= amountCents'));
+  assert.ok(app.includes("state.frozen ? 'Frozen locally' : 'Not connected'"), 'card status must not imply a connected issuer');
+  assert.ok(!html.includes('value="24.50"'), 'purchase amount must not be prefilled');
+  assert.ok(!html.includes('•••• 0000'), 'check illustration must not imply a real check number');
 });
 
 test('responsive layout and accessibility basics remain', () => {
