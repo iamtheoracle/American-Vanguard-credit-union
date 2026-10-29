@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 20
       - name: Install backend runtime dependencies
-        run: npm install --no-package-lock --no-audit --no-fund
+        run: npm install --no-package-lock --no-audit --no-fund && npm run build:auth
       - name: Validate JavaScript syntax and workflow regression tests
         run: npm run check
       - name: Install Chromium for browser audit
