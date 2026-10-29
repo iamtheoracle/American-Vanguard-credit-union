@@ -29,8 +29,8 @@
     $('dashboard').classList.toggle('hidden', !value);
   }
   async function loadDashboard() {
-    const [accountData, transactionData, cardData, notificationData, tierData, loanData] = await Promise.all([
-      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier'), api('/loans/applications')
+    const [accountData, transactionData, cardData, notificationData, tierData, loanData, poolData] = await Promise.all([
+      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier'), api('/loans/applications'), api('/funding-pools')
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
@@ -74,6 +74,27 @@
       <small>Submitted ${escapeHtml(new Date(app.submittedAt).toLocaleString())} · USD</small>
       ${app.status === 'information_required' ? `<form class="loan-response-form stack top-gap" data-loan-id="${escapeHtml(app.id)}"><label>Additional information requested</label><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>` : ''}
     </article>`).join('') : '<p class="muted">No loan applications yet.</p>';
+    const pools = poolData.pools || [];
+    $('funding-pools-list').innerHTML = pools.length ? pools.map(pool => {
+      const eligibility = Array.isArray(pool.eligibilityRequirements) ? pool.eligibilityRequirements : [];
+      const progress = Math.max(0, Math.min(100, Number(pool.progressPercent) || 0));
+      return `<article class="funding-pool-card">
+        <div class="section-head"><h3>${escapeHtml(pool.name)}</h3><span class="status-pill">${pool.synthetic ? 'Synthetic preview' : 'Published pool'}</span></div>
+        <p>${escapeHtml(pool.description)}</p>
+        <div class="funding-pool-metrics"><div><small>Verified progress</small><strong>${dollars(pool.verifiedAmountCents)}</strong></div><div><small>Funding target</small><strong>${dollars(pool.targetAmountCents)}</strong></div></div>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}" aria-label="Funding progress"><span style="width:${progress}%"></span></div>
+        <small>${progress}% of target · ${escapeHtml(pool.currency)}</small>
+        <p><strong>Dates:</strong> ${escapeHtml(pool.opensAt ? new Date(pool.opensAt).toLocaleDateString() : 'Not set')} – ${escapeHtml(pool.closesAt ? new Date(pool.closesAt).toLocaleDateString() : 'Not set')}</p>
+        <p><strong>Eligibility:</strong> ${escapeHtml(eligibility.length ? eligibility.join(', ') : 'Not configured')}</p>
+        <p><strong>Fees and terms:</strong> ${escapeHtml(pool.feesAndTerms || 'Not configured')}</p>
+        <p><strong>Risk disclosure:</strong> ${escapeHtml(pool.riskDisclosure || 'Disclosure not supplied; participation unavailable')}</p>
+        <p><strong>Return assumptions:</strong> ${escapeHtml(pool.returnAssumptions || 'No return assumption supplied')}</p>
+        <p><strong>Calculation methodology:</strong> ${escapeHtml(pool.calculationMethodology || 'No methodology supplied')}</p>
+        <p class="muted small">${escapeHtml(pool.participationStatus)}</p>
+        <button class="secondary" type="button" disabled>Participation unavailable</button>
+      </article>`;
+    }).join('') : '<p class="muted">No published funding pools are configured. Management must supply approved terms and disclosures before any pool can be published.</p>';
+
 
   }
   async function refresh() {
