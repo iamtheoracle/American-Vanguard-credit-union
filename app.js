@@ -4,13 +4,16 @@
   const STORAGE_KEY = 'avcu.member-demo.v1';
   const MAX_TRANSACTIONS = 100;
   const accounts = {
-    draft: { name: 'Share Draft', suffix: '2048', kind: 'EVERYDAY' },
-    primary: { name: 'Primary Share', suffix: '3812', kind: 'SAVINGS' },
+    draft: { name: 'Share Draft (Checking)', suffix: '2048', kind: 'EVERYDAY' },
+    primary: { name: 'Primary Share (Savings)', suffix: '3812', kind: 'SAVINGS' },
     market: { name: 'Money Market', suffix: '6621', kind: 'GROWTH' },
-    holiday: { name: 'Holiday Club', suffix: '9055', kind: 'GOAL SAVINGS' }
+    holiday: { name: 'Holiday Club', suffix: '9055', kind: 'GOAL SAVINGS' },
+    business: { name: 'Business Operating Account', suffix: '7314', kind: 'BUSINESS' },
+    ira: { name: 'Traditional IRA', suffix: '4472', kind: 'RETIREMENT' },
+    certificate: { name: 'Share Certificate', suffix: '1189', kind: 'TERM SAVINGS' }
   };
   const seed = {
-    balances: { draft: 324065, primary: 684000, market: 190000, holiday: 50000 },
+    balances: { draft: 324065, primary: 684000, market: 190000, holiday: 50000, business: 475000, ira: 200000, certificate: 500000 },
     frozen: false,
     transactions: [
       { id: 'seed-1', account: 'draft', title: 'Demo payroll deposit', amount: 215000, date: '2026-10-19T08:15:00.000Z', detail: 'Sample deposit' },
@@ -37,13 +40,16 @@
       if (!saved) return cloneSeed();
       const parsed = JSON.parse(saved);
       if (!parsed || typeof parsed !== 'object' || !parsed.balances || !Array.isArray(parsed.transactions) ||
-          !Object.keys(accounts).every(key => Number.isSafeInteger(parsed.balances[key]) && parsed.balances[key] >= 0) ||
+          Object.entries(parsed.balances).some(([key, value]) => !accounts[key] || !Number.isSafeInteger(value) || value < 0) ||
           typeof parsed.frozen !== 'boolean' ||
           parsed.transactions.some(t => !t || typeof t.id !== 'string' || typeof t.title !== 'string' ||
             !Number.isSafeInteger(t.amount) || typeof t.account !== 'string' || !accounts[t.account] || typeof t.date !== 'string')) {
         return cloneSeed();
       }
-      return { balances: { ...parsed.balances }, frozen: parsed.frozen, transactions: parsed.transactions.slice(0, MAX_TRANSACTIONS) };
+      // Migrate older local demo saves without discarding balances or history.
+      const balances = { ...seed.balances, ...parsed.balances };
+      for (const key of Object.keys(accounts)) if (!Object.hasOwn(parsed.balances, key)) balances[key] = 0;
+      return { balances, frozen: parsed.frozen, transactions: parsed.transactions.slice(0, MAX_TRANSACTIONS) };
     } catch {
       return cloneSeed();
     }
@@ -372,7 +378,7 @@
     showConfirm({
       title: 'Reset the demo ledger?',
       description: 'This replaces the local demo balances, transactions, and card state with the original sample data on this device.',
-      summary: '<div>Accounts <strong>4 sample shares</strong></div><div>Activity <strong>3 sample transactions</strong></div><div>Card <strong>Active</strong></div>',
+      summary: '<div>Accounts <strong>7 sample accounts</strong></div><div>Activity <strong>3 sample transactions</strong></div><div>Card <strong>Active</strong></div>',
       confirmText: 'Reset demo data',
       onConfirm: () => {
         state = cloneSeed();
@@ -387,7 +393,7 @@
   function showHelp() {
     showConfirm({
       title: 'About this demonstration',
-      description: 'American Vanguard Credit Union is a fictional member-banking concept. Jordan Hale, all balances, transactions, rates, and branch locations shown here are demo data.',
+      description: 'Atchison Village Credit Union is represented here as a fictional member-banking concept. Jordan Hale, all balances, transactions, rates, and community-area references shown here are sample demo data. This demo is not NCUA-insured.',
       summary: '<div>Real account connection <strong>None</strong></div><div>Money movement <strong>Simulated only</strong></div><div>Deposit insurance <strong>Not applicable; not a real institution</strong></div><div>Storage <strong>This browser only</strong></div>',
       confirmText: 'Got it',
       onConfirm: () => {}
