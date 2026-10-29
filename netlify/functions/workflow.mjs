@@ -1,4 +1,4 @@
-import { getUser } from '@netlify/identity';
+import { getUser, verifyRequestOrigin } from '@netlify/identity';
 import { getDatabase } from '@netlify/database';
 
 const accounts = new Set(['draft','primary','market','holiday','business','ira','certificate','retirement401k']);
@@ -60,6 +60,10 @@ async function audit(client, requestId, actorId, action, details = {}) {
 }
 
 export default async function handler(request) {
+  if (request.method === 'POST' || request.method === 'PATCH') {
+    try { verifyRequestOrigin(request); }
+    catch { return respond({ error:'Cross-origin request blocked.' },403); }
+  }
   let user;
   try { user = await getUser(); }
   catch { return respond({ error:'Identity is not configured or could not validate this session.' },503); }
