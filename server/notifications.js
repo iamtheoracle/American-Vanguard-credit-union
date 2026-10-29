@@ -96,6 +96,26 @@ export async function queueMemberNotification(client, {
 export async function notifyMember(options) {
   return withTx(client => queueMemberNotification(client, options));
 }
+export async function queueOperationsEmail(client, {
+  eventKey, eventType, title, body, subject = title,
+  recipient = process.env.AVCU_OPERATIONS_EMAIL
+}) {
+  const email = String(recipient || '').trim();
+  if (!email || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)) {
+    return { status: 'skipped', reason: 'operations_email_not_configured' };
+  }
+  const { rows } = await client.query(
+    `INSERT INTO notification_outbox
+      (event_key, member_id, event_type, recipient, title, body, email_subject, email_text)
+     VALUES ($1,NULL,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (event_key) DO NOTHING
+     RETURNING id`,
+    [eventKey, eventType, email, title, body, subject, body]);
+  if (rows.length) return { status: 'queued', outboxId: rows[0].id, duplicate: false };
+  const existing = await client.query('SELECT id, status FROM notification_outbox WHERE event_key = $1', [eventKey]);
+  return { status: 'queued', outboxId: existing.rows[0]?.id ?? null, duplicate: true };
+}
+
 
 /**
  * Claims due events with SKIP LOCKED so multiple app instances can share the
