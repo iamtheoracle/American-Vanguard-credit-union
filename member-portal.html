@@ -18,7 +18,7 @@
       <form id="login-form" class="stack">
         <label for="login-identifier">Member number, username, or email</label><input id="login-identifier" type="text" inputmode="text" autocomplete="username" placeholder="member number, username, or email" required>
         <label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required>
-        <button class="primary" type="submit">Sign in</button>
+        <button class="primary" type="submit">Sign in</button><button id="show-reset-request" class="text-button" type="button">Forgot password?</button>
       </form>
       <form id="register-form" class="stack hidden">
         <label for="register-name">Full name</label><input id="register-name" maxlength="100" autocomplete="name" required>
@@ -27,6 +27,17 @@
         <label for="register-password">Create password</label><input id="register-password" type="password" minlength="12" autocomplete="new-password" required>
         <button class="primary" type="submit">Submit application</button>
         <p class="muted small">Your application stays pending until an authorized operator reviews it.</p>
+      </form>
+      <form id="reset-request-form" class="stack hidden">
+        <h2>Recover your account</h2><p class="muted small">If an account matches your identifier, reset instructions will be sent to its verified email address.</p>
+        <label for="reset-identifier">Username, email, or member number</label><input id="reset-identifier" autocomplete="username" required>
+        <button class="primary" type="submit">Send reset instructions</button><button id="reset-request-back" class="text-button" type="button">Back to sign in</button>
+      </form>
+      <form id="password-reset-form" class="stack hidden">
+        <h2>Set a new password</h2><input id="reset-token" type="hidden">
+        <label for="reset-new-password">New password</label><input id="reset-new-password" type="password" minlength="12" autocomplete="new-password" required>
+        <label for="reset-confirm-password">Confirm new password</label><input id="reset-confirm-password" type="password" minlength="12" autocomplete="new-password" required>
+        <button class="primary" type="submit">Reset password</button>
       </form>
       <p id="auth-message" class="notice" role="status" aria-live="polite"></p>
     </section>
