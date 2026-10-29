@@ -55,7 +55,7 @@ const TIERS = {
 
 router.get('/operator/queue', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const [approvals, cases, aiFailed, membership, health] = await Promise.all([
+    const [approvals, cases, aiFailed, membership, alerts, health] = await Promise.all([
       query(`SELECT count(*) FILTER (WHERE status = 'pending') AS pending,
                     count(*) FILTER (WHERE status = 'escalated') AS escalated
              FROM approvals`),
@@ -64,6 +64,7 @@ router.get('/operator/queue', ...guard('management', 'operator'), async (req, re
              FROM support_cases`),
       query(`SELECT count(*) AS failed FROM ai_tasks WHERE status = 'failed'`),
       query(`SELECT count(*) AS pending FROM members WHERE status = 'pending'`),
+      query(`SELECT count(*) AS pending FROM operations_alerts WHERE status = 'pending'`),
       integrationHealth()
     ]);
     res.json({
