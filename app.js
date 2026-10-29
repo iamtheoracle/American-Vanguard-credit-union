@@ -75,7 +75,7 @@
 
   function shortDate(value) {
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return 'Demo activity';
+    if (Number.isNaN(date.getTime())) return 'Date unavailable';
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
@@ -162,14 +162,14 @@
 
   function renderAllTransactions() {
     const rows = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-    $('#all-transactions').innerHTML = rows.length ? rows.map(transactionMarkup).join('') : '<p class="empty-state">No activity in the demo ledger yet.</p>';
+    $('#all-transactions').innerHTML = rows.length ? rows.map(transactionMarkup).join('') : '<p class="empty-state">No account activity yet.</p>';
     $('#ledger-count').textContent = String(state.transactions.length);
     $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Active';
   }
 
   function renderCard() {
     $('#freeze-overlay').classList.toggle('hidden', !state.frozen);
-    $('#large-demo-card').setAttribute('aria-label', state.frozen ? 'Demo debit card, frozen' : 'Demo debit card, active');
+    $('#large-demo-card').setAttribute('aria-label', state.frozen ? 'Card controls frozen locally' : 'Card issuer not connected');
     $('#card-state-indicator').classList.toggle('frozen', state.frozen);
     $('#card-state-heading').textContent = state.frozen ? 'Card frozen locally' : 'Issuer not connected';
     $('#card-state-description').textContent = state.frozen ? 'New purchase authorizations will be declined locally.' : 'Purchase authorizations can be recorded locally.';
@@ -195,7 +195,7 @@
     state.transactions = state.transactions.slice(0, MAX_TRANSACTIONS);
   }
 
-  function showConfirm({ title, description, summary, confirmText = 'Confirm demo action', onConfirm }) {
+  function showConfirm({ title, description, summary, confirmText = 'Confirm request', onConfirm }) {
     pendingAction = onConfirm;
     $('#dialog-title').textContent = title;
     $('#dialog-description').textContent = description;
@@ -285,7 +285,7 @@
     showConfirm({
       title: next ? 'Freeze local card controls?' : 'Unfreeze local card controls?',
       description: next ? 'New local purchase authorization requests will be blocked.' : 'Local purchase authorization requests can be submitted for review. This does not change an external card issuer status.',
-      summary: `<div>Card <strong>•••• 4826</strong></div><div>New status <strong>${next ? 'Frozen' : 'Active'}</strong></div>`,
+      summary: `<div>Card <strong>Issuer not connected</strong></div><div>New status <strong>${next ? 'Frozen' : 'Active'}</strong></div>`,
       confirmText: next ? 'Freeze card' : 'Unfreeze card',
       onConfirm: () => {
         state.frozen = next;
