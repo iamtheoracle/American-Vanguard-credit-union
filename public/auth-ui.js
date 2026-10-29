@@ -24,7 +24,7 @@
     } else {
       status.textContent = state.identityAvailable ? 'Local mode · not signed in' : 'Local mode · identity unavailable';
     }
-    document.dispatchEvent(new CustomEvent('avcu:auth-state-updated', { detail:state }));
+    window.dispatchEvent(new CustomEvent('avcu:auth-state-updated', { detail:state }));
   }
 
   function showLogin() {
