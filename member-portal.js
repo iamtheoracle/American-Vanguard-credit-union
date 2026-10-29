@@ -38,7 +38,7 @@
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
-    $('member-subtitle').textContent = `Member ID: ${member?.memberNumber || 'pending'} · ${member?.email || ''} · Status: ${member?.status || 'unknown'}`;
+    $('member-subtitle').textContent = `Member ID: ${member?.memberNumber || 'pending'} · Username: ${member?.username ? '@' + member.username : 'not set'} · ${member?.email || ''} · Status: ${member?.status || 'unknown'}`;
     $('total-balance').textContent = dollars(accounts.reduce((sum, a) => sum + Number(a.balanceCents || 0), 0));
     const tier = tierData.membership;
     $('membership-tier').textContent = tier?.label || 'New Member';
