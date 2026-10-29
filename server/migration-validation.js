@@ -29,8 +29,14 @@ export function validateLegacyTransactions(rows, sourceSystem) {
       exceptions.push({ rowNumber, code: 'invalid_field_format', fields: [] });
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(row.occurredAt) ||
-        Number.isNaN(Date.parse(row.occurredAt))) {
+    const timestampParts = row.occurredAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/);
+    const timestampValid = timestampParts && !Number.isNaN(Date.parse(row.occurredAt)) &&
+      Number(timestampParts[2]) >= 1 && Number(timestampParts[2]) <= 12 &&
+      Number(timestampParts[3]) >= 1 &&
+      Number(timestampParts[3]) <= new Date(Date.UTC(Number(timestampParts[1]), Number(timestampParts[2]), 0)).getUTCDate() &&
+      Number(timestampParts[4]) <= 23 && Number(timestampParts[5]) <= 59 && Number(timestampParts[6]) <= 59 &&
+      (!timestampParts[7] || (Number(timestampParts[7]) <= 23 && Number(timestampParts[8]) <= 59));
+    if (!timestampValid) {
       exceptions.push({ rowNumber, code: 'invalid_timestamp', fields: ['occurredAt'] });
       return;
     }
