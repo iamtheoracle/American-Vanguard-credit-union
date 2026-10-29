@@ -118,7 +118,7 @@ function submit(e){
  if(typeof window.setAVCUView==='function')window.setAVCUView('operations');
 }
 function review(e){
- const b=e.target.closest('[data-review]');if(b){const r=requests.find(x=>x.id===b.dataset.id);if(!r||r.status!=='pending-approval')return;const note=$('[data-note="'+r.id+'"]')?.value?.trim()||'';
+ const b=e.target.closest('[data-review]');if(b){const r=requests.find(x=>x.id===b.dataset.id);if(!r||r.status!=='pending-approval')return;const note=document.querySelector('[data-note="'+r.id+'"]')?.value?.trim()||'';
  if(b.dataset.review!=='approve'&&note.length<4){alert('Add a review note of at least four characters.');return}
  if(r.type==='check-deposit'&&!files.has(r.id)){alert('Check images are unavailable for review. Reattach both images or keep the request pending until secure document storage is connected.');return}
  if(b.dataset.review==='approve'&&r.type==='internal-transfer'){const err=postTransfer(r);if(err){alert(err);return}r.status='approved';r.operatorNote=note||'Approved after local review; internal ledger updated.'}
