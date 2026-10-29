@@ -17,9 +17,14 @@ A responsive member-services front end built with HTML, CSS, vanilla JavaScript,
 
 ## Run and test
 
-Use Node.js 20 or newer and run: npm run check
+Use Node.js 20 or newer.
 
-The command validates JavaScript syntax and runs source-level regression checks. It does not replace end-to-end browser tests, security review, accessibility testing, or financial-services certification.
+- Source checks: `npm run check`
+- Desktop and mobile browser audit: `cd tests/browser && npm install && npx playwright install chromium && npx playwright test`
+
+The Playwright suite runs in Chromium at desktop and mobile viewports. It checks navigation, request submission, operator request-information and rejection decisions, zero-balance transfer blocking, external-payment provider boundaries, Zelle verification safeguards, check-image previews/requirements, card freeze labeling, and horizontal overflow. GitHub Actions runs both the source checks and browser suite.
+
+Browser automation is not a substitute for real-device/manual accessibility testing, an independent security review, institution compliance validation, or live provider certification.
 
 ## Standalone-mode limits
 
