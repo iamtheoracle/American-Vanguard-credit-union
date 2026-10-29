@@ -147,6 +147,35 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
       if (!rejected.rowCount) throw new ApprovalError('Membership is no longer pending review', 409, 'already_processed');
     }
 
+    if (approval.item_type === 'loan') {
+      const applicationStatus = nextStatus === 'approved' ? 'approved'
+        : nextStatus === 'rejected' ? 'rejected'
+        : nextStatus === 'info_requested' ? 'information_required' : 'under_review';
+      const updatedLoan = await client.query(
+        `UPDATE loan_applications
+         SET status = $1,
+             decision_reason = CASE WHEN $1 IN ('approved','rejected') THEN $2 ELSE decision_reason END,
+             reviewed_at = CASE WHEN $1 IN ('approved','rejected') THEN now() ELSE reviewed_at END,
+             updated_at = now()
+         WHERE approval_id = $3 AND status IN ('submitted','under_review','information_required')
+         RETURNING id, member_id, reference`,
+        [applicationStatus, reason ? String(reason).trim() : null, approvalId]);
+      if (!updatedLoan.rowCount) throw new ApprovalError('Loan application is no longer in a reviewable state', 409, 'already_processed');
+      if (['approved','rejected','information_required'].includes(applicationStatus)) {
+        const loan = updatedLoan.rows[0];
+        await queueMemberNotification(client, {
+          memberId: loan.member_id,
+          eventType: 'loan.application_status',
+          eventKey: `loan-application:${loan.id}:${applicationStatus}`,
+          title: 'Loan application status update',
+          body: applicationStatus === 'information_required'
+            ? `More information is required for application ${loan.reference}. Sign in to review the request.`
+            : `Application ${loan.reference} was ${applicationStatus}. Approval does not mean funds have been disbursed.`,
+          subject: 'AVCU loan application status update'
+        });
+      }
+    }
+
     if (nextStatus === 'approved' || nextStatus === 'rejected') {
       const decisionLabel = nextStatus === 'approved' ? 'approved' : 'rejected';
       if (approval.item_type === 'membership' && approval.member_id) {
