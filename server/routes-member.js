@@ -215,7 +215,7 @@ router.get('/loans/applications', memberAuth, async (req, res, next) => {
     const { rows } = await query(
       `SELECT id, reference, requested_amount_cents AS "requestedAmountCents",
               currency, requested_term_months AS "requestedTermMonths", purpose, status,
-              decision_reason AS "decisionReason", submitted_at AS "submittedAt",
+              decision_reason AS "decisionReason", information_requested AS "informationRequested", submitted_at AS "submittedAt",
               reviewed_at AS "reviewedAt", created_at AS "createdAt"
        FROM loan_applications WHERE member_id = $1
        ORDER BY created_at DESC LIMIT 50`, [req.member.id]);
@@ -329,7 +329,7 @@ router.post('/loans/applications/:id/information', memberAuth, async (req, res, 
       }
       await client.query(
         `UPDATE loan_applications
-         SET status = 'submitted', member_response = $1, updated_at = now()
+         SET status = 'submitted', member_response = $1, information_requested = NULL, updated_at = now()
          WHERE id = $2`, [responseText, current.id]);
       await client.query(
         `UPDATE operations_alerts
