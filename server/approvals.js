@@ -92,8 +92,8 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
     }
 
     const financial = approval.item_type === 'transaction';
-    if (approval.item_type === 'loan' && ['approve', 'reject'].includes(action) && (!reason || !String(reason).trim())) {
-      throw new ApprovalError('A written decision reason is required for a loan application', 400, 'reason_required');
+    if (['loan', 'money_request'].includes(approval.item_type) && ['approve', 'reject'].includes(action) && (!reason || !String(reason).trim())) {
+      throw new ApprovalError('A written decision reason is required for this final decision', 400, 'reason_required');
     }
     if (action === 'reject' && financial && (!reason || !String(reason).trim())) {
       throw new ApprovalError('A written reason is required to reject a financial action', 400, 'reason_required');
@@ -179,6 +179,36 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
             ? `More information is required for application ${loan.reference}. Sign in to review the request.`
             : `Application ${loan.reference} was ${applicationStatus}. Approval does not mean funds have been disbursed.`,
           subject: 'AVCU loan application status update'
+        });
+      }
+    }
+
+    if (approval.item_type === 'money_request') {
+      const requestStatus = nextStatus === 'approved' ? 'approved'
+        : nextStatus === 'rejected' ? 'rejected'
+        : nextStatus === 'info_requested' ? 'information_required' : 'under_review';
+      const updatedRequest = await client.query(
+        `UPDATE money_requests
+         SET status = $1,
+             decision_reason = CASE WHEN $1 IN ('approved','rejected') THEN $2 ELSE decision_reason END,
+             information_requested = CASE WHEN $1 = 'information_required' THEN $2 ELSE information_requested END,
+             reviewed_at = CASE WHEN $1 IN ('approved','rejected') THEN now() ELSE reviewed_at END,
+             updated_at = now()
+         WHERE approval_id = $3 AND status IN ('submitted','under_review','information_required')
+         RETURNING id, member_id, reference`,
+        [requestStatus, reason ? String(reason).trim() : null, approvalId]);
+      if (!updatedRequest.rowCount) throw new ApprovalError('Money request is no longer in a reviewable state', 409, 'already_processed');
+      if (['approved','rejected','information_required'].includes(requestStatus)) {
+        const request = updatedRequest.rows[0];
+        await queueMemberNotification(client, {
+          memberId: request.member_id,
+          eventType: 'money_request.status',
+          eventKey: `money-request:${request.id}:${requestStatus}`,
+          title: 'Money request status update',
+          body: requestStatus === 'information_required'
+            ? `More information is required for request ${request.reference}. Sign in to review the request.`
+            : `Money request ${request.reference} was ${requestStatus}. No funds were moved by this decision.`,
+          subject: 'AVCU money request status update'
         });
       }
     }
