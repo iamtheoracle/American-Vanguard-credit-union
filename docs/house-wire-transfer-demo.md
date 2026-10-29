@@ -27,6 +27,14 @@ The sender and beneficiary names are user-provided labels only. Verify legal nam
 6. Never expose full account or routing numbers in logs, analytics, URLs, client-side source, or demo fixtures.
 7. Keep this workflow disabled in production until a regulated banking/core provider, compliance review, security review, and end-to-end tests are complete.
 
+## Sender and recipient account reflection
+
+For an eventual **internal transfer between accounts on the same ledger**, a completed transfer must be recorded as one atomic, balanced ledger operation: debit the sender and credit the recipient for the same amount and currency, using one shared transfer ID. Both account histories must show the matching transfer reference, amount, currency, timestamp, counterparty, purpose, and final status. The sender's balance decreases and the recipient's balance increases only when the ledger transaction commits. If either posting fails, neither posting may remain committed. Enforce idempotency so retries cannot debit or credit either side twice, and verify that the authenticated sender is authorized to debit the source account and that the recipient account is valid and eligible to receive funds.
+
+For an **external bank wire**, do not credit a recipient wallet/account merely because the sender submitted the wire. Record the outgoing instruction and any provider status separately; reflect an incoming credit only when the receiving institution or an authorized settlement/ledger integration confirms receipt and supplies a trustworthy posting reference. Do not assume that an external recipient account is part of this application's ledger.
+
+These are future production requirements only. This repository currently has no connected banking core or authoritative account ledger, so the present scenario remains planned demo data and must not create either side of a real posting.
+
 ## Acceptance criteria
 
 - Demo UI labels all amounts as illustrative and the transfer as not initiated.
@@ -34,6 +42,9 @@ The sender and beneficiary names are user-provided labels only. Verify legal nam
 - Currency is visibly marked as unspecified until configured; no currency symbol is guessed.
 - Drafting or previewing the wire does not create a ledger entry or change any account balance.
 - A real transfer cannot be submitted without verified sender authority, beneficiary details, currency, and explicit confirmation.
+- For an internal transfer, sender debit and recipient credit commit atomically under one transfer ID; both histories reflect the same amount, currency, reference, and final status.
+- A retry cannot create a second debit or recipient credit; a failed posting leaves neither side committed.
+- For an external wire, the recipient side is not marked credited until the receiving institution or trusted settlement integration confirms receipt.
 - The UI distinguishes draft, submitted, processing, completed, rejected, and failed states based only on trusted server/provider responses.
 - Tests cover arithmetic, missing currency, missing or unverified beneficiary details, duplicate submissions, unauthorized access, and no ledger mutation during preview.
 
