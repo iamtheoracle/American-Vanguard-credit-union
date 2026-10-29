@@ -1,3 +1,12 @@
+import {
+  signup,
+  login,
+  logout,
+  getUser,
+  recoverPassword,
+  handleAuthCallback
+} from '@netlify/identity';
+
 (() => {
 'use strict';
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -5,9 +14,7 @@ const form = $('#auth-form');
 const notice = $('#notice');
 let mode = 'login';
 let busy = false;
-const identityBase = '/.netlify/identity';
-const tokenKey = 'avcu_identity_token';
-const token = () => sessionStorage.getItem(tokenKey);
+let recoveryToken = null;
 function showNotice(message, kind = 'neutral', target = notice) {
   target.textContent = message;
   target.className = 'notice ' + kind;
@@ -20,34 +27,36 @@ function setMode(next) {
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', String(active));
   });
-  const signup = mode === 'signup';
-  const reset = mode === 'reset';
-  $('#form-title').textContent = signup ? 'Create your account' : reset ? 'Choose a new password' : 'Welcome back';
-  $('#form-description').textContent = signup ? 'Create secure sign-in credentials to begin onboarding.' : reset ? 'Set a new password for your account.' : 'Sign in to continue to your member space.';
-  $('#name-label').hidden = !signup;
-  $('#full-name').hidden = !signup;
-  $('#full-name').required = signup;
-  $('#password-label').textContent = reset ? 'New password' : 'Password';
-  $('#password').autocomplete = signup || reset ? 'new-password' : 'current-password';
-  $('#password-help').hidden = !(signup || reset);
-  $('#submit').textContent = signup ? 'Create account →' : reset ? 'Update password →' : 'Sign in securely →';
-  $('#forgot').hidden = signup || reset;
-  document.querySelectorAll('[data-mode]').forEach(button => button.hidden = reset);
+  const signupMode = mode === 'signup';
+  const resetMode = mode === 'reset';
+  $('#form-title').textContent = signupMode ? 'Create your account' : resetMode ? 'Choose a new password' : 'Welcome back';
+  $('#form-description').textContent = signupMode ? 'Create secure sign-in credentials to begin onboarding.' : resetMode ? 'Set a new password for your account.' : 'Sign in to continue to your member space.';
+  $('#name-label').hidden = !signupMode;
+  $('#full-name').hidden = !signupMode;
+  $('#full-name').required = signupMode;
+  $('#password-label').textContent = resetMode ? 'New password' : 'Password';
+  $('#password').autocomplete = signupMode || resetMode ? 'new-password' : 'current-password';
+  $('#password-help').hidden = !(signupMode || resetMode);
+  $('#submit').textContent = signupMode ? 'Create account →' : resetMode ? 'Update password →' : 'Sign in securely →';
+  $('#forgot').hidden = signupMode || resetMode;
+  document.querySelectorAll('[data-mode]').forEach(button => button.hidden = resetMode);
   notice.hidden = true;
-}
-async function api(path, body, method = 'POST', authToken = token()) {
-  const headers = { 'Accept': 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (authToken) headers.Authorization = 'Bearer ' + authToken;
-  const response = await fetch(identityBase + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.msg || data.message || data.error_description || 'We could not complete that request. Please try again.');
-  return data;
 }
 function setBusy(value) {
   busy = value;
   $('#submit').disabled = value;
   $('#submit').textContent = value ? 'Please wait…' : (mode === 'signup' ? 'Create account →' : mode === 'reset' ? 'Update password →' : 'Sign in securely →');
+}
+async function memberRequest(method = 'GET', body) {
+  const headers = { Accept: 'application/json' };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const response = await fetch('/api/member', {
+    method, headers, credentials: 'same-origin',
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Member onboarding is temporarily unavailable.');
+  return data;
 }
 function setAuthenticatedView(user) {
   $('#welcome').hidden = true;
@@ -55,14 +64,6 @@ function setAuthenticatedView(user) {
   $('#admin-panel').hidden = true;
   $('#member-heading').textContent = 'Your member space';
   $('#member-copy').textContent = user.email || 'Signed-in member';
-}
-async function memberRequest(method = 'GET', body) {
-  const headers = { Accept: 'application/json', Authorization: 'Bearer ' + token() };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const response = await fetch('/api/member', { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || 'Member onboarding is temporarily unavailable.');
-  return data;
 }
 function statusCopy(status) {
   return ({
@@ -88,10 +89,9 @@ async function loadMemberStatus() {
     $('#member-status-copy').textContent = copy;
     $('#application-name').value = app.full_name || '';
     if (app.applicant_statement) $('#application-statement').value = app.applicant_statement;
-    const canResubmit = ['rejected', 'resubmission'].includes(app.application_status);
-    formEl.hidden = !canResubmit;
+    formEl.hidden = !['rejected', 'resubmission'].includes(app.application_status);
     if (app.application_status === 'pending') {
-      $('#member-status-copy').textContent = 'Your request is securely recorded and waiting for staff review. You cannot approve yourself.';
+      $('#member-status-copy').textContent = 'Your request is recorded and waiting for staff review. You cannot approve yourself.';
     }
   } catch (error) {
     formEl.hidden = true;
@@ -100,8 +100,7 @@ async function loadMemberStatus() {
 }
 async function probeAdminAccess() {
   try {
-    const response = await fetch('/api/admin/reviews', { headers: { Accept: 'application/json', Authorization: 'Bearer ' + token() } });
-    if (response.status === 403 || response.status === 401) return;
+    const response = await fetch('/api/admin/reviews', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
     if (!response.ok) return;
     $('#admin-entry').hidden = false;
     const data = await response.json();
@@ -160,8 +159,8 @@ function renderReviews(reviews) {
         submit.disabled = true;
         try {
           const response = await fetch('/api/admin/reviews', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + token() },
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({ verificationRequestId: item.verification_request_id, decision: select.value, note: note.value.trim() })
           });
           const result = await response.json().catch(() => ({}));
@@ -181,31 +180,30 @@ function renderReviews(reviews) {
   }
 }
 async function refreshReviews() {
-  const response = await fetch('/api/admin/reviews', { headers: { Accept: 'application/json', Authorization: 'Bearer ' + token() } });
+  const response = await fetch('/api/admin/reviews', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || 'Could not load review queue.');
   renderReviews(data.reviews || []);
 }
 async function handleHash() {
   const params = new URLSearchParams(location.hash.replace(/^#/, ''));
-  const tokenParam = params.get('confirmation_token') || params.get('recovery_token') || params.get('invite_token') || params.get('email_change_token');
-  const type = params.has('confirmation_token') ? 'signup' : params.has('recovery_token') ? 'recovery' : params.has('invite_token') ? 'invite' : params.has('email_change_token') ? 'email_change' : null;
-  if (!tokenParam || !type) return false;
-  try {
-    const data = await api('/verify', { token: tokenParam, type }, 'POST', null);
+  const recovery = params.get('recovery_token');
+  if (recovery) {
+    recoveryToken = recovery;
     history.replaceState(null, '', location.pathname + location.search);
-    if (data.access_token) sessionStorage.setItem(tokenKey, data.access_token);
-    if (type === 'recovery') {
-      setMode('reset');
-      showNotice('Recovery link verified. Choose a new password below.', 'success');
-      return true;
-    } else {
-      setMode('login');
-      showNotice(type === 'signup' ? 'Email confirmed. Sign in to continue your membership application.' : 'The link was verified. Please continue securely.', 'success');
+    setMode('reset');
+    showNotice('Recovery link detected. Choose a new password below.', 'success');
+    return true;
+  }
+  if (location.hash && /confirmation_token|invite_token|email_change_token|access_token/.test(location.hash)) {
+    try {
+      const result = await handleAuthCallback();
+      if (result) {
+        showNotice(result.type === 'confirmation' ? 'Email confirmed. Sign in to continue your membership application.' : 'Authentication link verified. Continue securely.', 'success');
+      }
+    } catch (error) {
+      showNotice(error.message || 'This link could not be verified. Request a fresh link and try again.', 'error');
     }
-  } catch (error) {
-    showNotice(error.message + ' Request a fresh link if this one has expired.', 'error');
-    return false;
   }
   return false;
 }
@@ -218,39 +216,37 @@ form.addEventListener('submit', async event => {
   setBusy(true);
   try {
     if (mode === 'signup') {
-      await api('/signup', { email, password, data: { full_name: $('#full-name').value.trim() } }, 'POST', null);
+      await signup(email, password, { full_name: $('#full-name').value.trim() });
       setMode('login');
       showNotice('Account created. Check your email for the confirmation link. Account creation does not approve membership.', 'success');
     } else if (mode === 'reset') {
-      const currentToken = token();
-      if (!currentToken) throw new Error('Your recovery session has expired. Request a new password recovery link.');
-      await api('/user', { password }, 'PUT', currentToken);
-      sessionStorage.removeItem(tokenKey);
+      if (!recoveryToken) throw new Error('Your recovery link has expired. Request a new password recovery link.');
+      await recoverPassword(recoveryToken, password);
+      recoveryToken = null;
+      await logout();
       $('#password').value = '';
       setMode('login');
       showNotice('Password updated. Sign in with your new password.', 'success');
     } else {
-      const data = await api('/token?grant_type=password', { email, password }, 'POST', null);
-      if (!data.access_token) throw new Error('Sign-in did not return a valid session. Please try again.');
-      sessionStorage.setItem(tokenKey, data.access_token);
-      setAuthenticatedView(data.user || { email });
+      const user = await login(email, password);
+      setAuthenticatedView(user);
       await loadMemberStatus();
       await probeAdminAccess();
     }
   } catch (error) {
-    const message = String(error.message || '');
-    if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+    const message = String(error?.message || '');
+    if (message.includes('MissingIdentityError') || message.includes('Identity is not configured')) {
       showNotice('Authentication is not available yet. Netlify Identity must be enabled and configured for this site.', 'error');
-    } else showNotice(error.message, 'error');
+    } else showNotice(message || 'We could not complete that request. Please try again.', 'error');
   } finally { setBusy(false); }
 });
 $('#forgot').addEventListener('click', async () => {
   const email = $('#email').value.trim().toLowerCase();
   if (!email) { showNotice('Enter your email address first, then request a password reset.', 'error'); $('#email').focus(); return; }
   try {
-    await api('/recover', { email }, 'POST', null);
+    await recoverPassword(email);
     showNotice('If an account exists for that email, a password recovery link will be sent.', 'success');
-  } catch (error) { showNotice(error.message, 'error'); }
+  } catch (error) { showNotice(error.message || 'Password recovery is unavailable right now.', 'error'); }
 });
 $('#application-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -263,9 +259,7 @@ $('#application-form').addEventListener('submit', async event => {
   finally { submit.disabled = false; }
 });
 $('#signout').addEventListener('click', async () => {
-  const currentToken = token();
-  try { if (currentToken) await api('/logout', {}, 'POST', currentToken); } catch {}
-  sessionStorage.removeItem(tokenKey);
+  try { await logout(); } catch {}
   location.reload();
 });
 $('#open-admin').addEventListener('click', async () => {
@@ -280,17 +274,14 @@ $('#back-member').addEventListener('click', () => { $('#admin-panel').hidden = t
 (async () => {
   const recoveryHandled = await handleHash();
   if (recoveryHandled) return;
-  const currentToken = token();
-  if (!currentToken) return;
   try {
-    const response = await fetch(identityBase + '/user', { headers: { Authorization: 'Bearer ' + currentToken, Accept: 'application/json' } });
-    if (!response.ok) { sessionStorage.removeItem(tokenKey); return; }
-    const user = await response.json();
+    const user = await getUser();
+    if (!user) return;
     setAuthenticatedView(user);
     await loadMemberStatus();
     await probeAdminAccess();
-  } catch {
-    showNotice('We could not check your session. Please check your connection and sign in again.', 'error');
+  } catch (error) {
+    showNotice('We could not restore your session. Please sign in again. ' + (error?.message || ''), 'error');
   }
 })();
 })();
