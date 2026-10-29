@@ -21,25 +21,29 @@ const aiLimiter = rateLimiter({ windowMs: 60_000, max: 20 });
 // ---- auth -------------------------------------------------------------------
 router.post('/auth/register', async (req, res, next) => {
   try {
-    const { email, password, fullName } = req.body || {};
+    const { email, password, fullName, username: rawUsername } = req.body || {};
+    const username = String(rawUsername || '').trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,24}$/.test(username)) return res.status(400).json({ error: 'Username must be 3–24 characters using lowercase letters, numbers, or underscores' });
     if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address' });
     if (!validPassword(password)) return res.status(400).json({ error: `Password must be at least ${PASSWORD_MIN} characters` });
     const name = String(fullName || '').trim();
     if (name.length < 2 || name.length > 100) return res.status(400).json({ error: 'Enter your full name' });
     const existing = await findMemberByEmail(email);
     if (existing) return res.status(409).json({ error: 'An application with this email already exists' });
+    const usernameExists = await query('SELECT 1 FROM members WHERE username = $1 LIMIT 1', [username]);
+    if (usernameExists.rowCount) return res.status(409).json({ error: 'That username is already taken' });
     const hash = await hashPassword(password);
     const member = await withTx(async client => {
       const { rows } = await client.query(
-        `INSERT INTO members (email, password_hash, full_name, status, application)
-         VALUES (lower($1),$2,$3,'pending',$4)
-         RETURNING id, member_number AS "memberNumber", email, full_name, status, created_at`,
-        [email, hash, name, JSON.stringify({ channel: 'web', submittedAt: new Date().toISOString() })]);
+        `INSERT INTO members (username, email, password_hash, full_name, status, application)
+         VALUES ($1,lower($2),$3,$4,'pending',$5)
+         RETURNING id, member_number AS "memberNumber", username, email, full_name, status, created_at`,
+        [username, email, hash, name, JSON.stringify({ channel: 'web', submittedAt: new Date().toISOString() })]);
       const created = rows[0];
       await client.query(
         `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
          VALUES ('membership', $1, $2, 'pending', 'management', $1, 'member')`,
-        [created.id, JSON.stringify({ memberId: created.id, email: created.email, fullName: created.full_name })]);
+        [created.id, JSON.stringify({ memberId: created.id, username: created.username, email: created.email, fullName: created.full_name })]);
       await queueMemberNotification(client, {
         memberId: created.id,
         eventType: 'membership.application_received',
@@ -51,9 +55,12 @@ router.post('/auth/register', async (req, res, next) => {
       return created;
     });
     await recalculateMemberTier(member.id).catch(error => console.error('[avcu] initial tier calculation failed:', error.code || error.name));
-    res.status(201).json({ member: { id: member.id, memberNumber: String(member.memberNumber), email: member.email, fullName: member.full_name, status: member.status },
+    res.status(201).json({ member: { id: member.id, memberNumber: String(member.memberNumber), username: member.username, email: member.email, fullName: member.full_name, status: member.status },
       message: 'Application received. Sign in to track its status.' });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (error.code === '23505' && String(error.constraint || '').includes('username')) return res.status(409).json({ error: 'That username is already taken' });
+    next(error);
+  }
 });
 
 router.post('/auth/login', async (req, res, next) => {
@@ -68,7 +75,7 @@ router.post('/auth/login', async (req, res, next) => {
     const session = await createMemberSession(member.id);
     applySessionCookie(req, res, 'member', session);
     const tier = await recalculateMemberTier(member.id).catch(() => null);
-    res.json({ member: { id: member.id, memberNumber: String(member.member_number), email: member.email, fullName: member.full_name, status: member.status,
+    res.json({ member: { id: member.id, memberNumber: String(member.member_number), username: member.username, email: member.email, fullName: member.full_name, status: member.status,
       membershipTier: tier?.tier || member.membership_tier || 'new_member' } });
   } catch (error) { next(error); }
 });
