@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS loan_applications (
     CHECK (status IN ('submitted','under_review','information_required','approved','rejected','cancelled')),
   approval_id UUID UNIQUE REFERENCES approvals(id) ON DELETE RESTRICT,
   decision_reason TEXT,
+  member_response TEXT,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   reviewed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
