@@ -168,10 +168,11 @@ export async function processNotificationOutbox() {
              sent_at = CASE WHEN $2 = 'sent' THEN now() ELSE sent_at END
          WHERE id = $1 AND status = 'processing'`,
         [row.id, status, providerMessageId, errorCode, delaySeconds]);
+      const deliveryLogStatus = status === 'retry' ? 'failed' : status;
       await client.query(
         `INSERT INTO email_delivery_log (member_id, recipient, event_type, subject, status, provider_message_id, error_code)
          VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [row.member_id, row.recipient, row.event_type, row.email_subject, status, providerMessageId, errorCode]);
+        [row.member_id, row.recipient, row.event_type, row.email_subject, deliveryLogStatus, providerMessageId, errorCode]);
     });
   }
   return { processed: claimed.length };
