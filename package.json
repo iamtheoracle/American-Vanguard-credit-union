@@ -1,8 +1,8 @@
 {
-  "name": "american-vanguard-credit-union-demo",
+  "name": "atchison-village-credit-union-demo",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-only fictional member banking demo",
+  "description": "Atchison Village Credit Union local-only member banking demonstration",
   "scripts": {
     "check": "node --check app.js && node --test tests/*.test.mjs"
   },
