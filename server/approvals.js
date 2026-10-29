@@ -1,6 +1,7 @@
 import { query, withTx, audit } from './db.js';
 import { POLICY, requiredApprovalRoleForAmount } from './policy.js';
 import { postTwoSided, reverseTransaction } from './ledger.js';
+import { queueMemberNotification } from './notifications.js';
 
 /**
  * Approval engine. Approvals are the only path through which pending money
@@ -18,9 +19,10 @@ export async function createTransactionApproval(client, transaction, { submitted
   }
   const requiredRole = requiredApprovalRoleForAmount(amountCents);
   const { rows } = await client.query(
-    `INSERT INTO approvals (item_type, transaction_id, payload, status, required_role, submitted_by, submitted_by_type)
-     VALUES ('transaction', $1, $2, 'pending', $3, $4, $5) RETURNING id`,
-    [transaction.id,
+    `INSERT INTO approvals (item_type, member_id, transaction_id, payload, status, required_role, submitted_by, submitted_by_type)
+     VALUES ('transaction', $1, $2, $3, 'pending', $4, $5, $6) RETURNING id`,
+    [submittedByType === 'member' ? submittedBy : null,
+     transaction.id,
      JSON.stringify({ type: transaction.type, amountCents,
        memo: transaction.memo, payee: transaction.payee, reference: transaction.reference }),
      requiredRole, submittedBy || null, submittedByType]);
@@ -30,7 +32,7 @@ export async function createTransactionApproval(client, transaction, { submitted
 export async function createMembershipApproval(client, member, { submittedByType, submittedBy }) {
   const { rows } = await client.query(
     `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
-     VALUES ('membership', $1, $2, 'pending', 'operator', $3, $4) RETURNING id`,
+     VALUES ('membership', $1, $2, 'pending', 'management', $3, $4) RETURNING id`,
     [member.id, JSON.stringify({ memberId: member.id, email: member.email, fullName: member.full_name }),
      submittedBy || null, submittedByType || 'member']);
   return rows[0].id;
@@ -77,7 +79,10 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
     }
 
     const requiredRole = approval.status === 'escalated' ? 'management' : approval.required_role;
-    if (!roleSatisfies(operator.role, requiredRole)) {
+    // Review actions (request information or escalate) are available to staff
+    // who can review the queue; only final approve/reject actions use the
+    // configured approval role and monetary policy.
+    if (['approve', 'reject'].includes(action) && !roleSatisfies(operator.role, requiredRole)) {
       throw new ApprovalError(`This decision requires the ${requiredRole} role`, 403, 'insufficient_role');
     }
 
@@ -88,6 +93,9 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
     }
 
     const financial = approval.item_type === 'transaction';
+    if (['loan', 'money_request'].includes(approval.item_type) && ['approve', 'reject'].includes(action) && (!reason || !String(reason).trim())) {
+      throw new ApprovalError('A written decision reason is required for this final decision', 400, 'reason_required');
+    }
     if (action === 'reject' && financial && (!reason || !String(reason).trim())) {
       throw new ApprovalError('A written reason is required to reject a financial action', 400, 'reason_required');
     }
@@ -125,6 +133,116 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
        WHERE id = $5 AND status IN ('pending','escalated') RETURNING *`,
       [nextStatus, operator.id, reason || null, action === 'request_info' ? (reason || 'Additional information requested') : null, approvalId]);
     if (updated.rowCount === 0) throw new ApprovalError('Item already decided', 409, 'already_decided');
+
+    // Persist terminal business state and notification work in the same
+    // transaction as the approval decision, so a process crash cannot lose it.
+    if (action === 'reject' && approval.item_type === 'transaction') {
+      const rejected = await client.query(
+        `UPDATE transactions
+         SET status = 'rejected', processed_by = $1, decision_reason = $2, updated_at = now()
+         WHERE id = $3 AND status IN ('pending_approval','pending_review')
+         RETURNING id`,
+        [operator.id, String(reason).trim(), approval.txn_id]);
+      if (!rejected.rowCount) throw new ApprovalError('Transaction is no longer pending review', 409, 'already_processed');
+    }
+
+    if (action === 'reject' && approval.item_type === 'membership') {
+      const rejected = await client.query(
+        `UPDATE members SET status = 'rejected', updated_at = now()
+         WHERE id = $1 AND status = 'pending' RETURNING id`,
+        [approval.member_id]);
+      if (!rejected.rowCount) throw new ApprovalError('Membership is no longer pending review', 409, 'already_processed');
+    }
+
+    if (approval.item_type === 'loan') {
+      const applicationStatus = nextStatus === 'approved' ? 'approved'
+        : nextStatus === 'rejected' ? 'rejected'
+        : nextStatus === 'info_requested' ? 'information_required' : 'under_review';
+      const updatedLoan = await client.query(
+        `UPDATE loan_applications
+         SET status = $1,
+             decision_reason = CASE WHEN $1 IN ('approved','rejected') THEN $2 ELSE decision_reason END,
+             information_requested = CASE WHEN $1 = 'information_required' THEN $2 WHEN $1 = 'submitted' THEN NULL ELSE information_requested END,
+             reviewed_at = CASE WHEN $1 IN ('approved','rejected') THEN now() ELSE reviewed_at END,
+             updated_at = now()
+         WHERE approval_id = $3 AND status IN ('submitted','under_review','information_required')
+         RETURNING id, member_id, reference`,
+        [applicationStatus, reason ? String(reason).trim() : null, approvalId]);
+      if (!updatedLoan.rowCount) throw new ApprovalError('Loan application is no longer in a reviewable state', 409, 'already_processed');
+      if (['approved','rejected','information_required'].includes(applicationStatus)) {
+        const loan = updatedLoan.rows[0];
+        await queueMemberNotification(client, {
+          memberId: loan.member_id,
+          eventType: 'loan.application_status',
+          eventKey: `loan-application:${loan.id}:${applicationStatus}`,
+          title: 'Loan application status update',
+          body: applicationStatus === 'information_required'
+            ? `More information is required for application ${loan.reference}. Sign in to review the request.`
+            : `Application ${loan.reference} was ${applicationStatus}. Approval does not mean funds have been disbursed.`,
+          subject: 'AVCU loan application status update'
+        });
+      }
+    }
+
+    if (approval.item_type === 'money_request') {
+      const requestStatus = nextStatus === 'approved' ? 'approved'
+        : nextStatus === 'rejected' ? 'rejected'
+        : nextStatus === 'info_requested' ? 'information_required' : 'under_review';
+      const updatedRequest = await client.query(
+        `UPDATE money_requests
+         SET status = $1,
+             decision_reason = CASE WHEN $1 IN ('approved','rejected') THEN $2 ELSE decision_reason END,
+             information_requested = CASE WHEN $1 = 'information_required' THEN $2 ELSE information_requested END,
+             reviewed_at = CASE WHEN $1 IN ('approved','rejected') THEN now() ELSE reviewed_at END,
+             updated_at = now()
+         WHERE approval_id = $3 AND status IN ('submitted','under_review','information_required')
+         RETURNING id, member_id, reference`,
+        [requestStatus, reason ? String(reason).trim() : null, approvalId]);
+      if (!updatedRequest.rowCount) throw new ApprovalError('Money request is no longer in a reviewable state', 409, 'already_processed');
+      if (['approved','rejected','information_required'].includes(requestStatus)) {
+        const request = updatedRequest.rows[0];
+        await queueMemberNotification(client, {
+          memberId: request.member_id,
+          eventType: 'money_request.status',
+          eventKey: `money-request:${request.id}:${requestStatus}`,
+          title: 'Money request status update',
+          body: requestStatus === 'information_required'
+            ? `More information is required for request ${request.reference}. Sign in to review the request.`
+            : `Money request ${request.reference} was ${requestStatus}. No funds were moved by this decision.`,
+          subject: 'AVCU money request status update'
+        });
+      }
+    }
+
+    if (nextStatus === 'approved' || nextStatus === 'rejected') {
+      const decisionLabel = nextStatus === 'approved' ? 'approved' : 'rejected';
+      if (approval.item_type === 'membership' && approval.member_id) {
+        await queueMemberNotification(client, {
+          memberId: approval.member_id,
+          eventType: 'membership.application_decided',
+          eventKey: `membership-approval:${approvalId}:${nextStatus}`,
+          title: 'Membership application update',
+          body: `Your membership application was ${decisionLabel}.`,
+          subject: 'AVCU membership application update'
+        });
+      } else if (approval.item_type === 'transaction' && approval.txn_id) {
+        const owners = await client.query(
+          `SELECT DISTINCT a.member_id
+           FROM accounts a
+           JOIN transactions t ON t.from_account_id = a.id OR t.to_account_id = a.id
+           WHERE t.id = $1`, [approval.txn_id]);
+        for (const owner of owners.rows) {
+          await queueMemberNotification(client, {
+            memberId: owner.member_id,
+            eventType: 'transaction.approval_decided',
+            eventKey: `transaction-approval:${approvalId}:${nextStatus}:${owner.member_id}`,
+            title: 'Transaction status update',
+            body: `A transaction review was ${decisionLabel}. Reference: ${approvalId}.`,
+            subject: 'AVCU transaction status update'
+          });
+        }
+      }
+    }
 
     await audit(client, {
       actorType: 'operator', actorId: operator.id, actorRole: operator.role,
@@ -168,10 +286,6 @@ async function executeApprovedMembership(client, approval, operator) {
     `INSERT INTO accounts (member_id, kind, name, suffix) VALUES
        ($1,'EVERYDAY','Share Draft',$2), ($1,'SAVINGS','Primary Share',$3)`,
     [memberId, String(1000 + Math.floor(Math.random() * 9000)), String(1000 + Math.floor(Math.random() * 9000))]);
-  await client.query(
-    `INSERT INTO notifications (member_id, title, body) VALUES ($1,$2,$3)`,
-    [memberId, 'Membership verified',
-     'Your American Vantoris Credit Union membership has been approved. Your share accounts are now open.']);
   await client.query(
     `INSERT INTO cards (member_id, last4, status, expires, provider_ref)
      VALUES ($1,$2,'active',$3,$4)`,

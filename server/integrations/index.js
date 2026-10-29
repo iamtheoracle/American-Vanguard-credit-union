@@ -153,18 +153,21 @@ export async function integrationHealth() {
 
 export function verifyWebhookSignature({ secret, body, signature, timestamp }) {
   const tolerance = POLICY.WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS * 1000;
-  if (!timestamp || Math.abs(Date.now() - Number(timestamp)) > tolerance) return false;
+  if (typeof secret !== 'string' || secret.length === 0) return false;
+  if (typeof timestamp !== 'string' || !/^\d+$/.test(timestamp)) return false;
+  const timestampMs = Number(timestamp);
+  if (!Number.isSafeInteger(timestampMs) || Math.abs(Date.now() - timestampMs) > tolerance) return false;
+  if (typeof signature !== 'string' || !/^(?:sha256=)?[a-f0-9]{64}$/.test(signature)) return false;
   const expected = crypto.createHmac('sha256', secret)
-    .update(`${timestamp}.${body}`).digest('hex');
-  if (typeof signature !== 'string') return false;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature.replace(/^sha256=/, ''));
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+    .update(`${timestamp}.${body}`).digest();
+  const supplied = Buffer.from(signature.replace(/^sha256=/, ''), 'hex');
+  return expected.length === supplied.length && crypto.timingSafeEqual(expected, supplied);
 }
 
 export function webhookSecret(provider) {
-  // Sandbox providers share the documented development webhook secret until a
-  // real partner is authorized. Production must set per-provider secrets.
   const specific = process.env[`AVCU_WEBHOOK_SECRET_${provider.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`];
-  return specific || process.env.AVCU_WEBHOOK_SECRET_SANDBOX || 'avcu-dev-webhook-secret';
+  if (specific) return specific;
+  // Production never falls back to a shared or documented development secret.
+  if (process.env.NODE_ENV === 'production') return null;
+  return process.env.AVCU_WEBHOOK_SECRET_SANDBOX || 'avcu-dev-webhook-secret';
 }

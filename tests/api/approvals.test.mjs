@@ -135,16 +135,17 @@ test('membership applications flow through the approval queue', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
 
-  await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'applicant@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Sam Lee' }
+  const registration = await api(env.base, '/api/auth/register', {
+    method: 'POST', body: { email: 'applicant@avcu.demo', username: 'sam_lee', password: 'Str0ngPassphrase!', fullName: 'Sam Lee' }
   });
-  const { cookie: teller } = await loginOperator(env.base, 'teller@avcu.demo');
-  const queue = await api(env.base, '/api/operator/approvals?status=pending', { cookie: teller });
+  assert.equal(registration.status, 201, JSON.stringify(registration.data));
+  const { cookie: manager } = await loginOperator(env.base, 'manager@avcu.demo');
+  const queue = await api(env.base, '/api/operator/approvals?status=pending', { cookie: manager });
   const membership = queue.data.approvals.find(a => a.itemType === 'membership');
   assert.ok(membership, 'expected a pending membership approval');
 
   const approved = await api(env.base, `/api/operator/approvals/${membership.id}/decide`, {
-    method: 'POST', cookie: teller, body: { action: 'approve' }
+    method: 'POST', cookie: manager, body: { action: 'approve' }
   });
   assert.equal(approved.status, 200, JSON.stringify(approved.data));
   assert.equal(approved.data.outcome.status, 'verified');

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestServer, api, loginMember, setCookieFrom, MEMBER_PASSWORD } from './helpers.mjs';
+import { stopNotificationWorker } from '../../server/notifications.js';
 
 test('authentication and session lifecycle', async t => {
   const env = await startTestServer();
@@ -8,11 +9,52 @@ test('authentication and session lifecycle', async t => {
 
   // 1. Register creates a pending application, not a verified member.
   const reg = await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'newmember@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
+    method: 'POST', body: { email: 'newmember@avcu.demo', username: 'alex_rivera', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
   });
-  assert.equal(reg.status, 201);
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
   assert.equal(reg.data.member.status, 'pending');
   assert.match(reg.data.member.memberNumber, /^\d{10}$/, 'registration assigns a 10-digit numeric member ID');
+  assert.equal(reg.data.member.username, 'alex_rivera');
+  process.env.AVCU_PUBLIC_BASE_URL = 'https://avcu.test';
+  stopNotificationWorker(); // Keep the test outbox stable while extracting the synthetic reset link.
+  const resetRequest = await api(env.base, '/api/auth/password-reset/request', {
+    method: 'POST', body: { identifier: reg.data.member.username }
+  });
+  assert.equal(resetRequest.status, 202);
+  const db = await import('../../server/db.js');
+  const { rows: resetEmails } = await db.query(
+    "SELECT email_text FROM notification_outbox WHERE member_id = $1 AND event_type = 'auth.password_reset' ORDER BY created_at DESC LIMIT 1",
+    [reg.data.member.id]
+  );
+  assert.equal(resetEmails.length, 1, 'reset instructions are queued for the verified member email');
+  const resetMatch = resetEmails[0].email_text.match(/https:\/\/avcu\.test\/member-portal\.html\?resetToken=([A-Za-z0-9_-]+)/);
+  assert.ok(resetMatch, 'reset email contains a valid portal link');
+  const resetToken = resetMatch[1];
+  const { rows: tokenRows } = await db.query('SELECT token_hash FROM password_reset_tokens WHERE member_id = $1', [reg.data.member.id]);
+  assert.equal(tokenRows.length, 1);
+  assert.notEqual(tokenRows[0].token_hash, resetToken, 'only a token hash is persisted');
+  const resetComplete = await api(env.base, '/api/auth/password-reset/complete', {
+    method: 'POST', body: { token: resetToken, password: 'NewSecurePassphrase!' }
+  });
+  assert.equal(resetComplete.status, 200);
+  const { rows: scrubbedResetPayload } = await db.query(
+    "SELECT email_text, body FROM notification_outbox WHERE event_type = 'auth.password_reset' AND member_id = $1",
+    [reg.data.member.id]
+  );
+  assert.equal(scrubbedResetPayload[0].email_text, '');
+  assert.equal(scrubbedResetPayload[0].body, '');
+  const oldPasswordLogin = await api(env.base, '/api/auth/login', {
+    method: 'POST', body: { identifier: reg.data.member.username, password: 'Str0ngPassphrase!' }
+  });
+  assert.equal(oldPasswordLogin.status, 401);
+  const newPasswordLogin = await api(env.base, '/api/auth/login', {
+    method: 'POST', body: { identifier: reg.data.member.username, password: 'NewSecurePassphrase!' }
+  });
+  assert.equal(newPasswordLogin.status, 200);
+  const tokenReuse = await api(env.base, '/api/auth/password-reset/complete', {
+    method: 'POST', body: { token: resetToken, password: 'AnotherSecurePassphrase!' }
+  });
+  assert.equal(tokenReuse.status, 400, 'reset tokens are single-use');
 
   // 2. Registration validation.
   const bad = await api(env.base, '/api/auth/register', {
@@ -20,7 +62,7 @@ test('authentication and session lifecycle', async t => {
   });
   assert.equal(bad.status, 400);
   const dupe = await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'newmember@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
+    method: 'POST', body: { email: 'newmember@avcu.demo', username: 'alex_rivera', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
   });
   assert.equal(dupe.status, 409);
 
@@ -67,7 +109,7 @@ test('member data isolation', async t => {
   t.after(() => env.close());
 
   await api(env.base, '/api/auth/register', {
-    method: 'POST', body: { email: 'isolation@avcu.demo', password: 'Str0ngPassphrase!', fullName: 'Riley Fox' }
+    method: 'POST', body: { email: 'isolation@avcu.demo', username: 'riley_fox', password: 'Str0ngPassphrase!', fullName: 'Riley Fox' }
   });
   const { cookie: cookieB } = await loginMember(env.base, 'isolation@avcu.demo', 'Str0ngPassphrase!');
   // Pending member cannot see accounts and cannot move money.

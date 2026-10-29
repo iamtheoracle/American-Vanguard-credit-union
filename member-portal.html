@@ -16,16 +16,28 @@
       <p class="muted">Sign in to your prototype member account or submit a membership application.</p>
       <div class="tabs"><button class="tab active" id="show-login" type="button">Sign in</button><button class="tab" id="show-register" type="button">Apply for membership</button></div>
       <form id="login-form" class="stack">
-        <label for="login-identifier">Member number or email</label><input id="login-identifier" type="text" inputmode="text" autocomplete="username" placeholder="10-digit member number or email" required>
+        <label for="login-identifier">Member number, username, or email</label><input id="login-identifier" type="text" inputmode="text" autocomplete="username" placeholder="member number, username, or email" required>
         <label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required>
-        <button class="primary" type="submit">Sign in</button>
+        <button class="primary" type="submit">Sign in</button><button id="show-reset-request" class="text-button" type="button">Forgot password?</button>
       </form>
       <form id="register-form" class="stack hidden">
         <label for="register-name">Full name</label><input id="register-name" maxlength="100" autocomplete="name" required>
+        <label for="register-username">Username</label><input id="register-username" minlength="3" maxlength="24" pattern="[a-z0-9_]{3,24}" autocomplete="username" required><p class="muted small">Use 3–24 lowercase letters, numbers, or underscores. This is separate from your numeric member number.</p>
         <label for="register-email">Email</label><input id="register-email" type="email" autocomplete="email" required>
         <label for="register-password">Create password</label><input id="register-password" type="password" minlength="12" autocomplete="new-password" required>
         <button class="primary" type="submit">Submit application</button>
         <p class="muted small">Your application stays pending until an authorized operator reviews it.</p>
+      </form>
+      <form id="reset-request-form" class="stack hidden">
+        <h2>Recover your account</h2><p class="muted small">If an account matches your identifier, reset instructions will be sent to its verified email address.</p>
+        <label for="reset-identifier">Username, email, or member number</label><input id="reset-identifier" autocomplete="username" required>
+        <button class="primary" type="submit">Send reset instructions</button><button id="reset-request-back" class="text-button" type="button">Back to sign in</button>
+      </form>
+      <form id="password-reset-form" class="stack hidden">
+        <h2>Set a new password</h2><input id="reset-token" type="hidden">
+        <label for="reset-new-password">New password</label><input id="reset-new-password" type="password" minlength="12" autocomplete="new-password" required>
+        <label for="reset-confirm-password">Confirm new password</label><input id="reset-confirm-password" type="password" minlength="12" autocomplete="new-password" required>
+        <button class="primary" type="submit">Reset password</button>
       </form>
       <p id="auth-message" class="notice" role="status" aria-live="polite"></p>
     </section>
@@ -35,6 +47,7 @@
       <div id="dashboard-message" class="notice" role="status" aria-live="polite"></div>
       <div class="stat-grid"><article class="stat-card"><small>Total share balance</small><strong id="total-balance">$0.00</strong><span>Prototype ledger</span></article><article class="stat-card"><small>Membership tier</small><strong id="membership-tier">—</strong><span id="tier-detail">Activity based</span></article><article class="stat-card"><small>Debit card</small><strong id="card-status">—</strong><span id="card-last4">Sandbox card</span></article></div>
       <div class="content-grid">
+        <section class="panel wide"><div class="section-head"><h2>Membership progress</h2><span class="tag">SERVER-CALCULATED</span></div><p id="tier-progress-note" class="muted small"></p><div id="tier-progress-list" class="tier-progress-list"></div></section>
         <section class="panel"><div class="section-head"><h2>Share accounts</h2><button class="text-button" id="refresh-button" type="button">Refresh</button></div><div id="accounts-list" class="account-list"></div></section>
         <section class="panel"><h2>Move money between shares</h2><form id="transfer-form" class="stack">
           <label for="transfer-from">From account</label><select id="transfer-from" required></select>
@@ -53,7 +66,24 @@
         <section class="panel"><h2>Debit card controls</h2><p class="muted">Card actions use the sandbox adapter and cannot reach a payment network.</p><button id="freeze-button" class="secondary" type="button">Freeze card</button>
           <form id="purchase-form" class="stack top-gap"><label for="purchase-merchant">Test merchant</label><input id="purchase-merchant" value="Harbor Market" maxlength="80" required><label for="purchase-amount">Amount (USD)</label><input id="purchase-amount" type="number" value="12.50" min="0.01" max="10000" step="0.01" required><button class="secondary" type="submit">Test authorization</button></form>
         </section>
-        <section class="panel wide"><div class="section-head"><h2>Recent transactions</h2><span class="tag">API DATA</span></div><div id="transactions-list" class="table-wrap"></div></section>
+        <section class="panel"><h2>Loan application</h2><form id="loan-form" class="stack">
+          <label for="loan-amount">Requested amount (USD)</label><input id="loan-amount" type="number" min="0.01" step="0.01" required>
+          <label for="loan-term">Requested term (months, optional)</label><input id="loan-term" type="number" min="1" step="1">
+          <label for="loan-purpose">Purpose</label><textarea id="loan-purpose" minlength="10" maxlength="2000" rows="4" required></textarea>
+          <button id="loan-submit" class="primary" type="submit">Submit loan application</button>
+          <p id="loan-form-note" class="muted small">Applications are reviewed by management. Approval does not disburse funds or guarantee a rate.</p>
+        </form></section>
+        <section class="panel"><h2>Money request</h2><form id="money-request-form" class="stack">
+          <label for="money-request-type">Request type</label><select id="money-request-type" required><option value="withdrawal">Withdrawal request</option><option value="transfer">Transfer request</option><option value="account_service">Account service request</option><option value="other">Other</option></select>
+          <label for="money-request-amount">Requested amount (USD)</label><input id="money-request-amount" type="number" min="0.01" step="0.01" required>
+          <label for="money-request-note">Details</label><textarea id="money-request-note" minlength="5" maxlength="2000" rows="4" required></textarea>
+          <button id="money-request-submit" class="primary" type="submit">Submit request</button>
+          <p id="money-request-form-note" class="muted small">This creates a review request only. It does not initiate a transfer or settlement.</p>
+        </form></section>
+        <section class="panel wide"><div class="section-head"><h2>Money requests</h2><button class="text-button" id="refresh-money-requests" type="button">Refresh</button></div><div id="money-requests-list" class="notification-list"></div></section>
+<section class="panel wide"><div class="section-head"><h2>Funding pools</h2><span class="tag">PARTICIPATION DISABLED</span></div><p class="muted small">Published pool details are shown only when configured. No live contributions or investment orders can be placed from this prototype.</p><div id="funding-pools-list" class="funding-pools-list"></div></section>
+        <section class="panel wide"><div class="section-head"><h2>Loan applications</h2><button class="text-button" id="refresh-loans" type="button">Refresh</button></div><div id="loan-applications-list" class="notification-list"></div></section>
+        <section class="panel wide"><div class="section-head"><h2>Transaction history</h2><span class="tag">API DATA</span></div><div class="row-actions"><input id="transaction-search" placeholder="Search description, payee, or reference" aria-label="Search transaction history"><button id="clear-transaction-search" class="text-button" type="button">Clear</button></div><div id="transactions-list" class="table-wrap"></div><div class="section-head"><span id="transaction-page-status" class="muted small">Showing recent activity</span><button id="load-more-transactions" class="secondary" type="button">Load more</button></div></section>
         <section class="panel wide"><div class="section-head"><h2>Notifications</h2><button id="read-notifications" class="text-button" type="button">Mark all read</button></div><div id="notifications-list" class="notification-list"></div></section>
       </div>
       <p class="disclaimer">AVCU is a software prototype, not a chartered or insured financial institution. This portal uses a development API and sandbox workflows; it does not hold deposits or move real money.</p>

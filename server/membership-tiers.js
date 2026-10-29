@@ -27,6 +27,45 @@ export function calculateTier({ memberStatus, accountAgeDays, transactions90Days
   return 'new_member';
 }
 
+export function getTierProgress({ tier, calculatedTier, activity90Days = 0, accountAgeDays = 0 }) {
+  const current = calculatedTier || tier;
+  if (current === 'review_required') {
+    return { nextTier: null, percent: 0, requirements: [], note: 'Membership verification is required before activity-based tier progress is available.' };
+  }
+  const definitions = {
+    new_member: {
+      nextTier: 'Active Member',
+      requirements: [{ key: 'activity90Days', label: 'Eligible transactions in the last 90 days', current: activity90Days, required: TIER_POLICY.activeTransactions90Days }]
+    },
+    active_member: {
+      nextTier: 'Established Member',
+      requirements: [
+        { key: 'activity90Days', label: 'Eligible transactions in the last 90 days', current: activity90Days, required: TIER_POLICY.establishedTransactions90Days },
+        { key: 'accountAgeDays', label: 'Membership age in days', current: accountAgeDays, required: TIER_POLICY.establishedMinimumAgeDays }
+      ]
+    },
+    established_member: {
+      nextTier: 'Priority Service',
+      requirements: [
+        { key: 'activity90Days', label: 'Eligible transactions in the last 90 days', current: activity90Days, required: TIER_POLICY.priorityTransactions90Days },
+        { key: 'accountAgeDays', label: 'Membership age in days', current: accountAgeDays, required: TIER_POLICY.priorityMinimumAgeDays }
+      ]
+    },
+    priority_service: null
+  };
+  const definition = definitions[current];
+  if (current === 'priority_service') return { nextTier: null, percent: 100, requirements: [], note: 'You are at the highest configured activity tier.' };
+  if (!definition) return { nextTier: null, percent: 0, requirements: [], note: 'No next tier is configured.' };
+  const requirements = definition.requirements.map(item => {
+    const currentValue = Math.max(0, Number(item.current) || 0);
+    const required = Number(item.required);
+    const progress = Math.min(100, Math.floor(currentValue / required * 100));
+    return { key: item.key, label: item.label, current: currentValue, required, remaining: Math.max(0, required - currentValue), satisfied: currentValue >= required, percent: progress };
+  });
+  const percent = Math.floor(requirements.reduce((sum, item) => sum + item.percent, 0) / requirements.length);
+  return { nextTier: definition.nextTier, percent, requirements, note: 'Informational progress only; it does not promise credit approval, account access, or financial benefits.' };
+}
+
 export async function recalculateMemberTier(memberId) {
   const { rows } = await query(
     `SELECT m.status, m.membership_tier AS "membershipTier", m.tier_override AS "tierOverride",
@@ -53,9 +92,11 @@ export async function recalculateMemberTier(memberId) {
        VALUES ($1,$2,$3,$4)`,
       [memberId, member.membershipTier, next, member.tierOverride ? 'Configured operator override' : 'Automatic activity recalculation']);
   }
+  const activity90Days = Number(member.activity90Days || 0);
+  const accountAgeDays = Math.floor(Number(member.ageDays || 0));
   return { tier: next, label: MEMBERSHIP_TIERS[next], calculatedTier: calculated,
-    activity90Days: Number(member.activity90Days || 0), accountAgeDays: Math.floor(Number(member.ageDays || 0)),
-    overridden: Boolean(member.tierOverride) };
+    activity90Days, accountAgeDays, overridden: Boolean(member.tierOverride),
+    progress: getTierProgress({ tier: next, calculatedTier: calculated, activity90Days, accountAgeDays }) };
 }
 
 export async function overrideMemberTier({ memberId, tier, reason, operator }) {

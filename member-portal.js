@@ -3,6 +3,9 @@
   const $ = id => document.getElementById(id);
   let member = null;
   let accounts = [];
+  let transactionRows = [];
+  let transactionOffset = null;
+  let transactionHasMore = false;
   const dollars = cents => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(cents || 0) / 100);
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const showMessage = (id, message, error = false) => { const node = $(id); node.textContent = message || ''; node.classList.toggle('error', error); };
@@ -20,6 +23,10 @@
   function switchAuth(register) {
     $('login-form').classList.toggle('hidden', register);
     $('register-form').classList.toggle('hidden', !register);
+    $('reset-request-form').classList.add('hidden');
+    $('password-reset-form').classList.add('hidden');
+    $('show-login').classList.remove('hidden');
+    $('show-register').classList.remove('hidden');
     $('show-login').classList.toggle('active', !register);
     $('show-register').classList.toggle('active', register);
     showMessage('auth-message', '');
@@ -29,16 +36,24 @@
     $('dashboard').classList.toggle('hidden', !value);
   }
   async function loadDashboard() {
-    const [accountData, transactionData, cardData, notificationData, tierData] = await Promise.all([
-      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier')
+    const [accountData, transactionData, cardData, notificationData, tierData, loanData, moneyRequestData, poolData] = await Promise.all([
+      api('/accounts'), api(`/transactions?limit=30&offset=0&search=${encodeURIComponent($('transaction-search').value.trim())}`), api('/card'), api('/notifications'), api('/membership-tier'), api('/loans/applications'), api('/money-requests'), api('/funding-pools')
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
-    $('member-subtitle').textContent = `Member ID: ${member?.memberNumber || 'pending'} · ${member?.email || ''} · Status: ${member?.status || 'unknown'}`;
+    $('member-subtitle').textContent = `Member ID: ${member?.memberNumber || 'pending'} · Username: ${member?.username ? '@' + member.username : 'not set'} · ${member?.email || ''} · Status: ${member?.status || 'unknown'}`;
     $('total-balance').textContent = dollars(accounts.reduce((sum, a) => sum + Number(a.balanceCents || 0), 0));
     const tier = tierData.membership;
     $('membership-tier').textContent = tier?.label || 'New Member';
     $('tier-detail').textContent = `${tier?.activity90Days ?? 0} qualifying transactions in 90 days`;
+    const tierProgress = tierData.progress || tier?.progress;
+    $('tier-progress-note').textContent = tierProgress?.note || 'Tier requirements are informational and use persisted account activity.';
+    $('tier-progress-list').innerHTML = tierProgress?.requirements?.length
+      ? tierProgress.requirements.map(item => {
+          const percent = Math.max(0, Math.min(100, Number(item.percent) || 0));
+          return `<article class="tier-requirement"><div class="tier-requirement-head"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.current)} / ${escapeHtml(item.required)}</span></div><div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="${escapeHtml(item.label)}"><span style="width:${percent}%"></span></div><small>${item.satisfied ? 'Requirement satisfied' : `${escapeHtml(item.remaining)} more needed`}</small></article>`;
+        }).join('')
+      : `<p class="muted">${escapeHtml(tierProgress?.note || 'No next-tier requirements are currently available.')}</p>`;
     const card = cardData.card;
     $('card-status').textContent = card?.status || 'Not issued';
     $('card-last4').textContent = card ? `Sandbox card ending ${card.last4}` : 'Card appears after membership approval';
@@ -51,8 +66,66 @@
       select.innerHTML = accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)} · •••• ${escapeHtml(a.suffix)}</option>`).join('');
       if (accounts.some(a => a.id === previous)) select.value = previous;
     }
-    $('transactions-list').innerHTML = transactionData.transactions?.length ? `<table><thead><tr><th>Date</th><th>Type / description</th><th>Status</th><th>Amount</th></tr></thead><tbody>${transactionData.transactions.map(t => `<tr><td>${escapeHtml(new Date(t.createdAt).toLocaleDateString())}</td><td><strong>${escapeHtml(t.memo || t.type)}</strong><small>${escapeHtml(t.reference)}</small></td><td><span class="status-pill">${escapeHtml(String(t.status).replaceAll('_',' '))}</span></td><td>${dollars(t.amountCents)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No API transactions yet.</p>';
+    transactionRows = transactionData.transactions || [];
+    transactionOffset = transactionData.pagination?.nextOffset ?? null;
+    transactionHasMore = Boolean(transactionData.pagination?.hasMore);
+    renderTransactions();
     $('notifications-list').innerHTML = notificationData.notifications?.length ? notificationData.notifications.map(n => `<article class="notification-row ${n.read ? '' : 'unread'}"><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.body)}</p><small>${escapeHtml(new Date(n.createdAt).toLocaleString())}</small></article>`).join('') : '<p class="muted">No notifications yet.</p>';
+    $('loan-submit').disabled = member?.status !== 'verified';
+    $('loan-form-note').textContent = member?.status === 'verified'
+      ? 'Applications are reviewed by management. Approval does not disburse funds or guarantee a rate.'
+      : 'Membership verification is required before applying for a loan.';
+    const applications = loanData.applications || [];
+    $('loan-applications-list').innerHTML = applications.length ? applications.map(app => `<article class="notification-row">
+      <strong>${escapeHtml(app.reference)} · ${dollars(app.requestedAmountCents)}</strong>
+      <p>Status: <span class="status-pill">${escapeHtml(String(app.status).replaceAll('_',' '))}</span>${app.requestedTermMonths ? ` · ${escapeHtml(app.requestedTermMonths)} months requested` : ''}</p>
+      <p>${escapeHtml(app.purpose)}</p>
+      ${app.decisionReason ? `<p class="muted">Decision note: ${escapeHtml(app.decisionReason)}</p>` : ''}
+      <small>Submitted ${escapeHtml(new Date(app.submittedAt).toLocaleString())} · USD</small>
+      ${app.status === 'information_required' ? `<form class="loan-response-form stack top-gap" data-loan-id="${escapeHtml(app.id)}"><label>Additional information requested</label><p>${escapeHtml(app.informationRequested || "Please provide the information requested by the reviewer.")}</p><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>` : ''}
+    </article>`).join('') : '<p class="muted">No loan applications yet.</p>';
+
+    $('money-request-submit').disabled = member?.status !== 'verified';
+    $('money-request-form-note').textContent = member?.status === 'verified'
+      ? 'This creates a review request only. It does not initiate a transfer or settlement.'
+      : 'Membership verification is required before submitting a money request.';
+    const moneyRequests = moneyRequestData.requests || [];
+    $('money-requests-list').innerHTML = moneyRequests.length ? moneyRequests.map(request => `<article class="notification-row">
+      <strong>${escapeHtml(request.reference)} · ${dollars(request.amountCents)}</strong>
+      <p><span class="status-pill">${escapeHtml(String(request.status).replaceAll('_',' '))}</span> · ${escapeHtml(String(request.requestType).replaceAll('_',' '))}</p>
+      <p>${escapeHtml(request.memberNote)}</p>
+      ${request.decisionReason ? `<p class="muted">Decision note: ${escapeHtml(request.decisionReason)}</p>` : ''}
+      ${request.informationRequested ? `<p><strong>Additional information requested:</strong> ${escapeHtml(request.informationRequested)}</p>` : ''}
+      <small>Submitted ${escapeHtml(new Date(request.submittedAt).toLocaleString())} · ${escapeHtml(request.currency)}</small>
+      ${request.status === 'information_required' ? `<form class="money-request-response-form stack top-gap" data-request-id="${escapeHtml(request.id)}"><label>Your response</label><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>` : ''}
+    </article>`).join('') : '<p class="muted">No money requests yet.</p>';
+    const pools = poolData.pools || [];
+    $('funding-pools-list').innerHTML = pools.length ? pools.map(pool => {
+      const eligibility = Array.isArray(pool.eligibilityRequirements) ? pool.eligibilityRequirements : [];
+      const progress = Math.max(0, Math.min(100, Number(pool.progressPercent) || 0));
+      return `<article class="funding-pool-card">
+        <div class="section-head"><h3>${escapeHtml(pool.name)}</h3><span class="status-pill">${pool.synthetic ? 'Synthetic preview' : 'Published pool'}</span></div>
+        <p>${escapeHtml(pool.description)}</p>
+        <div class="funding-pool-metrics"><div><small>Verified progress</small><strong>${dollars(pool.verifiedAmountCents)}</strong></div><div><small>Funding target</small><strong>${dollars(pool.targetAmountCents)}</strong></div></div>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}" aria-label="Funding progress"><span style="width:${progress}%"></span></div>
+        <small>${progress}% of target · ${escapeHtml(pool.currency)}</small>
+        <p><strong>Dates:</strong> ${escapeHtml(pool.opensAt ? new Date(pool.opensAt).toLocaleDateString() : 'Not set')} – ${escapeHtml(pool.closesAt ? new Date(pool.closesAt).toLocaleDateString() : 'Not set')}</p>
+        <p><strong>Eligibility:</strong> ${escapeHtml(eligibility.length ? eligibility.join(', ') : 'Not configured')}</p>
+        <p><strong>Fees and terms:</strong> ${escapeHtml(pool.feesAndTerms || 'Not configured')}</p>
+        <p><strong>Risk disclosure:</strong> ${escapeHtml(pool.riskDisclosure || 'Disclosure not supplied; participation unavailable')}</p>
+        <p><strong>Return assumptions:</strong> ${escapeHtml(pool.returnAssumptions || 'No return assumption supplied')}</p>
+        <p><strong>Calculation methodology:</strong> ${escapeHtml(pool.calculationMethodology || 'No methodology supplied')}</p>
+        <p class="muted small">${escapeHtml(pool.participationStatus)}</p>
+        <button class="secondary" type="button" disabled>Participation unavailable</button>
+      </article>`;
+    }).join('') : '<p class="muted">No published funding pools are configured. Management must supply approved terms and disclosures before any pool can be published.</p>';
+
+
+  }
+  function renderTransactions(){
+    $('transactions-list').innerHTML = transactionRows.length ? `<table><thead><tr><th>Date</th><th>Type / description</th><th>Status</th><th>Amount</th></tr></thead><tbody>${transactionRows.map(t => `<tr><td>${escapeHtml(new Date(t.createdAt).toLocaleString())}</td><td><strong>${escapeHtml(t.memo || t.type)}</strong><small>${escapeHtml(t.reference)}</small></td><td><span class="status-pill">${escapeHtml(String(t.status).replaceAll('_',' '))}</span></td><td>${dollars(t.amountCents)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No transactions match this search.</p>';
+    $('transaction-page-status').textContent = transactionRows.length ? `Showing ${transactionRows.length} transaction(s)` : 'No results';
+    $('load-more-transactions').disabled = !transactionHasMore;
   }
   async function refresh() {
     try { await loadDashboard(); showMessage('dashboard-message','Account information refreshed.'); }
@@ -60,6 +133,47 @@
   }
   $('show-login').addEventListener('click', () => switchAuth(false));
   $('show-register').addEventListener('click', () => switchAuth(true));
+  $('show-reset-request').addEventListener('click', () => {
+    $('login-form').classList.add('hidden');
+    $('register-form').classList.add('hidden');
+    $('password-reset-form').classList.add('hidden');
+    $('reset-request-form').classList.remove('hidden');
+    $('show-login').classList.add('hidden');
+    $('show-register').classList.add('hidden');
+    showMessage('auth-message', '');
+  });
+  $('reset-request-back').addEventListener('click', () => switchAuth(false));
+  $('reset-request-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const result = await post('/auth/password-reset/request', { identifier: $('reset-identifier').value.trim() });
+      $('reset-request-form').classList.add('hidden');
+      $('login-form').classList.remove('hidden');
+      $('show-login').classList.remove('hidden');
+      $('show-register').classList.remove('hidden');
+      showMessage('auth-message', result.message || 'If an account matches, reset instructions will be sent.');
+    } catch (error) { showMessage('auth-message', error.message, true); }
+  });
+  $('password-reset-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if ($('reset-new-password').value !== $('reset-confirm-password').value) {
+      return showMessage('auth-message', 'The passwords do not match.', true);
+    }
+    try {
+      const result = await post('/auth/password-reset/complete', {
+        token: $('reset-token').value,
+        password: $('reset-new-password').value
+      });
+      $('password-reset-form').reset();
+      $('password-reset-form').classList.add('hidden');
+      $('login-form').classList.remove('hidden');
+      $('show-login').classList.remove('hidden');
+      $('show-register').classList.remove('hidden');
+      try { window.history.replaceState(null, '', '/member-portal.html'); } catch {}
+      showMessage('auth-message', result.message || 'Password reset complete. Sign in again.');
+    } catch (error) { showMessage('auth-message', error.message, true); }
+  });
+
   $('login-form').addEventListener('submit', async event => {
     event.preventDefault(); showMessage('auth-message','Signing in…');
     try { const data = await post('/auth/login',{identifier:$('login-identifier').value,password:$('login-password').value}); member=data.member; setAuthenticated(true); await refresh(); }
@@ -67,7 +181,7 @@
   });
   $('register-form').addEventListener('submit', async event => {
     event.preventDefault(); showMessage('auth-message','Submitting application…');
-    try { const data = await post('/auth/register',{fullName:$('register-name').value,email:$('register-email').value,password:$('register-password').value}); switchAuth(false); $('login-identifier').value=$('register-email').value; const memberNumber = data.member?.memberNumber ? ` Your member number is ${data.member.memberNumber}; save it for future sign-in.` : ''; showMessage('auth-message',(data.message || 'Application received. You can sign in to track it.') + memberNumber); }
+    try { const data = await post('/auth/register',{fullName:$('register-name').value,username:$('register-username').value,email:$('register-email').value,password:$('register-password').value}); switchAuth(false); $('login-identifier').value=data.member?.username || $('register-email').value; const memberNumber = data.member?.memberNumber ? ` Your member number is ${data.member.memberNumber}; save it separately from your username.` : '';  showMessage('auth-message',(data.message || 'Application received. You can sign in to track it.') + memberNumber); }
     catch(error) { showMessage('auth-message',error.message,true); }
   });
   $('logout-button').addEventListener('click', async () => {
@@ -75,6 +189,22 @@
     member=null; setAuthenticated(false); switchAuth(false);
   });
   $('refresh-button').addEventListener('click', refresh);
+  $('transaction-search').addEventListener('change', refresh);
+  $('clear-transaction-search').addEventListener('click', async () => { $('transaction-search').value = ''; await refresh(); });
+  $('load-more-transactions').addEventListener('click', async () => {
+    if (transactionOffset === null) return;
+    const button = $('load-more-transactions');
+    button.disabled = true;
+    try {
+      const page = await api(`/transactions?limit=30&offset=${transactionOffset}&search=${encodeURIComponent($('transaction-search').value.trim())}`);
+      transactionRows = transactionRows.concat(page.transactions || []);
+      transactionOffset = page.pagination?.nextOffset ?? null;
+      transactionHasMore = Boolean(page.pagination?.hasMore);
+      renderTransactions();
+    } catch (error) { showMessage('dashboard-message', error.message, true); }
+    finally { button.disabled = !transactionHasMore; }
+  });
+
   $('transfer-form').addEventListener('submit', async event => {
     event.preventDefault();
     const amountCents = Math.round(Number($('transfer-amount').value) * 100);
@@ -100,11 +230,101 @@
     try { const result = await post('/card/test-purchase',{merchant:$('purchase-merchant').value,amountCents:Math.round(Number($('purchase-amount').value)*100)}); showMessage('dashboard-message',result.message); }
     catch(error) { showMessage('dashboard-message',error.message,true); }
   });
+
+
+  $('money-request-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = $('money-request-submit');
+    button.disabled = true;
+    try {
+      const result = await post('/money-requests', {
+        requestType: $('money-request-type').value,
+        amountCents: Math.round(Number($('money-request-amount').value) * 100),
+        currency: 'USD',
+        note: $('money-request-note').value
+      });
+      $('money-request-form').reset();
+      showMessage('dashboard-message', result.message || 'Money request submitted for review.');
+      await refresh();
+    } catch (error) {
+      showMessage('dashboard-message', error.message, true);
+    } finally {
+      button.disabled = member?.status !== 'verified';
+    }
+  });
+  $('refresh-money-requests').addEventListener('click', refresh);
+  $('money-requests-list').addEventListener('submit', async event => {
+    const form = event.target.closest('.money-request-response-form');
+    if (!form) return;
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await post(`/money-requests/${form.dataset.requestId}/information`, { response: form.elements.response.value });
+      showMessage('dashboard-message', 'Your additional information was submitted for review.');
+      await refresh();
+    } catch (error) {
+      showMessage('dashboard-message', error.message, true);
+      button.disabled = false;
+    }
+  });
+  $('loan-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = $('loan-submit');
+    button.disabled = true;
+    try {
+      const body = {
+        requestedAmountCents: Math.round(Number($('loan-amount').value) * 100),
+        currency: 'USD',
+        requestedTermMonths: $('loan-term').value ? Number($('loan-term').value) : null,
+        purpose: $('loan-purpose').value
+      };
+      const result = await post('/loans/applications', body);
+      $('loan-form').reset();
+      showMessage('dashboard-message', result.message || 'Loan application submitted for review.');
+      await refresh();
+    } catch (error) {
+      showMessage('dashboard-message', error.message, true);
+    } finally {
+      button.disabled = member?.status !== 'verified';
+    }
+  });
+  $('refresh-loans').addEventListener('click', refresh);
+  $('loan-applications-list').addEventListener('submit', async event => {
+    const form = event.target.closest('.loan-response-form');
+    if (!form) return;
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await post(`/loans/applications/${form.dataset.loanId}/information`, {
+        response: form.elements.response.value
+      });
+      showMessage('dashboard-message', 'Your additional information was submitted for review.');
+      await refresh();
+    } catch (error) {
+      showMessage('dashboard-message', error.message, true);
+      button.disabled = false;
+    }
+  });
   $('read-notifications').addEventListener('click', async () => {
     try { await post('/notifications/mark-read',{}); await refresh(); }
     catch(error) { showMessage('dashboard-message',error.message,true); }
   });
   (async () => {
+    const resetToken = new URLSearchParams(window.location.search).get('resetToken');
+    if (resetToken) {
+      setAuthenticated(false);
+      $('login-form').classList.add('hidden');
+      $('register-form').classList.add('hidden');
+      $('reset-request-form').classList.add('hidden');
+      $('password-reset-form').classList.remove('hidden');
+      $('show-login').classList.add('hidden');
+      $('show-register').classList.add('hidden');
+      $('reset-token').value = resetToken;
+      try { window.history.replaceState(null, '', '/member-portal.html'); } catch {}
+      return;
+    }
     try { const data = await api('/auth/me'); member = data.member; setAuthenticated(true); await refresh(); }
     catch { setAuthenticated(false); }
   })();

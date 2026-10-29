@@ -31,6 +31,9 @@ export async function withTx(fn) {
 }
 
 export async function migrate(log = () => {}) {
+  if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL must be configured explicitly in production.');
+  }
   await query(`CREATE TABLE IF NOT EXISTS schema_migrations (
     name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   const applied = new Set((await query('SELECT name FROM schema_migrations')).rows.map(r => r.name));
