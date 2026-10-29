@@ -20,6 +20,10 @@
   function switchAuth(register) {
     $('login-form').classList.toggle('hidden', register);
     $('register-form').classList.toggle('hidden', !register);
+    $('reset-request-form').classList.add('hidden');
+    $('password-reset-form').classList.add('hidden');
+    $('show-login').classList.remove('hidden');
+    $('show-register').classList.remove('hidden');
     $('show-login').classList.toggle('active', !register);
     $('show-register').classList.toggle('active', register);
     showMessage('auth-message', '');
@@ -118,6 +122,47 @@
   }
   $('show-login').addEventListener('click', () => switchAuth(false));
   $('show-register').addEventListener('click', () => switchAuth(true));
+  $('show-reset-request').addEventListener('click', () => {
+    $('login-form').classList.add('hidden');
+    $('register-form').classList.add('hidden');
+    $('password-reset-form').classList.add('hidden');
+    $('reset-request-form').classList.remove('hidden');
+    $('show-login').classList.add('hidden');
+    $('show-register').classList.add('hidden');
+    showMessage('auth-message', '');
+  });
+  $('reset-request-back').addEventListener('click', () => switchAuth(false));
+  $('reset-request-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const result = await post('/auth/password-reset/request', { identifier: $('reset-identifier').value.trim() });
+      $('reset-request-form').classList.add('hidden');
+      $('login-form').classList.remove('hidden');
+      $('show-login').classList.remove('hidden');
+      $('show-register').classList.remove('hidden');
+      showMessage('auth-message', result.message || 'If an account matches, reset instructions will be sent.');
+    } catch (error) { showMessage('auth-message', error.message, true); }
+  });
+  $('password-reset-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    if ($('reset-new-password').value !== $('reset-confirm-password').value) {
+      return showMessage('auth-message', 'The passwords do not match.', true);
+    }
+    try {
+      const result = await post('/auth/password-reset/complete', {
+        token: $('reset-token').value,
+        password: $('reset-new-password').value
+      });
+      $('password-reset-form').reset();
+      $('password-reset-form').classList.add('hidden');
+      $('login-form').classList.remove('hidden');
+      $('show-login').classList.remove('hidden');
+      $('show-register').classList.remove('hidden');
+      try { window.history.replaceState(null, '', '/member-portal.html'); } catch {}
+      showMessage('auth-message', result.message || 'Password reset complete. Sign in again.');
+    } catch (error) { showMessage('auth-message', error.message, true); }
+  });
+
   $('login-form').addEventListener('submit', async event => {
     event.preventDefault(); showMessage('auth-message','Signing in…');
     try { const data = await post('/auth/login',{identifier:$('login-identifier').value,password:$('login-password').value}); member=data.member; setAuthenticated(true); await refresh(); }
@@ -240,6 +285,19 @@
     catch(error) { showMessage('dashboard-message',error.message,true); }
   });
   (async () => {
+    const resetToken = new URLSearchParams(window.location.search).get('resetToken');
+    if (resetToken) {
+      setAuthenticated(false);
+      $('login-form').classList.add('hidden');
+      $('register-form').classList.add('hidden');
+      $('reset-request-form').classList.add('hidden');
+      $('password-reset-form').classList.remove('hidden');
+      $('show-login').classList.add('hidden');
+      $('show-register').classList.add('hidden');
+      $('reset-token').value = resetToken;
+      try { window.history.replaceState(null, '', '/member-portal.html'); } catch {}
+      return;
+    }
     try { const data = await api('/auth/me'); member = data.member; setAuthenticated(true); await refresh(); }
     catch { setAuthenticated(false); }
   })();
