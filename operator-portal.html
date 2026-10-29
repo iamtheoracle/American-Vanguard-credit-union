@@ -20,6 +20,18 @@
         <section class="panel wide"><div class="section-head"><h2>New loan application alerts</h2><button class="text-button" id="refresh-loan-alerts" type="button">Refresh alerts</button></div><p class="muted small">Acknowledge alerts to record that operations has received the submission. Loan approval does not disburse funds.</p><div id="loan-alert-list" class="table-wrap"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Approval queue</h2><button class="text-button" id="refresh-operator" type="button">Refresh all</button></div><div id="approval-list" class="table-wrap"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Membership tiers</h2><span class="tag">AUTOMATIC + AUDITED OVERRIDES</span></div><form id="tier-filter" class="filter-row"><input id="tier-search" placeholder="Search name or email" aria-label="Search members"><select id="tier-filter-value" aria-label="Filter by tier"><option value="">All tiers</option><option value="new_member">New Member</option><option value="active_member">Active Member</option><option value="established_member">Established Member</option><option value="priority_service">Priority Service</option><option value="review_required">Review Required</option></select><button class="secondary" type="submit">Filter</button></form><div id="tier-list" class="table-wrap"></div></section>
+        <section class="panel wide"><div class="section-head"><h2>Legacy migration staging</h2><span class="tag">STAGING ONLY</span></div>
+          <p class="muted small">Paste an authorized JSON export containing transaction rows. This validates and stages records only; it does not import balances, post transactions, or permit cutover. Raw source files and account mappings must still be authorized and reconciled.</p>
+          <form id="migration-form" class="stack">
+            <label for="migration-source-system">Source system</label><input id="migration-source-system" maxlength="120" required placeholder="Legacy core system">
+            <label for="migration-file-name">Source export filename</label><input id="migration-file-name" maxlength="255" required placeholder="authorized-export.json">
+            <label for="migration-json">Transaction rows (JSON array)</label><textarea id="migration-json" rows="7" required placeholder='[{"sourceTransactionId":"tx-1","sourceAccountId":"acct-1","occurredAt":"2024-01-01T12:00:00Z","amountMinor":-1250,"currency":"USD","status":"posted"}]'></textarea>
+            <button id="migration-validate" class="primary" type="submit">Validate and stage batch</button>
+          </form>
+          <pre id="migration-result" class="migration-result" aria-live="polite"></pre>
+          <div class="section-head"><h3>Recent migration batches</h3><button class="text-button" id="refresh-migrations" type="button">Refresh</button></div>
+          <div id="migration-batches" class="table-wrap"></div>
+        </section>
         <section class="panel wide"><div class="section-head"><h2>Email delivery history</h2><span id="gmail-config-status" class="tag">Checking Gmail setup…</span></div><p class="muted small">Delivery records distinguish sent, skipped (not configured), and failed attempts.</p><div id="email-log" class="table-wrap"></div></section>
       </div>
     </section>
