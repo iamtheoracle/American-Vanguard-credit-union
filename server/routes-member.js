@@ -10,7 +10,7 @@ import { submitMemberTransfer, submitMemberDeposit, freezeCard, testCardPurchase
   createSupportCase, lookupIdempotent } from './services-member.js';
 import { runChat, renderReply, activeProvider } from './ai/index.js';
 import { submitMemberTransfer as svcTransfer } from './services-member.js';
-import { notifyMember } from './notifications.js';
+import { notifyMember, queueMemberNotification } from './notifications.js';
 import { recalculateMemberTier } from './membership-tiers.js';
 
 const router = express.Router();
@@ -28,20 +28,28 @@ router.post('/auth/register', async (req, res, next) => {
     const existing = await findMemberByEmail(email);
     if (existing) return res.status(409).json({ error: 'An application with this email already exists' });
     const hash = await hashPassword(password);
-    const { rows } = await query(
-      `INSERT INTO members (email, password_hash, full_name, status, application)
-       VALUES (lower($1),$2,$3,'pending',$4) RETURNING id, member_number AS "memberNumber", email, full_name, status, created_at`,
-      [email, hash, name, JSON.stringify({ channel: 'web', submittedAt: new Date().toISOString() })]);
-    const member = rows[0];
-    await query(
-      `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
-       VALUES ('membership', $1, $2, 'pending', 'operator', $1, 'member')`, [member.id,
-      JSON.stringify({ memberId: member.id, email: member.email, fullName: member.full_name })]);
+    const member = await withTx(async client => {
+      const { rows } = await client.query(
+        `INSERT INTO members (email, password_hash, full_name, status, application)
+         VALUES (lower($1),$2,$3,'pending',$4)
+         RETURNING id, member_number AS "memberNumber", email, full_name, status, created_at`,
+        [email, hash, name, JSON.stringify({ channel: 'web', submittedAt: new Date().toISOString() })]);
+      const created = rows[0];
+      await client.query(
+        `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
+         VALUES ('membership', $1, $2, 'pending', 'operator', $1, 'member')`,
+        [created.id, JSON.stringify({ memberId: created.id, email: created.email, fullName: created.full_name })]);
+      await queueMemberNotification(client, {
+        memberId: created.id,
+        eventType: 'membership.application_received',
+        eventKey: `membership-application:${created.id}:received`,
+        title: 'Membership application received',
+        body: 'Your membership application has been received and is awaiting review.',
+        subject: 'We received your AVCU membership application'
+      });
+      return created;
+    });
     await recalculateMemberTier(member.id).catch(error => console.error('[avcu] initial tier calculation failed:', error.code || error.name));
-    await notifyMember({ memberId: member.id, eventType: 'membership.application_received',
-      eventKey: `membership-application:${member.id}:received`,
-      title: 'Membership application received', body: 'Your membership application has been received and is awaiting review.',
-      subject: 'We received your AVCU membership application' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
     res.status(201).json({ member: { id: member.id, memberNumber: String(member.memberNumber), email: member.email, fullName: member.full_name, status: member.status },
       message: 'Application received. Sign in to track its status.' });
   } catch (error) { next(error); }
