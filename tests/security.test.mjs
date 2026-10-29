@@ -26,3 +26,11 @@ test("admin API enforces staff role server-side and requires a note", async () =
   assert.match(api, /verification_review_events/);
   assert.match(api, /FOR UPDATE/);
 });
+test("public build excludes backend function source and database migrations", async () => {
+  const config = await read("../netlify.toml");
+  assert.match(config, /publish = "public"/);
+  const memberApi = await read("../netlify/functions/member-api.mjs");
+  const adminApi = await read("../netlify/functions/admin-reviews.mjs");
+  assert.match(memberApi, /origin !== new URL\(req.url\)\.origin/);
+  assert.match(adminApi, /user\.roles\.includes\("admin"\)/);
+});
