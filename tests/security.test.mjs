@@ -7,22 +7,22 @@ const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 test("member interface contains no fabricated financial account data", async () => {
   const html = await read("../index.html");
   const app = await read("../app.js");
-  assert.doesNotMatch(html + app, /12,480\\.65|4826|Jordan Hale|demo ledger|simulated transfer/i);
+  assert.doesNotMatch(html + app, /12,480\.65|4826|Jordan Hale|demo ledger|simulated transfer/i);
   assert.match(html, /verification/i);
 });
 
 test("member API binds records to the authenticated identity and stores pending requests", async () => {
   const api = await read("../netlify/functions/member-api.mjs");
   assert.match(api, /getUser/);
-  assert.match(api, /user\\.id/);
+  assert.match(api, /user\.id/);
   assert.match(api, /'pending'/);
   assert.match(api, /BEGIN/);
 });
 
 test("admin API enforces staff role server-side and requires a note", async () => {
   const api = await read("../netlify/functions/admin-reviews.mjs");
-  assert.match(api, /user\\.roles\\.includes\\("admin"\\)/);
-  assert.match(api, /note\\.length < 3/);
+  assert.match(api, /user\.roles\.includes\("admin"\)/);
+  assert.match(api, /note\.length < 3/);
   assert.match(api, /verification_review_events/);
   assert.match(api, /FOR UPDATE/);
 });
@@ -32,8 +32,8 @@ test("public build excludes backend function source and database migrations", as
   assert.match(config, /publish = "public"/);
   const memberApi = await read("../netlify/functions/member-api.mjs");
   const adminApi = await read("../netlify/functions/admin-reviews.mjs");
-  assert.match(memberApi, /origin !== new URL\\(req.url\\)\\.origin/);
-  assert.match(adminApi, /user\\.roles\\.includes\\("admin"\\)/);
+  assert.match(memberApi, /origin !== new URL\(req.url\)\.origin/);
+  assert.match(adminApi, /user\.roles\.includes\("admin"\)/);
 });
 
 test("house wire remains an uninitiated external-wire demo", async () => {
@@ -42,9 +42,9 @@ test("house wire remains an uninitiated external-wire demo", async () => {
   assert.match(brief, /Judith Anne Elizabeth Shearer/);
   assert.match(brief, /Goldenwest Credit Union/);
   assert.match(brief, /Planned \/ not initiated/);
-  assert.match(brief, /Currency: \\*\\*Not supplied/);
+  assert.match(brief, /Currency: \*\*Not supplied/);
   assert.match(brief, /no live wire or receiving-account credit can be performed/i);
-  assert.match(brief, /15,825\\.69 − 5,000\\.00 = 10,825\\.69/);
+  assert.match(brief, /15,825\.69 − 5,000\.00 = 10,825\.69/);
 });
 
 test("external recipient credit requires receiving-bank confirmation and two-person manual review", async () => {
