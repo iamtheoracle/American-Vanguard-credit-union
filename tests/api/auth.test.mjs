@@ -10,7 +10,7 @@ test('authentication and session lifecycle', async t => {
   const reg = await api(env.base, '/api/auth/register', {
     method: 'POST', body: { email: 'newmember@avcu.demo', username: 'alex_rivera', password: 'Str0ngPassphrase!', fullName: 'Alex Rivera' }
   });
-  assert.equal(reg.status, 201);
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
   assert.equal(reg.data.member.status, 'pending');
   assert.match(reg.data.member.memberNumber, /^\d{10}$/, 'registration assigns a 10-digit numeric member ID');
   assert.equal(reg.data.member.username, 'alex_rivera');
