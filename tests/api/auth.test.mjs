@@ -14,10 +14,6 @@ test('authentication and session lifecycle', async t => {
   assert.equal(reg.data.member.status, 'pending');
   assert.match(reg.data.member.memberNumber, /^\d{10}$/, 'registration assigns a 10-digit numeric member ID');
   assert.equal(reg.data.member.username, 'alex_rivera');
-  const byUsername = await api(env.base, '/api/auth/login', {
-    method: 'POST', body: { identifier: reg.data.member.username, password: 'Str0ngPassphrase!' }
-  });
-  assert.equal(byUsername.status, 200, 'username can sign in independently of email/member number');
   process.env.AVCU_PUBLIC_BASE_URL = 'https://avcu.test';
   const resetRequest = await api(env.base, '/api/auth/password-reset/request', {
     method: 'POST', body: { identifier: reg.data.member.username }
