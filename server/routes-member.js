@@ -11,7 +11,7 @@ import { submitMemberTransfer, submitMemberDeposit, freezeCard, testCardPurchase
   createSupportCase, lookupIdempotent } from './services-member.js';
 import { runChat, renderReply, activeProvider } from './ai/index.js';
 import { submitMemberTransfer as svcTransfer } from './services-member.js';
-import { notifyMember, queueMemberNotification } from './notifications.js';
+import { notifyMember, queueMemberNotification, queueOperationsEmail } from './notifications.js';
 import { recalculateMemberTier } from './membership-tiers.js';
 
 const router = express.Router();
@@ -267,6 +267,23 @@ router.post('/loans/applications', memberAuth, async (req, res, next) => {
         `INSERT INTO operations_alerts (alert_type, loan_application_id)
          VALUES ('loan_application_submitted',$1) ON CONFLICT (alert_type, loan_application_id) DO NOTHING`,
         [created.id]);
+      const reviewPath = process.env.AVCU_PUBLIC_BASE_URL
+        ? new URL('/operator-portal.html', process.env.AVCU_PUBLIC_BASE_URL).toString()
+        : '/operator-portal.html';
+      await queueOperationsEmail(client, {
+        eventKey: `loan-application-operations:${created.id}:submitted`,
+        eventType: 'loan.application_submitted',
+        title: 'New loan application submitted',
+        subject: `New AVCU loan application ${reference}`,
+        body: [
+          `Reference: ${reference}`,
+          `Submitted at (UTC): ${new Date(created.submitted_at).toISOString()}`,
+          `Requested amount: ${(amountCents / 100).toFixed(2)} ${currency}`,
+          termMonths ? `Requested term: ${termMonths} months` : null,
+          `Review workspace: ${reviewPath}`,
+          'Sign in with your authorized staff account to review the application. No funds have been disbursed.'
+        ].filter(Boolean).join('\\n')
+      });
       await queueMemberNotification(client, {
         memberId: req.member.id,
         eventType: 'loan.application_received',
