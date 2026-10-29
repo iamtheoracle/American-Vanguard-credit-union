@@ -49,7 +49,19 @@
         </form></section>
         <section class="panel"><h2>Deposits</h2><p class="muted">Unavailable — a verified deposit-capture provider is not connected. No deposit can be submitted from this portal.</p><button class="secondary" type="button" disabled>Deposits unavailable</button></section>
         <section class="panel"><h2>Debit card</h2><p class="muted">No live card issuer or processor is connected. Card status shown here is not a live issuer status. Use your card issuer's official contact details for urgent card issues.</p><button class="secondary" type="button" disabled>Card controls unavailable</button></section>
-        <section class="panel wide"><div class="section-head"><h2>Recent transactions</h2><span class="tag">API DATA</span></div><div id="transactions-list" class="table-wrap"></div></section>
+        <section class="panel wide"><div class="section-head"><div><h2>Activity &amp; transactions</h2><p class="muted small">Search and filter your recorded activity. Entries are application records, not proof of external settlement.</p></div><span class="tag">API DATA</span></div>
+          <form id="activity-filter-form" class="filter-row" role="search">
+            <label class="sr-only" for="activity-search">Search activity</label><input id="activity-search" type="search" maxlength="80" placeholder="Search description or reference">
+            <label class="sr-only" for="activity-type">Transaction type</label><select id="activity-type"><option value="">All types</option><option value="transfer">Transfer</option><option value="bill_pay">Bill payment</option><option value="deposit">Deposit</option><option value="card_auth">Card authorization (legacy records)</option></select>
+            <label class="sr-only" for="activity-status">Status</label><select id="activity-status"><option value="">All statuses</option><option value="posted">Posted</option><option value="completed">Completed</option><option value="pending_approval">Pending review</option><option value="pending">Pending</option><option value="rejected">Rejected</option><option value="failed">Failed</option></select>
+            <label class="sr-only" for="activity-from">From date</label><input id="activity-from" type="date" aria-label="From date">
+            <label class="sr-only" for="activity-to">To date</label><input id="activity-to" type="date" aria-label="To date">
+            <button class="secondary" type="submit">Apply filters</button><button class="text-button" id="activity-reset" type="button">Reset</button>
+          </form>
+          <p id="activity-message" class="notice" role="status" aria-live="polite"></p>
+          <div id="transactions-list" class="table-wrap" aria-live="polite"></div>
+          <div class="activity-pagination"><span id="activity-page-label" class="muted small">Loading activity…</span><div><button id="activity-prev" class="secondary" type="button" disabled>Previous</button><button id="activity-next" class="secondary" type="button" disabled>Next</button></div></div>
+        </section>
         <section class="panel wide"><div class="section-head"><h2>Notifications</h2><button id="read-notifications" class="text-button" type="button">Mark all read</button></div><div id="notifications-list" class="notification-list"></div></section>
       </div>
       <p class="disclaimer">Online services and account records depend on the configured system and your authorization. Deposit-taking, payment-network access, card processing, and financial-institution status are not established by this software. Do not use this portal to represent that real funds are held or moved.</p>

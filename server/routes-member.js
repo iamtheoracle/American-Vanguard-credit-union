@@ -10,7 +10,7 @@ import { submitMemberTransfer, createSupportCase, lookupIdempotent } from './ser
 import { runChat, renderReply, activeProvider } from './ai/index.js';
 import { submitMemberTransfer as svcTransfer } from './services-member.js';
 import { notifyMember } from './notifications.js';
-import { recalculateMemberTier } from './membership-tiers.js';
+import { recalculateMemberTier, MEMBERSHIP_TIERS, TIER_POLICY } from './membership-tiers.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -76,10 +76,42 @@ router.get('/auth/me', memberAuth, (req, res) => {
 
 router.get('/membership-tier', memberAuth, async (req, res, next) => {
   try {
-    const tier = await recalculateMemberTier(req.member.id);
-    res.json({ membership: tier });
-  } catch (error) { next(error); }
+    const membership = await recalculateMemberTier(req.member.id);
+    if (!membership) return res.status(404).json({ error: 'Membership record not found' });
 
+    // Progress is informational only: it does not promise credit, account access,
+    // or any financial benefit. Requirements come from the same centralized tier policy.
+    const order = ['new_member', 'active_member', 'established_member', 'priority_service'];
+    const currentIndex = order.indexOf(membership.tier);
+    const nextTier = !membership.overridden && currentIndex >= 0 && currentIndex < order.length - 1 ? order[currentIndex + 1] : null;
+    const nextRequirements = nextTier === 'active_member'
+      ? [{ key: 'transactions', label: 'Qualifying transactions in the last 90 days', current: membership.activity90Days, required: TIER_POLICY.activeTransactions90Days }]
+      : nextTier === 'established_member'
+        ? [
+            { key: 'transactions', label: 'Qualifying transactions in the last 90 days', current: membership.activity90Days, required: TIER_POLICY.establishedTransactions90Days },
+            { key: 'age', label: 'Membership age in days', current: membership.accountAgeDays, required: TIER_POLICY.establishedMinimumAgeDays }
+          ]
+        : nextTier === 'priority_service'
+          ? [
+              { key: 'transactions', label: 'Qualifying transactions in the last 90 days', current: membership.activity90Days, required: TIER_POLICY.priorityTransactions90Days },
+              { key: 'age', label: 'Membership age in days', current: membership.accountAgeDays, required: TIER_POLICY.priorityMinimumAgeDays }
+            ] : [];
+    const progressPercent = nextRequirements.length
+      ? Math.round(nextRequirements.reduce((sum, item) => sum + Math.min(item.current / item.required, 1), 0) / nextRequirements.length * 100)
+      : 100;
+    res.json({ membership, progress: {
+      currentTier: membership.label,
+      nextTier: nextTier ? MEMBERSHIP_TIERS[nextTier] : null,
+      requirements: nextRequirements.map(item => ({ ...item, remaining: Math.max(0, item.required - item.current) })),
+      percent: membership.tier === 'review_required' ? 0 : membership.overridden ? null : progressPercent,
+      note: membership.tier === 'review_required'
+        ? 'Membership verification is required before activity-based tier progress can be earned.'
+        : membership.overridden
+          ? 'This tier was assigned by an operator. Automatic tier progress is not shown while an override is active.'
+          : nextTier ? 'Progress is based on recorded activity and membership age; it does not guarantee approval for any financial product.'
+            : 'You are at the highest activity-based service tier.'
+    }});
+  } catch (error) { next(error); }
 });
 
 // ---- accounts & transactions ------------------------------------------------
@@ -94,11 +126,24 @@ router.get('/accounts', memberAuth, async (req, res, next) => {
 
 router.get('/transactions', memberAuth, async (req, res, next) => {
   try {
-    const { search, type, limit = '50' } = req.query;
-    const capped = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const { search, type, status, from, to, limit = '30', offset = '0' } = req.query;
+    const capped = Math.min(Math.max(parseInt(limit, 10) || 30, 1), 100);
+    const pageOffset = Math.min(Math.max(parseInt(offset, 10) || 0, 0), 100000);
+    const validDate = value => {
+      if (!value) return true;
+      if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+      const parsed = new Date(`${value}T00:00:00Z`);
+      return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+    };
+    if (!validDate(from) || !validDate(to) || (from && to && from > to)) {
+      return res.status(400).json({ error: 'Use valid from/to dates in YYYY-MM-DD format; from must not be after to.' });
+    }
     const params = [req.member.id];
     let where = 'a.member_id = $1';
-    if (type) { params.push(String(type)); where += ` AND t.type = $${params.length}`; }
+    if (type) { params.push(String(type).slice(0, 40)); where += ` AND t.type = $${params.length}`; }
+    if (status) { params.push(String(status).slice(0, 40)); where += ` AND t.status = $${params.length}`; }
+    if (from) { params.push(from); where += ` AND t.created_at >= $${params.length}::date`; }
+    if (to) { params.push(to); where += ` AND t.created_at < ($${params.length}::date + INTERVAL '1 day')`; }
     if (search) {
       params.push(`%${String(search).slice(0, 80)}%`);
       where += ` AND (t.memo ILIKE $${params.length} OR t.payee ILIKE $${params.length} OR t.reference ILIKE $${params.length})`;
@@ -112,8 +157,11 @@ router.get('/transactions', memberAuth, async (req, res, next) => {
        LEFT JOIN accounts fa ON fa.id = t.from_account_id
        LEFT JOIN accounts ta ON ta.id = t.to_account_id
        WHERE ${where}
-       ORDER BY t.created_at DESC LIMIT ${capped}`, params);
-    res.json({ transactions: rows.map(row => ({ ...row, amountCents: Number(row.amountCents) })) });
+       ORDER BY t.created_at DESC, t.id DESC LIMIT ${capped + 1} OFFSET ${pageOffset}`, params);
+    const hasMore = rows.length > capped;
+    if (hasMore) rows.pop();
+    res.json({ transactions: rows.map(row => ({ ...row, amountCents: Number(row.amountCents) })),
+      pagination: { limit: capped, offset: pageOffset, hasMore, nextOffset: hasMore ? pageOffset + rows.length : null } });
   } catch (error) { next(error); }
 });
 
