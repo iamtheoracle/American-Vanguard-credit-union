@@ -220,7 +220,7 @@
   }
 
   function renderAccountGuidance() {
-    const selected = [$('#transfer-from')?.value, $('#transfer-to')?.value, $('#deposit-account')?.value].filter(Boolean);
+    const selected = [$('#transfer-from')?.value, $('#transfer-to')?.value].filter(Boolean);
     const messages = {
       ira: 'Traditional IRA is illustrative only. This demo does not model tax, contribution, eligibility, or withdrawal rules.',
       certificate: 'Share Certificate is illustrative only. This demo does not model maturity dates, early-withdrawal penalties, or actual certificate terms.',
