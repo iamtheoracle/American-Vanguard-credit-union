@@ -201,8 +201,9 @@ router.get('/accounts', memberAuth, async (req, res, next) => {
 
 router.get('/transactions', memberAuth, async (req, res, next) => {
   try {
-    const { search, type, limit = '50' } = req.query;
+    const { search, type, limit = '50', offset = '0' } = req.query;
     const capped = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const start = Math.min(Math.max(parseInt(offset, 10) || 0, 0), 100000);
     const params = [req.member.id];
     let where = 'a.member_id = $1';
     if (type) { params.push(String(type)); where += ` AND t.type = $${params.length}`; }
@@ -219,8 +220,10 @@ router.get('/transactions', memberAuth, async (req, res, next) => {
        LEFT JOIN accounts fa ON fa.id = t.from_account_id
        LEFT JOIN accounts ta ON ta.id = t.to_account_id
        WHERE ${where}
-       ORDER BY t.created_at DESC LIMIT ${capped}`, params);
-    res.json({ transactions: rows.map(row => ({ ...row, amountCents: Number(row.amountCents) })) });
+       ORDER BY t.created_at DESC LIMIT ${capped + 1} OFFSET ${start}`, params);
+    const hasMore = rows.length > capped;
+    const transactions = rows.slice(0, capped).map(row => ({ ...row, amountCents: Number(row.amountCents) }));
+    res.json({ transactions, pagination: { limit: capped, offset: start, hasMore, nextOffset: hasMore ? start + transactions.length : null } });
   } catch (error) { next(error); }
 });
 
