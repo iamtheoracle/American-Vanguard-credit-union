@@ -2,8 +2,8 @@
 'use strict';
 const RK='avcu.workflow.v1', MK='avcu.member.v1';
 const A={draft:'Share Draft (Checking)',primary:'Primary Share (Savings)',market:'Money Market',holiday:'Holiday Club',business:'Business Operating Account',ira:'Traditional IRA',certificate:'Share Certificate',retirement401k:'401(k) Retirement'};
-const T={'internal-transfer':'Internal account transfer','bill-payment':'Bill payment','wire-transfer':'Wire transfer',zelle:'Zelle payment request',fx:'Foreign exchange (FX)',withdrawal:'Withdrawal',ira:'IRA contribution / withdrawal','401k':'401(k) rollover / retirement request','check-deposit':'Check deposit'};
-const external=new Set(['bill-payment','wire-transfer','zelle','fx','withdrawal','ira','401k','check-deposit']);
+const T={'internal-transfer':'Internal account transfer','bill-payment':'Bill payment','wire-transfer':'Wire transfer',zelle:'Zelle payment request',fx:'Foreign exchange (FX)',withdrawal:'Withdrawal',ira:'IRA contribution / withdrawal','401k':'401(k) rollover / retirement request','check-deposit':'Check deposit','card-authorization':'Card purchase authorization'};
+const external=new Set(['bill-payment','wire-transfer','zelle','fx','withdrawal','ira','401k','check-deposit','card-authorization']);
 let requests=load(), files=new Map();
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -20,7 +20,7 @@ function create(d,f){
  if(!validAmount(amount))return {error:'Enter a positive amount with no more than two decimal places.'};
  if(!note||note.length>180)return {error:'Enter a purpose or reference (maximum 180 characters).'};
  if(type==='internal-transfer'&&(!A[to]||to===from))return {error:'Choose two different accounts.'};
- if(['bill-payment','wire-transfer','zelle','withdrawal','fx','ira','401k'].includes(type)&&!recipient)return {error:'Enter the recipient, payee, or institution name.'};
+ if(['bill-payment','wire-transfer','zelle','withdrawal','fx','ira','401k','card-authorization'].includes(type)&&!recipient)return {error:'Enter the recipient, payee, or institution name.'};
  if(['wire-transfer','withdrawal'].includes(type)&&!destination)return {error:'Enter the destination details required for review.'};
  if(type==='check-deposit'&&(!f?.front||!f?.back))return {error:'Capture or select both the front and back of the check.'};
  const now=new Date().toISOString(),r={id:uid(),type,typeLabel:T[type],from,to:type==='internal-transfer'?to:'',recipient,destination,currency:String(d.currency||'USD'),amountCents:Math.round(amount*100),note,status:'pending-approval',createdAt:now,updatedAt:now,operatorNote:'',providerState:'not-connected',providerLookup:type==='zelle'?'unavailable-without-provider':null,checkImages:type==='check-deposit'?{frontName:f.front.name,backName:f.back.name}:null,audit:[{at:now,actor:'Member',action:'Submitted for approval'}]};
@@ -85,6 +85,7 @@ function review(e){
  const p=e.target.closest('[data-preview]');if(p){const f=files.get(p.dataset.preview);if(!f)return alert('Images are not available in this session.');const urls=[URL.createObjectURL(f.front),URL.createObjectURL(f.back)];const w=window.open('','_blank');if(!w){urls.forEach(URL.revokeObjectURL);return alert('Allow the image review window and retry.')}w.document.write('<title>Check review</title><h1>Front of check</h1><img style="max-width:95%" src="'+urls[0]+'"><h1>Back of check</h1><img style="max-width:95%" src="'+urls[1]+'"><p>Session-only images.</p>');w.document.close()}
 }
 function init(){
+ document.addEventListener('click',e=>{const b=e.target.closest('#simulate-purchase');if(!b)return;e.preventDefault();e.stopImmediatePropagation();const amount=$('purchase-amount')?.value,merchant=String($('purchase-merchant')?.value||'').trim();let s=null;try{s=JSON.parse(localStorage.getItem(MK)||'null')}catch{}if(s?.frozen){alert('This card is frozen. The authorization request was not submitted.');return}const out=create({type:'card-authorization',from:'draft',recipient:merchant,amount,note:'Card purchase authorization request for '+merchant});if(out.error){alert(out.error);return}render();if($('live-announcer'))$('live-announcer').textContent='Card authorization request submitted for approval.';if($('toast-region'))$('toast-region').textContent='Purchase authorization request submitted for approval. No merchant authorization has occurred.';window.setAVCUView?.('operations')},true);
  ['workflow-form','transfer-form','deposit-form'].forEach(k=>$(k)?.addEventListener('submit',submit,true));
  $('workflow-type')?.addEventListener('change',fields);$('check-front')?.addEventListener('change',()=>preview('check-front','check-front-preview','Front'));$('check-back')?.addEventListener('change',()=>preview('check-back','check-back-preview','Back'));
  $('workflow-member-queue')?.addEventListener('click',review);$('workflow-operator-queue')?.addEventListener('click',review);fields();render();window.renderWorkflowWorkspace=render;
