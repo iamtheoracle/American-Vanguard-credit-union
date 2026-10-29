@@ -539,7 +539,7 @@ router.post('/operator/migrations/validate', ...guard('management', 'operator'),
             typeof row.description === 'string' ? row.description.slice(0, 2000) : '',
             typeof row.reference === 'string' ? row.reference.slice(0, 250) : null,
             accepted ? 'accepted' : 'exception', accepted ? null : (exception?.code || 'unknown_exception'),
-            JSON.stringify(exception?.fields || []), JSON.stringify(row)]);
+            JSON.stringify(exception?.fields || []), JSON.stringify(raw ?? null)]);
       }
       await audit(client, {
         actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
@@ -574,6 +574,11 @@ router.get('/operator/migrations/:id', ...guard('management', 'operator', 'audit
       `SELECT row_number AS "rowNumber", exception_code AS code, exception_fields AS fields, raw_record AS "rawRecord"
        FROM migration_staged_transactions WHERE batch_id = $1 AND validation_status = 'exception'
        ORDER BY row_number LIMIT 100`, [req.params.id]);
+    await audit(null, {
+      actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
+      action: 'migration.batch_viewed', entityType: 'migration_batch', entityId: req.params.id,
+      metadata: { exceptionCount: exceptions.rows.length }
+    });
     res.json({ batch: rows[0], exceptions: exceptions.rows, cutoverAllowed: false });
   } catch (error) { next(error); }
 });
