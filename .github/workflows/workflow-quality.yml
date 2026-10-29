@@ -1,0 +1,26 @@
+name: AVCU Workflow Quality
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+concurrency:
+  group: avcu-workflow-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate JavaScript syntax and workflow regression tests
+        run: npm run check
