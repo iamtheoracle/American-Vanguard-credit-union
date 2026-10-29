@@ -123,7 +123,7 @@ router.post('/operator/approvals/:id/decide', ...guard('management', 'operator')
         const memberId = owner.rows[0].member_id;
         await recalculateMemberTier(memberId).catch(() => {});
         await notifyMember({ memberId, eventType: 'transaction.approval_decided',
-          eventKey: `transaction-approval:${result.approval.id}:${result.approval.status}`,
+          eventKey: `transaction-approval:${result.approval.id}:${result.approval.status}:${memberId}`,
           title: 'Transaction status update',
           body: `A transaction review was ${result.approval.status}. Reference: ${result.approval.id}.`,
           subject: 'AVCU transaction status update' }).catch(error => console.error('[avcu] notification failed:', error.code || error.name));
