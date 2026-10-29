@@ -44,6 +44,8 @@ export function validateRequest(body) {
   if (!types.has(type) || !accounts.has(source)) return { error:'Choose a supported request type and source account.' };
   if (!Number.isSafeInteger(amountCents) || amountCents < 1 || amountCents > 100000000) return { error:'Amount must be a positive, valid cent value within the configured limit.' };
   if (!purpose || purpose.length > 180) return { error:'Purpose is required and must be 180 characters or fewer.' };
+  if (recipient.length > 100) return { error:'Recipient must be 100 characters or fewer.' };
+  if (destinationDetails.length > 160) return { error:'Destination details must be 160 characters or fewer.' };
   if (type === 'internal-transfer' && (!accounts.has(destination) || destination === source)) return { error:'Internal transfers require two different supported accounts.' };
   if (type !== 'internal-transfer' && destination) return { error:'A destination account is only valid for internal transfers.' };
   if (['bill-payment','wire-transfer','zelle','fx','withdrawal','ira','401k','card-authorization'].includes(type) && (!recipient || recipient.length > 100)) return { error:'A recipient or institution name is required.' };
