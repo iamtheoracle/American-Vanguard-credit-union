@@ -1,5 +1,6 @@
 import express from 'express';
-import { query, withTx } from './db.js';
+import { randomUUID } from 'node:crypto';
+import { query, withTx, audit } from './db.js';
 import {
   memberAuth, operatorAuth, applySessionCookie, clearAuthCookie,
   createMemberSession, createOperatorSession, destroySession, hashPassword, verifyPassword,
@@ -206,6 +207,92 @@ router.post('/card/test-purchase', memberAuth, async (req, res, next) => {
     if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
     next(error);
   }
+});
+
+// ---- loan applications ------------------------------------------------------
+router.get('/loans/applications', memberAuth, async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, reference, requested_amount_cents AS "requestedAmountCents",
+              currency, requested_term_months AS "requestedTermMonths", purpose, status,
+              decision_reason AS "decisionReason", submitted_at AS "submittedAt",
+              reviewed_at AS "reviewedAt", created_at AS "createdAt"
+       FROM loan_applications WHERE member_id = $1
+       ORDER BY created_at DESC LIMIT 50`, [req.member.id]);
+    res.json({ applications: rows.map(row => ({ ...row, requestedAmountCents: Number(row.requestedAmountCents) })) });
+  } catch (error) { next(error); }
+});
+
+router.post('/loans/applications', memberAuth, async (req, res, next) => {
+  try {
+    if (req.member.status !== 'verified') {
+      return res.status(403).json({ error: 'Membership verification is required before applying for a loan', code: 'membership_pending' });
+    }
+    const body = req.body || {};
+    const amountCents = body.requestedAmountCents ?? body.amountCents;
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
+      return res.status(400).json({ error: 'Enter a positive whole-number amount in cents', code: 'invalid_amount' });
+    }
+    const currency = String(body.currency || 'USD').toUpperCase();
+    if (currency !== 'USD') {
+      return res.status(400).json({ error: 'Only USD applications are currently supported', code: 'unsupported_currency' });
+    }
+    const termMonths = body.requestedTermMonths == null || body.requestedTermMonths === ''
+      ? null : Number(body.requestedTermMonths);
+    if (termMonths !== null && (!Number.isSafeInteger(termMonths) || termMonths <= 0)) {
+      return res.status(400).json({ error: 'Requested term must be a positive whole number of months', code: 'invalid_term' });
+    }
+    const purpose = String(body.purpose || '').trim();
+    if (purpose.length < 10 || purpose.length > 2000) {
+      return res.status(400).json({ error: 'Describe the purpose in 10–2000 characters', code: 'invalid_purpose' });
+    }
+
+    const application = await withTx(async client => {
+      const reference = `AVCU-LA-${randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`;
+      const { rows } = await client.query(
+        `INSERT INTO loan_applications
+          (member_id, reference, requested_amount_cents, currency, requested_term_months, purpose)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [req.member.id, reference, amountCents, currency, termMonths, purpose]);
+      const created = rows[0];
+      const approval = await client.query(
+        `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
+         VALUES ('loan',$1,$2,'pending','management',$1,'member') RETURNING id`,
+        [req.member.id, JSON.stringify({
+          loanApplicationId: created.id, reference, requestedAmountCents: amountCents,
+          currency, requestedTermMonths: termMonths, purpose
+        })]);
+      await client.query('UPDATE loan_applications SET approval_id = $1 WHERE id = $2', [approval.rows[0].id, created.id]);
+      await client.query(
+        `INSERT INTO operations_alerts (alert_type, loan_application_id)
+         VALUES ('loan_application_submitted',$1) ON CONFLICT (alert_type, loan_application_id) DO NOTHING`,
+        [created.id]);
+      await queueMemberNotification(client, {
+        memberId: req.member.id,
+        eventType: 'loan.application_received',
+        eventKey: `loan-application:${created.id}:submitted`,
+        title: 'Loan application received',
+        body: `Application ${reference} was submitted and is awaiting review.`,
+        subject: 'AVCU loan application received'
+      });
+      await audit(client, {
+        actorType: 'member', actorId: req.member.id, action: 'loan.application_submitted',
+        entityType: 'loan_application', entityId: created.id,
+        metadata: { reference, requestedAmountCents: amountCents, currency, requestedTermMonths: termMonths }
+      });
+      return { ...created, approval_id: approval.rows[0].id };
+    });
+    res.status(201).json({
+      application: {
+        id: application.id, reference: application.reference,
+        requestedAmountCents: Number(application.requested_amount_cents),
+        currency: application.currency, requestedTermMonths: application.requested_term_months,
+        purpose: application.purpose, status: application.status, submittedAt: application.submitted_at,
+        approvalId: application.approval_id
+      },
+      message: 'Application submitted for review. Submission does not guarantee approval or disbursement.'
+    });
+  } catch (error) { next(error); }
 });
 
 // ---- notifications ----------------------------------------------------------
