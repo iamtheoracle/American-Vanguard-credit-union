@@ -60,3 +60,5 @@ body{background:var(--wash);color:var(--ink)}
 .rate-row>strong{color:#285f49}
 .shares-grid{grid-template-columns:repeat(auto-fit,minmax(205px,1fr))}
 @media(max-width:620px){.community-trust-strip{grid-template-columns:1fr;padding:4px 18px}.community-trust-strip>span,.community-trust-strip>span:first-child{padding:9px 0;border-left:0;border-bottom:1px solid var(--line)}.community-trust-strip>span:last-child{border-bottom:0}}
+
+.hero-watermark{font-family:Georgia,serif;color:rgba(226,193,125,.14)}
