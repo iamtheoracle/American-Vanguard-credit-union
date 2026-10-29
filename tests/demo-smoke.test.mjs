@@ -37,7 +37,7 @@ test('legacy forms cannot post unapproved transfers or deposits', () => {
   assert.ok(app.includes('No account was credited.'));
   assert.ok(workflow.includes("addEventListener('submit',submit,true)"));
   assert.ok(workflow.includes('stopImmediatePropagation'));
-  assert.ok(workflow.includes('Submit for approval'));
+  assert.ok(html.includes('Submit for approval'));
 });
 
 test('internal transfers check available funds and post only after operator approval', () => {
