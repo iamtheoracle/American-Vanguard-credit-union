@@ -295,6 +295,67 @@ router.post('/loans/applications', memberAuth, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.post('/loans/applications/:id/information', memberAuth, async (req, res, next) => {
+  try {
+    const responseText = String(req.body?.response || '').trim();
+    if (responseText.length < 10 || responseText.length > 2000) {
+      return res.status(400).json({ error: 'Provide a response between 10 and 2000 characters', code: 'invalid_response' });
+    }
+    const application = await withTx(async client => {
+      const { rows } = await client.query(
+        `SELECT id, reference, approval_id AS "approvalId", status
+         FROM loan_applications WHERE id = $1 AND member_id = $2 FOR UPDATE`,
+        [req.params.id, req.member.id]);
+      const current = rows[0];
+      if (!current) {
+        const error = new Error('Loan application not found');
+        error.status = 404;
+        throw error;
+      }
+      if (current.status !== 'information_required' || !current.approvalId) {
+        const error = new Error('This application is not waiting for information');
+        error.status = 409;
+        throw error;
+      }
+      const updatedApproval = await client.query(
+        `UPDATE approvals SET status = 'pending', info_requested = NULL, decision_reason = NULL,
+           decided_at = NULL, updated_at = now()
+         WHERE id = $1 AND status = 'info_requested' RETURNING id`,
+        [current.approvalId]);
+      if (!updatedApproval.rowCount) {
+        const error = new Error('The review state changed; refresh and try again');
+        error.status = 409;
+        throw error;
+      }
+      await client.query(
+        `UPDATE loan_applications
+         SET status = 'submitted', member_response = $1, updated_at = now()
+         WHERE id = $2`, [responseText, current.id]);
+      await client.query(
+        `UPDATE operations_alerts
+         SET status = 'pending', acknowledged_at = NULL, acknowledged_by = NULL
+         WHERE loan_application_id = $1`, [current.id]);
+      await queueMemberNotification(client, {
+        memberId: req.member.id,
+        eventType: 'loan.application_information_received',
+        eventKey: `loan-application:${current.id}:information-received:${randomUUID()}`,
+        title: 'Additional information submitted',
+        body: `Your response for application ${current.reference} was submitted for review.`,
+        subject: 'AVCU loan application update'
+      });
+      await audit(client, {
+        actorType: 'member', actorId: req.member.id, action: 'loan.application_information_submitted',
+        entityType: 'loan_application', entityId: current.id
+      });
+      return { id: current.id, reference: current.reference, status: 'submitted' };
+    });
+    res.json({ application });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message, code: error.code });
+    next(error);
+  }
+});
+
 // ---- notifications ----------------------------------------------------------
 router.get('/notifications', memberAuth, async (req, res, next) => {
   try {
