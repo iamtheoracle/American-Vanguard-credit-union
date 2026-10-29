@@ -58,14 +58,14 @@
       ? 'Applications are reviewed by management. Approval does not disburse funds or guarantee a rate.'
       : 'Membership verification is required before applying for a loan.';
     const applications = loanData.applications || [];
-    $('loan-applications-list').innerHTML = applications.length ? applications.map(app => \`<article class="notification-row">
-      <strong>\${escapeHtml(app.reference)} · \${dollars(app.requestedAmountCents)}</strong>
-      <p>Status: <span class="status-pill">\${escapeHtml(String(app.status).replaceAll('_',' '))}</span>\${app.requestedTermMonths ? \` · \${escapeHtml(app.requestedTermMonths)} months requested\` : ''}</p>
-      <p>\${escapeHtml(app.purpose)}</p>
-      \${app.decisionReason ? \`<p class="muted">Decision note: \${escapeHtml(app.decisionReason)}</p>\` : ''}
-      <small>Submitted \${escapeHtml(new Date(app.submittedAt).toLocaleString())} · USD</small>
-      \${app.status === 'information_required' ? \`<form class="loan-response-form stack top-gap" data-loan-id="\${escapeHtml(app.id)}"><label>Additional information requested</label><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>\` : ''}
-    </article>\`).join('') : '<p class="muted">No loan applications yet.</p>';
+    $('loan-applications-list').innerHTML = applications.length ? applications.map(app => `<article class="notification-row">
+      <strong>${escapeHtml(app.reference)} · ${dollars(app.requestedAmountCents)}</strong>
+      <p>Status: <span class="status-pill">${escapeHtml(String(app.status).replaceAll('_',' '))}</span>${app.requestedTermMonths ? ` · ${escapeHtml(app.requestedTermMonths)} months requested` : ''}</p>
+      <p>${escapeHtml(app.purpose)}</p>
+      ${app.decisionReason ? `<p class="muted">Decision note: ${escapeHtml(app.decisionReason)}</p>` : ''}
+      <small>Submitted ${escapeHtml(new Date(app.submittedAt).toLocaleString())} · USD</small>
+      ${app.status === 'information_required' ? `<form class="loan-response-form stack top-gap" data-loan-id="${escapeHtml(app.id)}"><label>Additional information requested</label><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>` : ''}
+    </article>`).join('') : '<p class="muted">No loan applications yet.</p>';
 
   }
   async function refresh() {
@@ -144,7 +144,7 @@
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     try {
-      await post(\`/loans/applications/\${form.dataset.loanId}/information\`, {
+      await post(`/loans/applications/${form.dataset.loanId}/information`, {
         response: form.elements.response.value
       });
       showMessage('dashboard-message', 'Your additional information was submitted for review.');
