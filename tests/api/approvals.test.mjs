@@ -135,9 +135,10 @@ test('membership applications flow through the approval queue', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
 
-  await api(env.base, '/api/auth/register', {
+  const registration = await api(env.base, '/api/auth/register', {
     method: 'POST', body: { email: 'applicant@avcu.demo', username: 'sam_lee', password: 'Str0ngPassphrase!', fullName: 'Sam Lee' }
   });
+  assert.equal(registration.status, 201, JSON.stringify(registration.data));
   const { cookie: manager } = await loginOperator(env.base, 'manager@avcu.demo');
   const queue = await api(env.base, '/api/operator/approvals?status=pending', { cookie: manager });
   const membership = queue.data.approvals.find(a => a.itemType === 'membership');
