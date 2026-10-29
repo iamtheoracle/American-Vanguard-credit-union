@@ -57,10 +57,9 @@ test('internal transfer approval cannot create money from zero balances', async 
   page.once('dialog', dialog => dialog.accept());
   await page.locator('#workflow-operator-queue .workflow-request').first().locator('[data-review="approve"]').click();
   await expect(page.locator('#workflow-operator-queue .workflow-request').first().locator('.workflow-status')).toHaveText('Pending Approval');
-  const balances = await page.evaluate(() => JSON.parse(localStorage.getItem('avcu.member.v1')));
-  expect(balances.balances.draft).toBe(0);
-  expect(balances.balances.primary).toBe(0);
-  expect(balances.transactions).toHaveLength(0);
+  const balances = await page.evaluate(() => JSON.parse(localStorage.getItem('avcu.member.v1') || 'null'));
+  expect(balances).toBeNull();
+  await expect(page.locator('#view-home [data-balance="draft"]')).toHaveText('$0.00');
 });
 
 test('external wire approval stays awaiting provider and is not reported as settled', async ({ page }) => {
