@@ -188,6 +188,7 @@
   }
 
   window.renderAll = renderAll;
+  window.addEventListener('avcu:member-state-updated', () => { state = loadState(); renderAll(); });
 
   function addTransaction(account, title, amount, detail) {
     state.transactions.unshift({ id: createId(), account, title, amount, date: new Date().toISOString(), detail });
