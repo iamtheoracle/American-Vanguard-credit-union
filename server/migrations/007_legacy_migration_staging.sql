@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS migration_batches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_system TEXT NOT NULL,
   source_file_name TEXT NOT NULL,
-  source_file_sha256 CHAR(64) NOT NULL,
+  source_payload_sha256 CHAR(64) NOT NULL,
   created_by UUID NOT NULL REFERENCES operators(id) ON DELETE RESTRICT,
   status TEXT NOT NULL DEFAULT 'staged'
     CHECK (status IN ('staged','validated','blocked','reconciled','approved','imported','failed')),
