@@ -158,6 +158,7 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
         `UPDATE loan_applications
          SET status = $1,
              decision_reason = CASE WHEN $1 IN ('approved','rejected') THEN $2 ELSE decision_reason END,
+             information_requested = CASE WHEN $1 = 'information_required' THEN $2 WHEN $1 = 'submitted' THEN NULL ELSE information_requested END,
              reviewed_at = CASE WHEN $1 IN ('approved','rejected') THEN now() ELSE reviewed_at END,
              updated_at = now()
          WHERE approval_id = $3 AND status IN ('submitted','under_review','information_required')
