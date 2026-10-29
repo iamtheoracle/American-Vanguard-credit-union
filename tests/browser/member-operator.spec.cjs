@@ -46,7 +46,7 @@ test('unauthenticated users see local mode and a sign-in entry point', async ({ 
   await expect(page.locator('#auth-form')).toContainText('institution-issued account');
   if (process.env.BASE_URL) {
     const api = await page.evaluate(async () => {
-      const response = await fetch('/api/workflow', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      const response = await fetch('/api/workflow', { headers: { Accept: 'application/json' }, cache: 'no-store', signal: AbortSignal.timeout(10000) });
       return { status: response.status, body: await response.json().catch(() => ({})) };
     });
     expect([401, 503]).toContain(api.status);
