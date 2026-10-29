@@ -49,6 +49,7 @@ export function validateLegacyTransactions(rows, sourceSystem) {
 
     seen.add(sourceKey);
     const normalized = {
+      rowNumber,
       sourceSystem,
       sourceTransactionId: row.sourceTransactionId,
       sourceAccountId: row.sourceAccountId,
