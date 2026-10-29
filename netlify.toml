@@ -1,6 +1,7 @@
 [build]
   command = "npm run build:auth && npm run check"
   publish = "public"
+  functions = "netlify/functions"
 
 [[headers]]
   for = "/*"
