@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#102b4e">
-<meta name="description" content="American Vanguard Credit Union member access and onboarding.">
+<meta name="description" content="American Vanguard Credit Union member access, onboarding and verification status.">
 <title>American Vanguard Credit Union | Member Access</title>
 <link rel="stylesheet" href="./auth.css">
 <script src="./app.js" defer></script>
@@ -13,21 +13,43 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="top"><a class="brand" href="/" aria-label="American Vanguard Credit Union"><span class="mark">AV</span><span><strong>AMERICAN VANGUARD</strong><small>CREDIT UNION</small></span></a><span class="secure"><span></span> SECURE MEMBER ACCESS</span></header>
 <main id="main">
-<section class="hero"><div class="hero-copy"><p class="eyebrow">YOUR MEMBERSHIP STARTS HERE</p><h1>Banking built around <em>your life.</em></h1><p class="intro">Access your member space, start an application, and track verification. Your account information appears only after a verified membership and a connected, authorized banking system.</p><div class="trust"><span>✓ Private sign-in</span><span>✓ Email confirmation</span><span>✓ Verification-first onboarding</span></div></div>
-<section class="auth-card" aria-labelledby="form-title"><div class="tabs" role="tablist" aria-label="Member access"><button type="button" class="tab active" data-mode="login" role="tab" aria-selected="true">Sign in</button><button type="button" class="tab" data-mode="signup" role="tab" aria-selected="false">Create account</button></div>
+<section class="hero" id="welcome">
+<div class="hero-copy"><p class="eyebrow">YOUR MEMBERSHIP STARTS HERE</p><h1>Banking built around <em>your life.</em></h1><p class="intro">Create your sign-in, submit your membership application, and track verification. Membership approval is a separate review step. Financial information is shown only when an authorized banking data source is connected.</p><div class="trust"><span>✓ Private sign-in</span><span>✓ Email confirmation</span><span>✓ Review before approval</span></div></div>
+<section class="auth-card" aria-labelledby="form-title">
+<div class="tabs" role="tablist" aria-label="Member access"><button type="button" class="tab active" data-mode="login" role="tab" aria-selected="true">Sign in</button><button type="button" class="tab" data-mode="signup" role="tab" aria-selected="false">Create account</button></div>
 <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
 <h2 id="form-title">Welcome back</h2><p id="form-description" class="muted">Sign in to continue to your member space.</p>
 <form id="auth-form">
 <label for="full-name" id="name-label" hidden>Full legal name</label><input id="full-name" name="fullName" autocomplete="name" placeholder="Full legal name" hidden>
 <label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
-<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="At least 8 characters" required>
+<label for="password" id="password-label">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="At least 8 characters" required>
 <div id="password-help" class="muted tiny" hidden>Use at least 8 characters. Never reuse a password from another site.</div>
 <button class="primary" id="submit" type="submit">Sign in securely <span aria-hidden="true">→</span></button>
 <button class="text-button" type="button" id="forgot">Forgot password?</button>
 </form>
-<div class="rule"></div><p class="footnote">Identity confirmation and membership verification are separate steps. Creating a login does not mean your membership or identity has been approved.</p>
-</section></section>
-<section id="member-panel" class="member-panel" hidden><div><p class="eyebrow">MEMBER ACCESS</p><h2 id="member-heading">Your member space</h2><p id="member-copy" class="muted"></p></div><div class="status-card"><span class="status-icon">✓</span><div><strong id="member-status">Email account active</strong><p id="member-status-copy">Membership verification has not been completed.</p></div></div><div class="notice neutral">No balances, cards, transaction history, rates, or branch details are shown here until the appropriate verified data source is connected. Your sign-in alone does not create a bank account.</div><button class="secondary" id="signout" type="button">Sign out</button></section>
+<div class="rule"></div><p class="footnote">Email confirmation proves control of an email address; it does not prove identity or approve membership.</p>
+</section>
+</section>
+
+<section id="member-panel" class="member-panel" hidden>
+<div><p class="eyebrow">MEMBER ACCESS</p><h2 id="member-heading">Your member space</h2><p id="member-copy" class="muted"></p></div>
+<div id="member-notice" class="notice" role="status" aria-live="polite" hidden></div>
+<div class="status-card"><span class="status-icon" aria-hidden="true">✓</span><div><strong id="member-status">Application not submitted</strong><p id="member-status-copy">Complete your application to begin verification.</p></div></div>
+<form id="application-form">
+<h3>Membership application</h3><p class="muted">Provide only the information requested here. Do not upload identity documents or enter account numbers or financial credentials.</p>
+<label for="application-name">Full legal name</label><input id="application-name" name="applicationName" autocomplete="name" maxlength="160" required>
+<label for="application-statement">Application statement</label><textarea id="application-statement" name="statement" rows="4" maxlength="2000" minlength="10" placeholder="Tell us briefly why you are applying and confirm the information is accurate." required></textarea>
+<button class="primary" id="application-submit" type="submit">Submit for verification <span aria-hidden="true">→</span></button>
+</form>
+<div id="admin-entry" hidden><div class="rule"></div><h3>Staff workspace</h3><p class="muted">Staff access is checked by the server. Being signed in does not grant review permissions.</p><button class="secondary" id="open-admin" type="button">Open verification dashboard</button></div>
+<button class="secondary" id="signout" type="button">Sign out</button>
+</section>
+
+<section id="admin-panel" class="member-panel admin-panel" hidden>
+<div class="admin-heading"><div><p class="eyebrow">STAFF WORKSPACE</p><h2>Verification review</h2><p class="muted">Decisions and notes are recorded in the server-side review history.</p></div><button class="secondary" id="back-member" type="button">Back to member space</button></div>
+<div id="admin-notice" class="notice" role="status" aria-live="polite" hidden></div>
+<div id="review-list" class="review-list"></div>
+</section>
 </main>
 <footer><span>American Vanguard Credit Union</span><span>Member access · Privacy · Security</span></footer>
 </body></html>
