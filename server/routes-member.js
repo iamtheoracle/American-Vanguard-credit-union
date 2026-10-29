@@ -135,10 +135,10 @@ router.get('/transactions', memberAuth, async (req, res, next) => {
     }
     const params = [req.member.id];
     let where = 'a.member_id = $1';
-    if (type) { params.push(String(type).slice(0, 40)); where += ` AND t.type = ${params.length}`; }
-    if (status) { params.push(String(status).slice(0, 40)); where += ` AND t.status = ${params.length}`; }
-    if (from) { params.push(from); where += ` AND t.created_at >= ${params.length}::date`; }
-    if (to) { params.push(to); where += ` AND t.created_at < (${params.length}::date + INTERVAL '1 day')`; }
+    if (type) { params.push(String(type).slice(0, 40)); where += ` AND t.type = $${params.length}`; }
+    if (status) { params.push(String(status).slice(0, 40)); where += ` AND t.status = $${params.length}`; }
+    if (from) { params.push(from); where += ` AND t.created_at >= $${params.length}::date`; }
+    if (to) { params.push(to); where += ` AND t.created_at < ($${params.length}::date + INTERVAL '1 day')`; }
     if (search) {
       params.push(`%${String(search).slice(0, 80)}%`);
       where += ` AND (t.memo ILIKE $${params.length} OR t.payee ILIKE $${params.length} OR t.reference ILIKE $${params.length})`;
