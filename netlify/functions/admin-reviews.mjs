@@ -9,7 +9,10 @@ const fail = (status, message) => json({ error: message }, status);
 const clean = (value, max = 2000) => typeof value === "string" ? value.trim().slice(0, max) : "";
 
 async function authorizedStaff(req) {
-  if (!req.headers.get("authorization")?.startsWith("Bearer ")) return null;
+  if (req.method === "POST") {
+    const origin = req.headers.get("origin");
+    if (!origin || origin !== new URL(req.url).origin) return null;
+  }
   const user = await getUser();
   if (!user?.id || !Array.isArray(user.roles) || !user.roles.includes("admin")) return null;
   return user;
