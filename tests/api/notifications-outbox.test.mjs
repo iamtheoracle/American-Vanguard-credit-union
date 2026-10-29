@@ -181,3 +181,21 @@ test('loan application review, information request, operations alert, and final 
   const { rows: loans } = await query('SELECT count(*)::int AS count FROM loan_applications WHERE id = $1', [submitted.data.application.id]);
   assert.equal(loans[0].count, 1, 'approval records the application only; no loan balance or disbursement is created');
 });
+
+
+test('funding pool participation stays disabled until authorized provider controls exist', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { cookie } = await loginMember(env.base);
+  const catalogue = await api(env.base, '/funding-pools', { cookie });
+  assert.equal(catalogue.status, 200);
+  assert.equal(catalogue.data.liveContributionsEnabled, false);
+  assert.deepEqual(catalogue.data.pools, []);
+
+  const attempt = await api(env.base, '/funding-pools/00000000-0000-4000-8000-000000000001/contributions', {
+    method: 'POST', cookie, body: { amountCents: 10000 }
+  });
+  assert.equal(attempt.status, 503);
+  assert.equal(attempt.data.liveContributionsEnabled, false);
+  assert.equal(attempt.data.code, 'funding_provider_not_authorized');
+});
