@@ -23,7 +23,7 @@ test('AVCU workspace has eight account categories and no fabricated opening bala
   for (const fake of ['$3,240.65', '$6,840.00', '$24,230.65', '4826', 'JORDAN HALE']) assert.ok(!html.includes(fake), 'unexpected fabricated detail: ' + fake);
   assert.ok(html.includes('STANDALONE OPERATIONS'));
   assert.ok(html.includes('External financial services require authorized connections'));
-  assert.ok(!/\\bdemo\\b/i.test(html + app), 'visible UI and application code should not label the product as a demo');
+  assert.ok(!/\bdemo\b/i.test(html + app), 'visible UI and application code should not label the product as a demo');
   for (const fabricatedSuffix of ["suffix: '2048'", "suffix: '3812'", "suffix: '6621'", "suffix: '9055'", "suffix: '7314'", "suffix: '4472'", "suffix: '1189'"]) assert.ok(!app.includes(fabricatedSuffix), 'fabricated account suffix remains: ' + fabricatedSuffix);
 });
 
@@ -44,7 +44,7 @@ test('legacy forms cannot post unapproved transfers or deposits', () => {
 });
 
 test('internal transfers check available funds and post only after operator approval', () => {
-  for (const value of ['s.balances[r.from]<r.amountCents','s.balances[r.from]-=r.amountCents','s.balances[r.to]+=r.amountCents','Approved internal transfer',"b.dataset.review==='approve'&&r.type==='internal-transfer'"]) {
+  for (const value of ['fromBalance<r.amountCents','s.balances[r.from]=fromBalance-r.amountCents','s.balances[r.to]=toBalance+r.amountCents','Approved internal transfer',"b.dataset.review==='approve'&&r.type==='internal-transfer'"]) {
     assert.ok(workflow.includes(value), 'missing internal-transfer control ' + value);
   }
   assert.ok(app.includes("window.addEventListener('avcu:member-state-updated'"));
