@@ -48,6 +48,15 @@ test('internal transfers check available funds and post only after operator appr
   assert.ok(app.includes("window.addEventListener('avcu:member-state-updated'"));
 });
 
+test('FX and check-deposit submissions fail safely on invalid or stale input', () => {
+  assert.ok(workflow.includes("amount=Number(d.amount),currency=String(d.currency||'USD')"), 'FX currency must be defined before quote lookup');
+  assert.ok(workflow.includes("fxQuotes.get(currency+'|'+Math.round(amount*100))"), 'FX quote must match the request currency and amount');
+  assert.ok(workflow.includes("file.size>12*1024*1024"), 'check images must be size-limited at submission, not only preview');
+  assert.ok(workflow.includes("!String(file.type||'').startsWith('image/')"), 'check uploads must reject non-image files');
+  assert.ok(workflow.includes("!Number.isSafeInteger(fromBalance)||!Number.isSafeInteger(toBalance)"), 'internal transfers must reject missing or invalid balances');
+  assert.ok(workflow.includes("Approval blocked: account records could not be saved"), 'storage failure must block transfer approval');
+});
+
 test('external approvals remain un-settled until provider confirmation', () => {
   for (const value of ["providerState:'not-connected'",'approved-awaiting-provider','no external funds have been sent or settled','unavailable-without-provider']) assert.ok(workflow.includes(value));
   assert.ok(providers.includes('PROVIDER_NOT_CONFIGURED'));
