@@ -8,7 +8,7 @@ AVCU is a software prototype with a responsive browser demo and a separate Expre
 
 - Responsive member-facing demo interface with simulated shares, transfers, bill payments, deposits, card freeze/unfreeze, activity, and a clear demo disclosure.
 - Separate authenticated API-connected member portal at `/member-portal.html` for registration, sign-in, accounts, transactions, transfers, deposits, sandbox card controls, membership tier, and notifications.
-- Separate role-checked operator console at `/operator-portal.html` for approval queue, membership tiers and audited overrides, and email delivery history.
+- Separate role-checked operator console at `/operator-portal.html` with a centralized approval queue, server-side status/type/search filters, pagination, a decision workspace with mandatory notes, audited member history (accounts, transactions, loan applications, money requests, and decisions), membership tiers and audited overrides, migration staging, audit history, loan alerts, and email delivery history.
 - Express API for member registration/login, unique 10-digit numeric member IDs (separate from email), sessions, account and transaction endpoints, operator workflows, server-enforced roles, approval separation of duties, ledger entries, audit events, idempotency, and sandbox integrations.
 - PostgreSQL migrations and seed data for API development.
 - Activity-based membership tiers: New Member, Active Member, Established Member, Priority Service, and Review Required; tier changes are recorded in history and manual overrides are audited.
