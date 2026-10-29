@@ -13,15 +13,75 @@
   }
   const post=(path,body)=>api(path,{method:'POST',body:JSON.stringify(body)});
   function setAuthed(value){$('operator-auth').classList.toggle('hidden',value);$('operator-dashboard').classList.toggle('hidden',!value);}
+  let approvalRows = [];
+  let selectedApproval = null;
+  const money = cents => cents == null ? '—' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(cents)/100);
+  async function loadMemberHistory(memberId, targetId='review-member-history'){
+    if(!memberId){$(targetId).innerHTML='<p class="muted">No member is linked to this queue item.</p>';return;}
+    const data=await api('/operator/members/'+encodeURIComponent(memberId));
+    const m=data.member;
+    const accounts=data.accounts||[], transactions=data.transactions||[];
+    $(targetId).innerHTML=`<div class="member-history-summary"><strong>${esc(m.fullName)}</strong><span>${esc(m.email)}</span><span class="status-pill">${esc(m.status)}</span><small>Member since ${esc(new Date(m.createdAt).toLocaleString())}</small></div><h4>Accounts</h4>${accounts.length?`<table><thead><tr><th>Account</th><th>Type</th><th>Balance shown in prototype</th><th>Status</th></tr></thead><tbody>${accounts.map(a=>`<tr><td>${esc(a.name)} · ••${esc(a.suffix)}</td><td>${esc(a.kind)}</td><td>${money(a.balanceCents)}</td><td>${esc(a.status)}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">No account records.</p>'}<h4>Recent transactions (up to 50)</h4>${transactions.length?`<table><thead><tr><th>Date</th><th>Reference</th><th>Type / description</th><th>Amount</th><th>Status</th></tr></thead><tbody>${transactions.map(t=>`<tr><td>${esc(new Date(t.createdAt).toLocaleString())}</td><td>${esc(t.reference)}</td><td>${esc(t.type)}<small>${esc(t.memo||t.payee||'')}</small></td><td>${money(t.amountCents)}</td><td><span class="status-pill">${esc(t.status)}</span></td></tr>`).join('')}</tbody></table>`:'<p class="muted">No transaction history found.</p>'}<p class="muted small">Account values are prototype records, not evidence of funds held or settled.</p>`;
+  }
+  function renderReviewWorkspace(a){
+    selectedApproval=a;
+    $('review-empty').classList.toggle('hidden',!!a);
+    $('review-workspace').classList.toggle('hidden',!a);
+    if(!a)return;
+    $('review-summary').innerHTML=`<div><small>Review item</small><strong>${esc(a.itemType.replaceAll('_',' '))} · ${esc(a.reference||a.id)}</strong></div><div><small>Member</small><strong>${esc(a.memberName||'Not linked')}</strong><span>${esc(a.memberEmail||'')}</span></div><div><small>Requested amount</small><strong>${money(a.amountCents)}</strong></div><div><small>Status / required role</small><strong>${esc(a.status.replaceAll('_',' '))}</strong><span>${esc(a.requiredRole)}</span></div><div><small>Submitted</small><strong>${esc(new Date(a.createdAt).toLocaleString())}</strong></div>`;
+    $('review-note').value='';
+    const active=['pending','escalated'].includes(a.status);
+    const rank={operator:0,management:1,super_admin:2};
+    const canDecide=rank[operator?.role] >= rank[a.status==='escalated'?'management':a.requiredRole];
+    const actions=[];
+    if(active&&canDecide){actions.push(['approve','Approve','primary'],['reject','Reject','danger-action']);}
+    if(active){actions.push(['request_info','Request information','secondary'],['escalate','Escalate','secondary']);}
+    $('review-actions').innerHTML=actions.length?actions.map(([action,label,cls])=>`<button type="button" class="${cls==='primary'?'primary':cls==='danger-action'?'mini-action danger-action':'secondary'}" data-review-action="${action}">${label}</button>`).join(''):'<p class="muted">This item is not awaiting a decision, or your role cannot make the final decision.</p>';
+    $('review-actions').querySelectorAll('[data-review-action]').forEach(button=>button.addEventListener('click',async()=>{
+      const reason=$('review-note').value.trim();
+      if(reason.length<5){notice('operator-message','Enter a meaningful review note (at least 5 characters) before submitting.',true);$('review-note').focus();return;}
+      if(!window.confirm(`Submit "${button.textContent}" for ${a.reference||a.id}? The action will be recorded in the audit trail.`))return;
+      button.disabled=true;
+      try{
+        const result=await post(`/operator/approvals/${encodeURIComponent(a.id)}/decide`,{action:button.dataset.reviewAction,reason});
+        notice('operator-message',`Decision recorded: ${result.approval.status}. No settlement is implied by this status.`);
+        await loadAll();
+        $('review-workspace').classList.add('hidden');$('review-empty').classList.remove('hidden');
+      }catch(error){notice('operator-message',error.message,true);button.disabled=false;}
+    }));
+    loadMemberHistory(a.memberId).catch(error=>{$('review-member-history').textContent=error.message;});
+  }
   async function loadApprovals(){
-    const data=await api('/operator/approvals');
-    $('approval-list').innerHTML=data.approvals?.length? `<table><thead><tr><th>Type</th><th>Member / reference</th><th>Amount</th><th>Status</th><th>Required role</th><th>Actions</th></tr></thead><tbody>${data.approvals.map(a=>`<tr><td>${esc(a.itemType)}</td><td><strong>${esc(a.memberName||a.reference||a.id)}</strong><small>${esc(a.memberEmail||a.transactionType||a.requestType||'')}</small></td><td>${a.amountCents==null?'—':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(a.amountCents)/100)}</td><td><span class="status-pill">${esc(a.status.replaceAll('_',' '))}</span></td><td>${esc(a.requiredRole)}</td><td class="action-cell">${['pending','escalated'].includes(a.status)?`<button class="mini-action" data-approval="${esc(a.id)}" data-item-type="${esc(a.itemType)}" data-action="approve">Approve</button><button class="mini-action danger-action" data-approval="${esc(a.id)}" data-action="reject">Reject</button><button class="mini-action" data-approval="${esc(a.id)}" data-action="request_info">Request info</button><button class="mini-action" data-approval="${esc(a.id)}" data-action="escalate">Escalate</button>`:'—'}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">No approvals in this queue.</p>';
-    $('approval-list').querySelectorAll('[data-approval]').forEach(button=>button.addEventListener('click',async()=>{
-      const action=button.dataset.action;
-      let reason='';
-      if(action==='reject'||action==='escalate'||action==='request_info'||(action==='approve'&&['loan','money_request'].includes(button.dataset.itemType))){reason=window.prompt(action==='reject'?'Enter the reason for rejection:':action==='request_info'?'Describe the additional information required:':action==='approve'?'Enter the management decision reason:':'Enter why this item needs escalation:')||'';if(!reason.trim())return;}
-      try{await api(`/operator/approvals/${encodeURIComponent(button.dataset.approval)}/decide`,{method:'POST',body:JSON.stringify({action,reason})});notice('operator-message',`Approval ${action} request processed.`);await loadAll();}
+    const params=new URLSearchParams();
+    if($('approval-status').value)params.set('status',$('approval-status').value);
+    if($('approval-type').value)params.set('type',$('approval-type').value);
+    if($('approval-search').value.trim())params.set('search',$('approval-search').value.trim());
+    const data=await api('/operator/approvals?'+params.toString());
+    approvalRows=data.approvals||[];
+    const rows=approvalRows;
+    $('approval-list').innerHTML=rows.length?`<table><thead><tr><th>Submitted</th><th>Type / member</th><th>Reference / amount</th><th>Status</th><th>Required role</th><th>Review</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${esc(new Date(a.createdAt).toLocaleString())}</td><td><strong>${esc(a.itemType.replaceAll('_',' '))}</strong><small>${esc(a.memberName||a.memberEmail||'Member not linked')}</small></td><td>${esc(a.reference||a.id)}<small>${money(a.amountCents)}</small></td><td><span class="status-pill">${esc(a.status.replaceAll('_',' '))}</span></td><td>${esc(a.requiredRole)}</td><td><button class="mini-action" data-review-id="${esc(a.id)}">Review</button></td></tr>`).join('')}</tbody></table>`:'<p class="muted">No review items match these filters.</p>';
+    $('approval-list').querySelectorAll('[data-review-id]').forEach(button=>button.addEventListener('click',()=>{
+      const item=rows.find(a=>String(a.id)===button.dataset.reviewId);
+      renderReviewWorkspace(item);
+      $('review-workspace').scrollIntoView({behavior:'smooth',block:'start'});
+    }));
+    if(selectedApproval){
+      const refreshed=rows.find(a=>String(a.id)===String(selectedApproval.id));
+      if(refreshed)renderReviewWorkspace(refreshed);
+    }
+  }
+  async function searchMembers(event){
+    event?.preventDefault();
+    const term=$('member-search').value.trim();
+    if(term.length<2){notice('operator-message','Enter at least two characters to search members.',true);return;}
+    const data=await api('/operator/members?search='+encodeURIComponent(term));
+    const members=data.members||[];
+    $('member-search-results').innerHTML=members.length?`<table><thead><tr><th>Member</th><th>Status</th><th>Created</th><th>Prototype balance total</th><th></th></tr></thead><tbody>${members.map(m=>`<tr><td><strong>${esc(m.fullName)}</strong><small>${esc(m.email)}</small></td><td>${esc(m.status)}</td><td>${esc(new Date(m.createdAt).toLocaleString())}</td><td>${money(m.totalCents)}</td><td><button class="mini-action" data-member-history="${esc(m.id)}">View history</button></td></tr>`).join('')}</tbody></table>`:'<p class="muted">No members matched that search.</p>';
+    $('member-search-results').querySelectorAll('[data-member-history]').forEach(button=>button.addEventListener('click',async()=>{
+      button.disabled=true;
+      try{await loadMemberHistory(button.dataset.memberHistory,'member-history-result');$('member-history-result').scrollIntoView({behavior:'smooth',block:'start'});}
       catch(error){notice('operator-message',error.message,true);}
+      finally{button.disabled=false;}
     }));
   }
   async function loadLoanAlerts(){
@@ -149,6 +209,9 @@
       $('migration-result').textContent = error.message;
     } finally { button.disabled = false; }
   });
+  $('apply-approval-filter').addEventListener('click',async()=>{try{await loadApprovals();}catch(error){notice('operator-message',error.message,true);}});
+  $('approval-search').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();$('apply-approval-filter').click();}});
+  $('member-search-form').addEventListener('submit',searchMembers);
   $('refresh-audit').addEventListener('click', async () => { try { await loadAudit(); } catch (error) { notice('operator-message', error.message, true); } });
   $('audit-search').addEventListener('input', renderAudit);
   $('refresh-migrations').addEventListener('click', async () => {
