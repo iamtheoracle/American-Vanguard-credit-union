@@ -800,7 +800,9 @@ router.get('/wallets/privy/status', memberAuth, async (req, res, next) => {
 router.post('/wallets/privy/link', memberAuth, async (req, res, next) => {
   try {
     if (!privyConfigured()) return res.status(503).json({ error: 'Privy is not configured' });
-    const token = String(req.get('X-Privy-Access-Token') || req.body?.accessToken || '');
+    const authorization = String(req.get('Authorization') || '');
+    const bearerToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    const token = String(req.get('X-Privy-Access-Token') || bearerToken || req.body?.accessToken || '');
     if (!token || token.length > 8192) return res.status(400).json({ error: 'A valid Privy access token is required' });
     const claims = verifyPrivyAccessToken(token);
     const user = await fetchPrivyUser(claims.sub);
@@ -841,6 +843,7 @@ router.post('/wallets/privy/link', memberAuth, async (req, res, next) => {
     });
     res.json({ linked: true, walletCount: wallets.length, wallets, transfersEnabled: false });
   } catch (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'This Privy identity is already linked to another AVCU member' });
     if (['privy_not_configured','privy_token_invalid','privy_identity_unavailable'].includes(error.code)) {
       return res.status(error.code === 'privy_identity_unavailable' ? 502 : 401)
         .json({ error: 'Privy identity verification failed' });
