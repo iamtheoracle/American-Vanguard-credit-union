@@ -100,9 +100,11 @@ test('responsive layout and accessibility basics remain', () => {
 });
 
 test('documentation and scripts describe standalone and provider boundaries', () => {
-  for (const value of ['Pending Approval','Approved · Awaiting Provider','not protected by real staff authentication','provider-confirmed outcomes may be marked settled']) assert.ok(readme.includes(value));
+  for (const value of ['Pending Approval','Approved · Awaiting Provider','not secure for real staff review','provider-confirmed outcomes may be marked settled']) assert.ok(readme.includes(value));
   assert.ok(!readme.includes('sample balances'));
   assert.ok(pkg.includes('node --check public/workflow.js'));
+  assert.ok(pkg.includes('build:auth'), 'Identity browser client must be built during deployment');
+  assert.ok(netlify.includes('npm run build:auth'), 'Netlify must build the auth bundle before publish');
   assert.ok(pkg.includes('node --check public/review-assistant.js'));
   assert.ok(netlify.includes('publish = "public"'), 'backend source must remain outside the published directory');
   assert.ok(netlify.includes("img-src 'self' data: blob:"), 'check-image previews require blob: under the content security policy');
