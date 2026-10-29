@@ -40,7 +40,9 @@ export function authorizeTransition({ workflow, from, to, role }) {
 export function buildStatusNotification({ entityType, entityId, memberId, memberEmail, from, to }) {
   if (!["approved", "rejected"].includes(to)) return null;
   if (!memberId || !memberEmail || !entityId) throw new TypeError("Notification recipient and entity identifiers are required");
-  const normalizedType = entityType === "loan" ? "loan" : "money_request";
+  if (!["loan", "money_request"].includes(entityType)) throw new TypeError("Unsupported notification entity type");
+  if (!from) throw new TypeError("Previous status is required");
+  const normalizedType = entityType;
   return {
     eventKey: `${normalizedType}:${entityId}:${from}:${to}`,
     recipientMemberId: memberId,
