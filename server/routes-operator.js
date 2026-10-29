@@ -90,11 +90,12 @@ router.get('/operator/approvals', ...guard('management', 'operator'), async (req
               a.payload, a.created_at AS "createdAt", a.decided_at AS "decidedAt",
               a.decision_reason AS "decisionReason", a.assigned_to AS "assignedTo",
               a.submitted_by_type AS "submittedByType", a.submitted_by AS "submittedBy",
-              t.id AS "transactionId", t.reference, t.type AS "transactionType",
-              t.amount_cents AS "amountCents", t.status AS "transactionStatus",
+              t.id AS "transactionId", COALESCE(t.reference, l.reference) AS reference, t.type AS "transactionType",
+              COALESCE(t.amount_cents, l.requested_amount_cents) AS "amountCents", t.status AS "transactionStatus",
               m.full_name AS "memberName", m.email AS "memberEmail", m.id AS "memberId"
        FROM approvals a
        LEFT JOIN transactions t ON t.id = a.transaction_id
+       LEFT JOIN loan_applications l ON l.approval_id = a.id
        LEFT JOIN members m ON m.id = a.member_id
        WHERE ${where}
        ORDER BY CASE a.status WHEN 'escalated' THEN 0 ELSE 1 END, a.created_at DESC
