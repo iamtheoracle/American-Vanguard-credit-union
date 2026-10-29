@@ -67,7 +67,7 @@ function submit(e){
  const form=e.target;if(!['workflow-form','transfer-form','deposit-form'].includes(form?.id))return;
  e.preventDefault();e.stopImmediatePropagation();let d,f=null;
  if(form.id==='workflow-form'){d=Object.fromEntries(new FormData(form).entries());if(d.type==='check-deposit')f={front:$('check-front')?.files?.[0],back:$('check-back')?.files?.[0]}}
- else if(form.id==='transfer-form'){const x=Object.fromEntries(new FormData(form).entries());d={...x,type:x.kind==='bill'?'bill-payment':'internal-transfer',recipient:x.payee||'',note:x.memo||x.payee||'Account transfer request'}}
+ else if(form.id==='transfer-form'){const x=Object.fromEntries(new FormData(form).entries());d={...x,from:x.kind==='bill'?'draft':x.from,type:x.kind==='bill'?'bill-payment':'internal-transfer',recipient:x.payee||'',note:x.memo||x.payee||'Account transfer request'}}
  else {const x=Object.fromEntries(new FormData(form).entries());d={...x,type:'check-deposit',from:x.account,note:x.description||'Check deposit request'};f={front:$('legacy-check-front')?.files?.[0],back:$('legacy-check-back')?.files?.[0]}}
  const out=create(d,f);if(out.error){alert(out.error);return}render();
  if(form.id==='workflow-form'){form.reset();fields();['check-front-preview','check-back-preview'].forEach((k,i)=>{if($(k))$(k).textContent=(i?'Back':'Front')+' image not selected.'})}else form.reset();
