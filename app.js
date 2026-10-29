@@ -147,7 +147,7 @@
     const recent = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4);
     $('#recent-transactions').innerHTML = recent.length ? recent.map(transactionMarkup).join('') : '<p class="empty-state">No account activity yet. Start a payment or deposit request.</p>';
     $('#card-status-dot').classList.toggle('frozen', state.frozen);
-    $('#card-status-text').textContent = state.frozen ? 'Card is frozen' : 'Card is active';
+    $('#card-status-text').textContent = state.frozen ? 'Local controls frozen' : 'Issuer not connected';
     $('#today-label').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
     $('#ledger-count').textContent = String(state.transactions.length);
     $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Not connected';
