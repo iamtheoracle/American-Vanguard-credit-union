@@ -282,7 +282,7 @@ router.post('/loans/applications', memberAuth, async (req, res, next) => {
           termMonths ? `Requested term: ${termMonths} months` : null,
           `Review workspace: ${reviewPath}`,
           'Sign in with your authorized staff account to review the application. No funds have been disbursed.'
-        ].filter(Boolean).join('\\n')
+        ].filter(Boolean).join(String.fromCharCode(10))
       });
       await queueMemberNotification(client, {
         memberId: req.member.id,
