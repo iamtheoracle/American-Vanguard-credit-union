@@ -1,4 +1,4 @@
-name: AVCU Demo Quality
+name: AVCU Workflow Quality
 on:
   push:
     branches:
@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: avcu-demo-quality-${{ github.workflow }}-${{ github.ref }}
+  group: avcu-workflow-quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   validate:
@@ -22,5 +22,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Validate JavaScript syntax and demo smoke tests
+      - name: Validate JavaScript syntax and workflow regression tests
         run: npm run check
