@@ -121,7 +121,7 @@ router.post('/auth/password-reset/complete', async (req, res, next) => {
     }
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const passwordHash = await hashPassword(password);
-    const memberId = await withTx(async client => {
+    await withTx(async client => {
       const { rows } = await client.query(
         `SELECT id, member_id FROM password_reset_tokens
          WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
@@ -144,7 +144,6 @@ router.post('/auth/password-reset/complete', async (req, res, next) => {
         actorType: 'system', actorId: reset.member_id, action: 'auth.password_reset_completed',
         entityType: 'member', entityId: reset.member_id
       });
-      return reset.member_id;
     });
     res.json({ success: true, message: 'Password reset complete. Sign in using your username, email, or member number.' });
   } catch (error) {
