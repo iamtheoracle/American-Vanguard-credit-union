@@ -83,3 +83,7 @@ Configure `AVCU_OPERATIONS_EMAIL` with an authorized operations mailbox and `AVC
 Authorized staff can stage a JSON array of legacy transaction rows from the operator console or `POST /api/operator/migrations/validate`. Validation preserves original timestamp text and signed minor-unit amounts, records every raw row, identifies duplicate source references and invalid fields, stores exception reports, and groups totals by source account/currency/status. Each batch stores a SHA-256 fingerprint of the canonical parsed JSON payload; this is **not** a raw source-file byte hash because no source file upload/parser has been configured yet.
 
 Batches with validation exceptions are marked `blocked`; even clean batches are staging-only. No import, balance posting, account cutover, or production migration is exposed until an authorized source export, approved account mapping, target-side reconciliation, and separate release approval exist. Viewing migration exceptions and audit history is role-restricted and logged.
+
+## Money requests
+
+Members can submit and track withdrawal, transfer, account-service, and other money requests through the authenticated API and member portal. Staff can request more information, and management makes final approval/rejection decisions with a recorded reason. Requests, decisions, audit events, member notifications, and the operations email outbox are persisted transactionally. Approval only changes the request status; it does not create a transaction or move funds.
