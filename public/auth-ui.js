@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const state = { ready:false, user:null, roles:[], identityAvailable:false, inviteToken:null, error:null };
+  const state = { ready:false, user:null, roles:[], identityAvailable:false, inviteToken:null, recoveryToken:null, error:null };
   window.AVCUAuthState = state;
   const button = $('auth-button');
   const status = $('auth-status-text');
@@ -13,6 +13,7 @@
   const password = $('auth-password');
   const title = $('auth-title');
   const submit = $('auth-submit');
+  const recovery = $('auth-recovery');
 
   function publish() {
     const roles = state.roles;
@@ -29,12 +30,14 @@
 
   function showLogin() {
     error.textContent = '';
-    if (state.inviteToken) {
+    if (state.inviteToken || state.recoveryToken) {
       emailWrap.classList.add('hidden');
-      title.textContent = 'Set your password';
-      submit.textContent = 'Accept invitation';
+      title.textContent = state.inviteToken ? 'Set your password' : 'Reset your password';
+      submit.textContent = state.inviteToken ? 'Accept invitation' : 'Update password';
       password.autocomplete = 'new-password';
+      if (recovery) recovery.classList.add('hidden');
     } else {
+      if (recovery) recovery.classList.remove('hidden');
       emailWrap.classList.remove('hidden');
       title.textContent = 'Sign in to AVCU';
       submit.textContent = 'Sign in';
@@ -60,8 +63,9 @@
     submit.disabled = true;
     try {
       if (state.inviteToken) {
-        const user = await window.AVCUIdentity.acceptInvite(state.inviteToken, password.value);
-        state.user = user;
+        state.user = await window.AVCUIdentity.acceptInvite(state.inviteToken, password.value);
+      } else if (state.recoveryToken) {
+        state.user = await window.AVCUIdentity.recoverPassword(state.recoveryToken, password.value);
       } else {
         await window.AVCUIdentity.login(email.value.trim(), password.value);
       }
@@ -75,14 +79,24 @@
     }
   });
 
+  recovery?.addEventListener('click', async () => {
+    error.textContent = '';
+    const address = email.value.trim();
+    if (!address) { error.textContent = 'Enter your email address first.'; return; }
+    try { await window.AVCUIdentity.requestPasswordRecovery(address); error.textContent = 'If this account exists, password recovery instructions have been sent.'; }
+    catch { error.textContent = 'Password recovery is unavailable. Contact the administrator.'; }
+  });
+
   async function initialize() {
     try {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      state.recoveryToken = hash.get('recovery_token') || null;
       const callback = await window.AVCUIdentity.handleAuthCallback();
       state.identityAvailable = true;
       if (callback?.type === 'invite' && callback.token) {
         state.inviteToken = callback.token;
-      } else if (callback?.type === 'recovery') {
-        state.error = 'Password recovery needs the institution-approved reset flow. Contact the administrator.';
+      } else if (callback?.type === 'recovery' && !state.recoveryToken) {
+        state.error = 'This password recovery link is invalid or expired.';
       }
       state.user = await window.AVCUIdentity.getUser();
       state.roles = Array.isArray(state.user?.roles) ? state.user.roles : [];
