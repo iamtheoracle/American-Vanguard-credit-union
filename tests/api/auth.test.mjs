@@ -18,6 +18,39 @@ test('authentication and session lifecycle', async t => {
     method: 'POST', body: { identifier: reg.data.member.username, password: 'Str0ngPassphrase!' }
   });
   assert.equal(byUsername.status, 200, 'username can sign in independently of email/member number');
+  process.env.AVCU_PUBLIC_BASE_URL = 'https://avcu.test';
+  const resetRequest = await api(env.base, '/api/auth/password-reset/request', {
+    method: 'POST', body: { identifier: reg.data.member.username }
+  });
+  assert.equal(resetRequest.status, 202);
+  const db = await import('../../server/db.js');
+  const { rows: resetEmails } = await db.query(
+    "SELECT email_text FROM notification_outbox WHERE member_id = $1 AND event_type = 'auth.password_reset' ORDER BY created_at DESC LIMIT 1",
+    [reg.data.member.id]
+  );
+  assert.equal(resetEmails.length, 1, 'reset instructions are queued for the verified member email');
+  const resetMatch = resetEmails[0].email_text.match(/https:\/\/avcu\.test\/member-portal\.html\?resetToken=([A-Za-z0-9_-]+)/);
+  assert.ok(resetMatch, 'reset email contains a valid portal link');
+  const resetToken = resetMatch[1];
+  const { rows: tokenRows } = await db.query('SELECT token_hash FROM password_reset_tokens WHERE member_id = $1', [reg.data.member.id]);
+  assert.equal(tokenRows.length, 1);
+  assert.notEqual(tokenRows[0].token_hash, resetToken, 'only a token hash is persisted');
+  const resetComplete = await api(env.base, '/api/auth/password-reset/complete', {
+    method: 'POST', body: { token: resetToken, password: 'NewSecurePassphrase!' }
+  });
+  assert.equal(resetComplete.status, 200);
+  const oldPasswordLogin = await api(env.base, '/api/auth/login', {
+    method: 'POST', body: { identifier: reg.data.member.username, password: 'Str0ngPassphrase!' }
+  });
+  assert.equal(oldPasswordLogin.status, 401);
+  const newPasswordLogin = await api(env.base, '/api/auth/login', {
+    method: 'POST', body: { identifier: reg.data.member.username, password: 'NewSecurePassphrase!' }
+  });
+  assert.equal(newPasswordLogin.status, 200);
+  const tokenReuse = await api(env.base, '/api/auth/password-reset/complete', {
+    method: 'POST', body: { token: resetToken, password: 'AnotherSecurePassphrase!' }
+  });
+  assert.equal(tokenReuse.status, 400, 'reset tokens are single-use');
 
   // 2. Registration validation.
   const bad = await api(env.base, '/api/auth/register', {
