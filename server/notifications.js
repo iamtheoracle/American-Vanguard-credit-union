@@ -110,8 +110,8 @@ export async function processNotificationOutbox() {
       `SELECT * FROM notification_outbox
        WHERE status IN ('pending','retry') AND next_attempt_at <= now()
        ORDER BY id
-       FOR UPDATE SKIP LOCKED
-       LIMIT $1`, [BATCH_SIZE]);
+       LIMIT $1
+       FOR UPDATE SKIP LOCKED`, [BATCH_SIZE]);
     for (const row of rows) {
       await client.query(
         `UPDATE notification_outbox
