@@ -148,3 +148,34 @@ test('card controls fail closed without a live issuer and create no fake authori
   assert.equal(Number(after.rows[0].n), Number(before.rows[0].n),
     'unavailable provider must not create simulated card transactions');
 });
+
+
+test('member activity supports safe filtering, date validation, and offset pagination', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { cookie } = await loginMember(env.base);
+
+  const first = await api(env.base, '/api/transactions?limit=1&offset=0', { cookie });
+  assert.equal(first.status, 200);
+  assert.ok(Array.isArray(first.data.transactions));
+  assert.equal(first.data.pagination.limit, 1);
+  assert.equal(first.data.pagination.offset, 0);
+  assert.equal(typeof first.data.pagination.hasMore, 'boolean');
+
+  const badDate = await api(env.base, '/api/transactions?from=not-a-date', { cookie });
+  assert.equal(badDate.status, 400);
+
+  const reversedRange = await api(env.base, '/api/transactions?from=2026-10-20&to=2026-10-01', { cookie });
+  assert.equal(reversedRange.status, 400);
+
+  const noMatch = await api(env.base, '/api/transactions?status=__no_such_status__', { cookie });
+  assert.equal(noMatch.status, 200);
+  assert.deepEqual(noMatch.data.transactions, []);
+
+  const second = await api(env.base, '/api/transactions?limit=1&offset=1', { cookie });
+  assert.equal(second.status, 200);
+  if (first.data.transactions.length && second.data.transactions.length) {
+    assert.notEqual(first.data.transactions[0].id, second.data.transactions[0].id,
+      'offset pagination should not repeat the same transaction');
+  }
+});
