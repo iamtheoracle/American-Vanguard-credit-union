@@ -3,6 +3,9 @@
   const $ = id => document.getElementById(id);
   let member = null;
   let accounts = [];
+  let transactionRows = [];
+  let transactionOffset = null;
+  let transactionHasMore = false;
   const dollars = cents => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(cents || 0) / 100);
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const showMessage = (id, message, error = false) => { const node = $(id); node.textContent = message || ''; node.classList.toggle('error', error); };
@@ -34,7 +37,7 @@
   }
   async function loadDashboard() {
     const [accountData, transactionData, cardData, notificationData, tierData, loanData, moneyRequestData, poolData] = await Promise.all([
-      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier'), api('/loans/applications'), api('/money-requests'), api('/funding-pools')
+      api('/accounts'), api(`/transactions?limit=30&offset=0&search=${encodeURIComponent($('transaction-search').value.trim())}`), api('/card'), api('/notifications'), api('/membership-tier'), api('/loans/applications'), api('/money-requests'), api('/funding-pools')
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
@@ -63,7 +66,10 @@
       select.innerHTML = accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)} · •••• ${escapeHtml(a.suffix)}</option>`).join('');
       if (accounts.some(a => a.id === previous)) select.value = previous;
     }
-    $('transactions-list').innerHTML = transactionData.transactions?.length ? `<table><thead><tr><th>Date</th><th>Type / description</th><th>Status</th><th>Amount</th></tr></thead><tbody>${transactionData.transactions.map(t => `<tr><td>${escapeHtml(new Date(t.createdAt).toLocaleDateString())}</td><td><strong>${escapeHtml(t.memo || t.type)}</strong><small>${escapeHtml(t.reference)}</small></td><td><span class="status-pill">${escapeHtml(String(t.status).replaceAll('_',' '))}</span></td><td>${dollars(t.amountCents)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No API transactions yet.</p>';
+    transactionRows = transactionData.transactions || [];
+    transactionOffset = transactionData.pagination?.nextOffset ?? null;
+    transactionHasMore = Boolean(transactionData.pagination?.hasMore);
+    renderTransactions();
     $('notifications-list').innerHTML = notificationData.notifications?.length ? notificationData.notifications.map(n => `<article class="notification-row ${n.read ? '' : 'unread'}"><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.body)}</p><small>${escapeHtml(new Date(n.createdAt).toLocaleString())}</small></article>`).join('') : '<p class="muted">No notifications yet.</p>';
     $('loan-submit').disabled = member?.status !== 'verified';
     $('loan-form-note').textContent = member?.status === 'verified'
@@ -115,6 +121,11 @@
     }).join('') : '<p class="muted">No published funding pools are configured. Management must supply approved terms and disclosures before any pool can be published.</p>';
 
 
+  }
+  function renderTransactions(){
+    $('transactions-list').innerHTML = transactionRows.length ? `<table><thead><tr><th>Date</th><th>Type / description</th><th>Status</th><th>Amount</th></tr></thead><tbody>${transactionRows.map(t => `<tr><td>${escapeHtml(new Date(t.createdAt).toLocaleString())}</td><td><strong>${escapeHtml(t.memo || t.type)}</strong><small>${escapeHtml(t.reference)}</small></td><td><span class="status-pill">${escapeHtml(String(t.status).replaceAll('_',' '))}</span></td><td>${dollars(t.amountCents)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No transactions match this search.</p>';
+    $('transaction-page-status').textContent = transactionRows.length ? `Showing ${transactionRows.length} transaction(s)` : 'No results';
+    $('load-more-transactions').disabled = !transactionHasMore;
   }
   async function refresh() {
     try { await loadDashboard(); showMessage('dashboard-message','Account information refreshed.'); }
@@ -178,6 +189,22 @@
     member=null; setAuthenticated(false); switchAuth(false);
   });
   $('refresh-button').addEventListener('click', refresh);
+  $('transaction-search').addEventListener('change', refresh);
+  $('clear-transaction-search').addEventListener('click', async () => { $('transaction-search').value = ''; await refresh(); });
+  $('load-more-transactions').addEventListener('click', async () => {
+    if (transactionOffset === null) return;
+    const button = $('load-more-transactions');
+    button.disabled = true;
+    try {
+      const page = await api(`/transactions?limit=30&offset=${transactionOffset}&search=${encodeURIComponent($('transaction-search').value.trim())}`);
+      transactionRows = transactionRows.concat(page.transactions || []);
+      transactionOffset = page.pagination?.nextOffset ?? null;
+      transactionHasMore = Boolean(page.pagination?.hasMore);
+      renderTransactions();
+    } catch (error) { showMessage('dashboard-message', error.message, true); }
+    finally { button.disabled = !transactionHasMore; }
+  });
+
   $('transfer-form').addEventListener('submit', async event => {
     event.preventDefault();
     const amountCents = Math.round(Number($('transfer-amount').value) * 100);
