@@ -44,6 +44,14 @@ test('unauthenticated users see local mode and a sign-in entry point', async ({ 
   await expect(page.locator('#auth-dialog')).toBeVisible();
   await expect(page.locator('#auth-title')).toHaveText('Sign in to AVCU');
   await expect(page.locator('#auth-form')).toContainText('institution-issued account');
+  if (process.env.BASE_URL) {
+    const api = await page.evaluate(async () => {
+      const response = await fetch('/api/workflow', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      return { status: response.status, body: await response.json().catch(() => ({})) };
+    });
+    expect([401, 503]).toContain(api.status);
+    expect(api.status).not.toBe(404);
+  }
 });
 
 test('member request enters approval queue and operator can request more information', async ({ page }) => {
