@@ -53,6 +53,14 @@
         <section class="panel"><h2>Debit card controls</h2><p class="muted">Card actions use the sandbox adapter and cannot reach a payment network.</p><button id="freeze-button" class="secondary" type="button">Freeze card</button>
           <form id="purchase-form" class="stack top-gap"><label for="purchase-merchant">Test merchant</label><input id="purchase-merchant" value="Harbor Market" maxlength="80" required><label for="purchase-amount">Amount (USD)</label><input id="purchase-amount" type="number" value="12.50" min="0.01" max="10000" step="0.01" required><button class="secondary" type="submit">Test authorization</button></form>
         </section>
+        <section class="panel"><h2>Loan application</h2><form id="loan-form" class="stack">
+          <label for="loan-amount">Requested amount (USD)</label><input id="loan-amount" type="number" min="0.01" step="0.01" required>
+          <label for="loan-term">Requested term (months, optional)</label><input id="loan-term" type="number" min="1" step="1">
+          <label for="loan-purpose">Purpose</label><textarea id="loan-purpose" minlength="10" maxlength="2000" rows="4" required></textarea>
+          <button id="loan-submit" class="primary" type="submit">Submit loan application</button>
+          <p id="loan-form-note" class="muted small">Applications are reviewed by management. Approval does not disburse funds or guarantee a rate.</p>
+        </form></section>
+        <section class="panel wide"><div class="section-head"><h2>Loan applications</h2><button class="text-button" id="refresh-loans" type="button">Refresh</button></div><div id="loan-applications-list" class="notification-list"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Recent transactions</h2><span class="tag">API DATA</span></div><div id="transactions-list" class="table-wrap"></div></section>
         <section class="panel wide"><div class="section-head"><h2>Notifications</h2><button id="read-notifications" class="text-button" type="button">Mark all read</button></div><div id="notifications-list" class="notification-list"></div></section>
       </div>
