@@ -224,7 +224,21 @@ router.get('/operator/members/:id', ...guard('management', 'operator'), async (r
       `SELECT t.reference, t.type, t.status, t.amount_cents AS "amountCents", t.created_at AS "createdAt", t.memo, t.payee
        FROM transactions t JOIN accounts a ON (a.id = t.from_account_id OR a.id = t.to_account_id)
        WHERE a.member_id = $1 ORDER BY t.created_at DESC LIMIT 50`, [member.id]);
-    res.json({ member, accounts: accounts.rows, transactions: transactions.rows });
+    const [loans, moneyRequests, approvals] = await Promise.all([
+      query(`SELECT reference, status, requested_amount_cents AS "amountCents", currency,
+                    created_at AS "createdAt", reviewed_at AS "reviewedAt", decision_reason AS "decisionReason"
+             FROM loan_applications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id]),
+      query(`SELECT reference, request_type AS "requestType", status, amount_cents AS "amountCents",
+                    currency, created_at AS "createdAt", reviewed_at AS "reviewedAt", decision_reason AS "decisionReason"
+             FROM money_requests WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id]),
+      query(`SELECT id, item_type AS "itemType", status, decision_reason AS "decisionReason",
+                    created_at AS "createdAt", decided_at AS "decidedAt"
+             FROM approvals WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id])
+    ]);
+    res.json({
+      member, accounts: accounts.rows, transactions: transactions.rows,
+      loans: loans.rows, moneyRequests: moneyRequests.rows, approvals: approvals.rows
+    });
   } catch (error) { next(error); }
 });
 
