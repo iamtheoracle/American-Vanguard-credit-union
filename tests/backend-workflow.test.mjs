@@ -27,6 +27,8 @@ test('backend rejects invalid account pairs, amount values, and client-supplied 
 
 test('backend rejects FX and check deposit until trusted provider and document storage exist', () => {
   const base = { sourceAccount:'draft', amountCents:1250, purpose:'Service request' };
+  const nonUsdWire = validateRequest({ ...base, type:'wire-transfer', recipient:'Receiving bank', destinationDetails:'Bank details on file', currency:'EUR' });
+  assert.ok(nonUsdWire.error?.includes('USD'));
   const fx = validateRequest({ ...base, type:'fx', recipient:'Exchange provider', currency:'EUR' });
   assert.ok(fx.unavailable?.includes('Live FX'));
   const check = validateRequest({ ...base, type:'check-deposit' });
@@ -47,6 +49,9 @@ test('backend requires Identity roles and prevents operators from reviewing thei
   assert.ok(source.includes("if (!user) return respond({ error:'Sign in is required.' },401)"));
   assert.ok(source.includes("if (!isOperator(user)) return respond({ error:'Authorized operator role required.' },403)"));
   assert.ok(source.includes("if (row.created_by === user.id)"));
+  assert.ok(source.includes('function publicRequest(row)'), 'API responses must be explicitly allow-listed');
+  assert.ok(source.includes("'actor',CASE WHEN a.actor_id=r.created_by THEN 'Member' ELSE 'Authorized operator' END"), 'audit output must not expose user IDs');
+  assert.ok(!source.includes("SELECT * FROM avcu_workflow_requests WHERE created_by"), 'member API must not return raw database rows');
   assert.ok(source.includes("Approval blocked: verified account records and sufficient available funds are required"));
   assert.ok(source.includes("nextStatus = external.has(row.type) ? 'approved-awaiting-provider'"));
   assert.ok(!source.includes("nextStatus = 'settled'"));
