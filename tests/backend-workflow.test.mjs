@@ -44,9 +44,17 @@ test('backend schema has audit history, idempotency, and no seeded account balan
   assert.ok(!/INSERT\s+INTO\s+avcu_account_balances/i.test(schema), 'migration must not fabricate account balances');
 });
 
+test('new Identity accounts receive member role by default, never operator role', async () => {
+  const identity = await readFile(new URL('../netlify/functions/identity.mjs', import.meta.url), 'utf8');
+  assert.ok(identity.includes("['member']"));
+  assert.ok(!identity.includes("['operator']"));
+  assert.ok(!identity.includes("['admin']"));
+});
+
 test('backend requires Identity roles and prevents operators from reviewing their own requests', async () => {
   const source = await readFile(new URL('../netlify/functions/workflow.mjs', import.meta.url), 'utf8');
   assert.ok(source.includes("if (!user) return respond({ error:'Sign in is required.' },401)"));
+  assert.ok(source.includes('verifyRequestOrigin(request)'), 'workflow mutations must reject cross-origin requests');
   assert.ok(source.includes("if (!isOperator(user)) return respond({ error:'Authorized operator role required.' },403)"));
   assert.ok(source.includes("if (row.created_by === user.id)"));
   assert.ok(source.includes('function publicRequest(row)'), 'API responses must be explicitly allow-listed');
