@@ -4,11 +4,17 @@
   "private": true,
   "description": "Member authentication, onboarding and verification review workflow",
   "scripts": {
+    "build": "esbuild app.js --bundle --format=esm --outfile=auth.bundle.js",
     "check": "node --check app.js && node --check netlify/functions/member-api.mjs && node --check netlify/functions/admin-reviews.mjs && node --check netlify/functions/identity.mjs && node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@netlify/database": "^0.10.0",
-    "@netlify/identity": "^0.4.0"
+    "@netlify/database": "^2.0.1",
+    "@netlify/identity": "^2.0.0"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
 }
