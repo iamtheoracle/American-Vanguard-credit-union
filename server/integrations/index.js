@@ -154,7 +154,7 @@ export async function integrationHealth() {
 export function verifyWebhookSignature({ secret, body, signature, timestamp }) {
   const tolerance = POLICY.WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS * 1000;
   if (typeof secret !== 'string' || secret.length === 0) return false;
-  if (typeof timestamp !== 'string' || !/^\\d+$/.test(timestamp)) return false;
+  if (typeof timestamp !== 'string' || !/^\d+$/.test(timestamp)) return false;
   const timestampMs = Number(timestamp);
   if (!Number.isSafeInteger(timestampMs) || Math.abs(Date.now() - timestampMs) > tolerance) return false;
   if (typeof signature !== 'string' || !/^(?:sha256=)?[a-f0-9]{64}$/.test(signature)) return false;
