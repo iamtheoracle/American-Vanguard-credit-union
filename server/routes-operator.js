@@ -71,6 +71,7 @@ router.get('/operator/queue', ...guard('management', 'operator'), async (req, re
       cases: { open: Number(cases.rows[0].open), escalated: Number(cases.rows[0].escalated) },
       aiFailed: Number(aiFailed.rows[0].failed),
       membershipPending: Number(membership.rows[0].pending),
+      loanAlertsPending: Number(alerts.rows[0].pending),
       integrations: health
     });
   } catch (error) { next(error); }
@@ -423,6 +424,52 @@ router.patch('/operator/operators/:id', requireOperatorRole('super_admin'), asyn
       metadata: { role, active }
     });
     res.json({ operator: rows[0] });
+  } catch (error) { next(error); }
+});
+
+// ---- loan application operations alerts -------------------------------------
+router.get('/operator/loan-alerts', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const status = ['pending','acknowledged','resolved'].includes(req.query.status) ? req.query.status : null;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const params = [];
+    let where = 'TRUE';
+    if (status) { params.push(status); where = `oa.status = ${params.length}`; }
+    params.push(limit);
+    const { rows } = await query(
+      `SELECT oa.id, oa.alert_type AS "alertType", oa.status,
+              oa.created_at AS "createdAt", oa.acknowledged_at AS "acknowledgedAt",
+              oa.acknowledged_by AS "acknowledgedBy",
+              la.id AS "applicationId", la.reference,
+              la.requested_amount_cents AS "requestedAmountCents", la.currency,
+              la.requested_term_months AS "requestedTermMonths", la.status AS "applicationStatus",
+              la.submitted_at AS "submittedAt", m.id AS "memberId",
+              m.full_name AS "memberName", m.email AS "memberEmail"
+       FROM operations_alerts oa
+       JOIN loan_applications la ON la.id = oa.loan_application_id
+       JOIN members m ON m.id = la.member_id
+       WHERE ${where}
+       ORDER BY CASE oa.status WHEN 'pending' THEN 0 ELSE 1 END, oa.created_at DESC
+       LIMIT ${params.length}`, params);
+    res.json({ alerts: rows.map(row => ({ ...row, requestedAmountCents: Number(row.requestedAmountCents) })) });
+  } catch (error) { next(error); }
+});
+
+router.post('/operator/loan-alerts/:id/acknowledge', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `UPDATE operations_alerts
+       SET status = 'acknowledged', acknowledged_at = now(), acknowledged_by = $1
+       WHERE id = $2 AND status = 'pending'
+       RETURNING id, alert_type AS "alertType", status, acknowledged_at AS "acknowledgedAt"`,
+      [req.operator.id, req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Pending operations alert not found' });
+    await audit(null, {
+      actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
+      action: 'loan.alert.acknowledged', entityType: 'operations_alert', entityId: rows[0].id,
+      metadata: { alertType: rows[0].alertType }
+    });
+    res.json({ alert: rows[0] });
   } catch (error) { next(error); }
 });
 
