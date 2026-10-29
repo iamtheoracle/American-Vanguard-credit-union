@@ -58,6 +58,24 @@ Operator endpoints (authenticated and role-checked):
 
 Member endpoint: `GET /api/membership-tier`.
 
+## Privy wallet identity integration
+
+The API can link a member's existing Privy identity and read its canonical linked wallet addresses. It does not provision embedded wallets, custody keys, sign transactions, or broadcast transfers.
+
+Configure these values as server-side deployment secrets (never in browser code or Git):
+
+- `PRIVY_APP_ID`
+- `PRIVY_APP_SECRET`
+- `PRIVY_VERIFICATION_KEY` — the PEM-encoded ES256 public verification key for the same Privy app.
+
+The member must first be authenticated to AVCU. The frontend obtains a Privy access token through the official Privy client SDK and sends it to `POST /api/wallets/privy/link` in the `X-Privy-Access-Token` header. The API verifies its signature and audience, fetches the canonical user record from Privy using server credentials, then persists only the Privy user ID and public linked-wallet addresses. It never persists the access token or private keys.
+
+- `GET /api/wallets/privy/status` — member's link state and public linked wallets.
+- `POST /api/wallets/privy/link` — verify and link the signed-in member's Privy identity.
+- `DELETE /api/wallets/privy/link` — unlink the current member's Privy identity.
+
+The AVCU member session is still required for all three routes. The same Privy user ID cannot be linked to multiple AVCU members. Wallet linking is not proof of beneficial ownership of funds and does not authorize a transfer. **All signing, broadcasting, and real-money movement remain disabled.** The frontend Privy SDK setup and embedded-wallet provisioning are separate remaining integration steps.
+
 ## Testing
 
 `npm run check` validates the JavaScript syntax for the frontend and API.
