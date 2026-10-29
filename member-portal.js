@@ -29,8 +29,8 @@
     $('dashboard').classList.toggle('hidden', !value);
   }
   async function loadDashboard() {
-    const [accountData, transactionData, cardData, notificationData, tierData, loanData, poolData] = await Promise.all([
-      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier'), api('/loans/applications'), api('/funding-pools')
+    const [accountData, transactionData, cardData, notificationData, tierData, loanData, moneyRequestData, poolData] = await Promise.all([
+      api('/accounts'), api('/transactions?limit=30'), api('/card'), api('/notifications'), api('/membership-tier'), api('/loans/applications'), api('/money-requests'), api('/funding-pools')
     ]);
     accounts = accountData.accounts || [];
     $('welcome-title').textContent = `Welcome, ${member?.fullName || 'member'}`;
@@ -74,6 +74,21 @@
       <small>Submitted ${escapeHtml(new Date(app.submittedAt).toLocaleString())} · USD</small>
       ${app.status === 'information_required' ? `<form class="loan-response-form stack top-gap" data-loan-id="${escapeHtml(app.id)}"><label>Additional information requested</label><p>${escapeHtml(app.informationRequested || "Please provide the information requested by the reviewer.")}</p><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>` : ''}
     </article>`).join('') : '<p class="muted">No loan applications yet.</p>';
+
+    $('money-request-submit').disabled = member?.status !== 'verified';
+    $('money-request-form-note').textContent = member?.status === 'verified'
+      ? 'This creates a review request only. It does not initiate a transfer or settlement.'
+      : 'Membership verification is required before submitting a money request.';
+    const moneyRequests = moneyRequestData.requests || [];
+    $('money-requests-list').innerHTML = moneyRequests.length ? moneyRequests.map(request => `<article class="notification-row">
+      <strong>${escapeHtml(request.reference)} · ${dollars(request.amountCents)}</strong>
+      <p><span class="status-pill">${escapeHtml(String(request.status).replaceAll('_',' '))}</span> · ${escapeHtml(String(request.requestType).replaceAll('_',' '))}</p>
+      <p>${escapeHtml(request.memberNote)}</p>
+      ${request.decisionReason ? `<p class="muted">Decision note: ${escapeHtml(request.decisionReason)}</p>` : ''}
+      ${request.informationRequested ? `<p><strong>Additional information requested:</strong> ${escapeHtml(request.informationRequested)}</p>` : ''}
+      <small>Submitted ${escapeHtml(new Date(request.submittedAt).toLocaleString())} · ${escapeHtml(request.currency)}</small>
+      ${request.status === 'information_required' ? `<form class="money-request-response-form stack top-gap" data-request-id="${escapeHtml(request.id)}"><label>Your response</label><textarea name="response" minlength="10" maxlength="2000" rows="3" required></textarea><button class="secondary" type="submit">Send response</button></form>` : ''}
+    </article>`).join('') : '<p class="muted">No money requests yet.</p>';
     const pools = poolData.pools || [];
     $('funding-pools-list').innerHTML = pools.length ? pools.map(pool => {
       const eligibility = Array.isArray(pool.eligibilityRequirements) ? pool.eligibilityRequirements : [];
@@ -144,6 +159,43 @@
     catch(error) { showMessage('dashboard-message',error.message,true); }
   });
 
+
+  $('money-request-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = $('money-request-submit');
+    button.disabled = true;
+    try {
+      const result = await post('/money-requests', {
+        requestType: $('money-request-type').value,
+        amountCents: Math.round(Number($('money-request-amount').value) * 100),
+        currency: 'USD',
+        note: $('money-request-note').value
+      });
+      $('money-request-form').reset();
+      showMessage('dashboard-message', result.message || 'Money request submitted for review.');
+      await refresh();
+    } catch (error) {
+      showMessage('dashboard-message', error.message, true);
+    } finally {
+      button.disabled = member?.status !== 'verified';
+    }
+  });
+  $('refresh-money-requests').addEventListener('click', refresh);
+  $('money-requests-list').addEventListener('submit', async event => {
+    const form = event.target.closest('.money-request-response-form');
+    if (!form) return;
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await post(`/money-requests/${form.dataset.requestId}/information`, { response: form.elements.response.value });
+      showMessage('dashboard-message', 'Your additional information was submitted for review.');
+      await refresh();
+    } catch (error) {
+      showMessage('dashboard-message', error.message, true);
+      button.disabled = false;
+    }
+  });
   $('loan-form').addEventListener('submit', async event => {
     event.preventDefault();
     const button = $('loan-submit');
