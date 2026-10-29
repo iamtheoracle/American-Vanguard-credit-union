@@ -1,35 +1,32 @@
-# American Vanguard Credit Union — Member Banking Demo
+# American Vanguard Credit Union — member access and onboarding
 
-A responsive, interactive **front-end demonstration** of a fictional credit-union member experience. This repository is intentionally self-contained: HTML, CSS, and browser JavaScript only.
+This branch replaces the former fictional banking dashboard with a member-access and verification workflow. It does not fabricate balances, transactions, card details, rates, or branch information.
 
-> **Demo-only notice:** American Vanguard Credit Union is represented here as a product concept, not a real or chartered credit union. The prototype is not insured, does not hold deposits, and cannot move real money. Jordan Hale, all account balances, transactions, rates, branch details, and the debit card are fictional sample data.
+## Implementation
+1. Netlify Identity provides registration, email confirmation, sign-in, sign-out, and password recovery.
+2. A signed-in user submits a membership application; the server stores it as pending.
+3. Verification requests and their status are stored in Netlify Database (Postgres). Staff can decide approved, rejected, or resubmission.
+4. The staff review API checks the Netlify Identity `admin` role on the server for every request. Decisions require notes and create an append-only review event.
+5. The member view only displays the user's own application status. It does not display financial account data.
 
-## Preview features
+## Setup required in Netlify
+- Enable and configure Netlify Identity for the site; ensure email confirmation is enabled and password recovery email templates/settings are configured.
+- Enable Netlify Database for the project. The migration in `netlify/database/migrations/` is applied by Netlify on deployment.
+- Assign the `admin` role only to approved staff using the Netlify Identity admin interface. Never grant admin role from the browser or signup form.
+- Configure the preview deployment and run the full signup, confirmation, sign-in, recovery, member submission, staff decision, and unauthorized-access tests before merging.
 
-- Member overview with four demo shares: Share Draft, Primary Share, Money Market, and Holiday Club.
-- Local share-to-share transfers and simulated bill payments from Share Draft.
-- Simulated check deposits into a selected demo share.
-- Debit-card freeze/unfreeze and a test purchase that declines while frozen.
-- Illustrative share rates, fictional branch cards, recent activity, and a resettable demo ledger.
-- Responsive desktop/mobile navigation, accessible form labels and focus states, and a visible demo disclosure.
-- Local browser persistence only. No sign-in, API, bank connection, payment rail, or external font dependency.
+Identity settings are dashboard-only. This repository cannot enable Identity or assign staff accounts in the Netlify dashboard on its own.
 
-## Run locally
-
-No install or build step is required for the app itself. Serve the repository root with any static HTTP server, or open `index.html` directly in a modern browser.
-
-For code checks, use Node.js 20 or newer:
-
+## Checks
+Use Node.js 20 or newer:
 ```sh
+npm install
 npm run check
 ```
 
-The check validates JavaScript syntax and runs the repository's built-in smoke tests.
+The tests check source-level security invariants and absence of the previous fabricated financial content. They are not a substitute for end-to-end tests against a configured Netlify preview.
 
-## Data and privacy
+## Explicit limits
+No banking/core system is connected. No balances, ledger entries, transfers, deposits, card actions, interest rates, or financial products are shown or processed. No identity documents are collected by this workflow; connect an approved identity-verification provider and define secure document handling before adding document uploads. Membership approval in this workflow is not a substitute for a real financial institution's legal, compliance, or core-banking controls.
 
-The demo stores its sample ledger in this browser's `localStorage` under `avcu.member-demo.v1`. Data is not synchronized between devices. Resetting the demo restores the original sample data in this browser. Avoid entering real personal or financial information.
-
-## Not production banking software
-
-This preview has no authentication, backend, ledger authority, fraud monitoring, compliance controls, deposit insurance, or payment integrations. It must not be used to accept deposits, process payments, issue cards, or represent real financial products. Any future production build requires a separate, security-reviewed architecture and appropriately authorized financial-institution relationships.
+Do not release to production until Netlify Identity and Database are configured, the preview deployment is green, and the authenticated and unauthenticated flows have been exercised end-to-end.
