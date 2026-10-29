@@ -2,6 +2,7 @@ name: AVCU verification
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main, "feat/**", "fix/**"]
   workflow_dispatch:
