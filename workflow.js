@@ -5,7 +5,7 @@ const A={draft:'Share Draft (Checking)',primary:'Primary Share (Savings)',market
 const T={'internal-transfer':'Internal account transfer','bill-payment':'Bill payment','wire-transfer':'Wire transfer',zelle:'Zelle payment request',fx:'Foreign exchange (FX)',withdrawal:'Withdrawal',ira:'IRA contribution / withdrawal','401k':'401(k) rollover / retirement request','check-deposit':'Check deposit','card-authorization':'Card purchase authorization'};
 const external=new Set(['bill-payment','wire-transfer','zelle','fx','withdrawal','ira','401k','check-deposit','card-authorization']);
 const routing={'internal-transfer':['Account Services','Account Operator'],'bill-payment':['Payments Operations','Payments Operator'],'wire-transfer':['Payments Operations','Wire Operator'],'zelle':['Payments Operations','Zelle Operator'],'fx':['Treasury Operations','FX Operator'],'withdrawal':['Payments Operations','Withdrawal Operator'],'ira':['Retirement Services','Retirement Administrator'],'401k':['Retirement Services','Retirement Administrator'],'check-deposit':['Deposit Operations','Deposit Operator'],'card-authorization':['Card Services','Card Operator']};
-let requests=load(), files=new Map(), zelleVerified=new Map();
+let requests=load(), files=new Map(), zelleVerified=new Map(), fxQuotes=new Map();
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>window.crypto?.randomUUID?.()||('AV-'+Date.now()+'-'+Math.random().toString(16).slice(2,8));
@@ -23,8 +23,9 @@ function create(d,f){
  if(type==='internal-transfer'&&(!A[to]||to===from))return {error:'Choose two different accounts.'};
  if(['bill-payment','wire-transfer','zelle','withdrawal','fx','ira','401k','card-authorization'].includes(type)&&!recipient)return {error:'Enter the recipient, payee, or institution name.'};
  if(['wire-transfer','withdrawal'].includes(type)&&!destination)return {error:'Enter the destination details required for review.'};
+ if(type==='fx'&&!fxQuotes.has(currency+'|'+Math.round(amount*100)))return {error:'Get a live FX quote from the connected provider before submitting this request.'};
  if(type==='check-deposit'&&(!f?.front||!f?.back))return {error:'Capture or select both the front and back of the check.'};
- const now=new Date().toISOString(),r={id:uid(),type,typeLabel:T[type],from,to:type==='internal-transfer'?to:'',recipient,destination,currency:String(d.currency||'USD'),amountCents:Math.round(amount*100),note,status:'pending-approval',createdAt:now,updatedAt:now,operatorNote:'',providerState:'not-connected',providerLookup:type==='zelle'?(zelleVerified.has(recipient.toLowerCase())?'verified':'unavailable-without-provider'):null,assignedTeam:routing[type][0],assignedRole:routing[type][1],checkImages:type==='check-deposit'?{frontName:f.front.name,backName:f.back.name}:null,audit:[{at:now,actor:'Member',action:'Submitted for approval'}]};
+ const now=new Date().toISOString(),r={id:uid(),type,typeLabel:T[type],from,to:type==='internal-transfer'?to:'',recipient,destination,currency:String(d.currency||'USD'),amountCents:Math.round(amount*100),note,status:'pending-approval',createdAt:now,updatedAt:now,operatorNote:'',providerState:'not-connected',providerLookup:type==='zelle'?(zelleVerified.has(recipient.toLowerCase())?'verified':'unavailable-without-provider'):null,fxQuote:type==='fx'?fxQuotes.get(currency+'|'+Math.round(amount*100)):null,assignedTeam:routing[type][0],assignedRole:routing[type][1],checkImages:type==='check-deposit'?{frontName:f.front.name,backName:f.back.name}:null,audit:[{at:now,actor:'Member',action:'Submitted for approval'}]};
  requests.unshift(r);requests=requests.slice(0,500);if(!save()){requests.shift();return {error:'Request could not be saved.'}}if(f?.front&&f?.back)files.set(r.id,f);return {request:r};
 }
 function postTransfer(r){
@@ -51,12 +52,25 @@ function render(){
  if($('workflow-pending-count'))$('workflow-pending-count').textContent=p.length+' pending';
 }
 function fields(){
- const t=$('workflow-type')?.value;if(!t)return;const internal=t==='internal-transfer',check=t==='check-deposit',isZelle=t==='zelle';
+ const t=$('workflow-type')?.value;if(!t)return;const internal=t==='internal-transfer',check=t==='check-deposit',isZelle=t==='zelle',isFx=t==='fx';
  $('workflow-to-wrap')?.classList.toggle('hidden',!internal);$('workflow-recipient-wrap')?.classList.toggle('hidden',internal||check);
- $('workflow-destination-wrap')?.classList.toggle('hidden',!['wire-transfer','withdrawal'].includes(t));$('workflow-currency-wrap')?.classList.toggle('hidden',t!=='fx');$('workflow-check-wrap')?.classList.toggle('hidden',!check);$('zelle-lookup')?.classList.toggle('hidden',!isZelle);$('zelle-lookup-note')?.classList.toggle('hidden',!isZelle);$('zelle-lookup-result')?.classList.add('hidden');
+ $('workflow-destination-wrap')?.classList.toggle('hidden',!['wire-transfer','withdrawal'].includes(t));$('workflow-currency-wrap')?.classList.toggle('hidden',t!=='fx');$('workflow-check-wrap')?.classList.toggle('hidden',!check);$('zelle-lookup')?.classList.toggle('hidden',!isZelle);$('zelle-lookup-note')?.classList.toggle('hidden',!isZelle);$('zelle-lookup-result')?.classList.add('hidden');$('fx-quote')?.classList.toggle('hidden',!isFx);$('fx-quote-result')?.classList.toggle('hidden',!isFx);
  if($('workflow-recipient'))$('workflow-recipient').required=!internal&&!check;
  if($('workflow-destination'))$('workflow-destination').required=['wire-transfer','withdrawal'].includes(t);
  if($('workflow-to'))$('workflow-to').required=internal;
+}
+async function getFxQuote(){
+ const amount=Number($('workflow-amount')?.value),currency=String($('workflow-currency')?.value||'USD'),out=$('fx-quote-result');
+ if(!validAmount(amount)){alert('Enter a valid amount before requesting an FX quote.');return}
+ if(out){out.classList.remove('hidden');out.textContent='Requesting a live quote…'}
+ if(!window.AVCUProviders?.supports?.('getFxQuote')){if(out)out.textContent='Live FX quotes are unavailable because the authorized FX provider is not connected. No rate is estimated.';return}
+ try{
+  const q=await window.AVCUProviders.getFxQuote({amount,fromCurrency:'USD',toCurrency:currency});
+  if(!q||!Number.isFinite(Number(q.rate))||Number(q.rate)<=0||!q.quoteId){if(out)out.textContent=q?.message||'The provider did not return a valid, identified quote.';return}
+  const key=currency+'|'+Math.round(amount*100),quote={quoteId:String(q.quoteId),rate:Number(q.rate),expiresAt:q.expiresAt||new Date(Date.now()+300000).toISOString()};
+  fxQuotes.set(key,quote);
+  if(out)out.textContent='Provider quote: 1 USD = '+quote.rate+' '+currency+'. Estimated receive amount: '+(amount*quote.rate).toFixed(2)+' '+currency+'. Quote reference: '+quote.quoteId+'. Expires: '+new Date(quote.expiresAt).toLocaleString()+'.';
+ }catch{if(out)out.textContent='FX quote failed. No exchange rate was applied.'}
 }
 async function lookupZelle(){
  const name=String($('workflow-recipient')?.value||'').trim(),out=$('zelle-lookup-result');
@@ -107,7 +121,7 @@ function review(e){
 function init(){
  document.addEventListener('click',e=>{const b=e.target.closest('#simulate-purchase');if(!b)return;e.preventDefault();e.stopImmediatePropagation();const amount=$('purchase-amount')?.value,merchant=String($('purchase-merchant')?.value||'').trim();let s=null;try{s=JSON.parse(localStorage.getItem(MK)||'null')}catch{}if(s?.frozen){alert('This card is frozen. The authorization request was not submitted.');return}const out=create({type:'card-authorization',from:'draft',recipient:merchant,amount,note:'Card purchase authorization request for '+merchant});if(out.error){alert(out.error);return}render();if($('live-announcer'))$('live-announcer').textContent='Card authorization request submitted for approval.';if($('toast-region'))$('toast-region').textContent='Purchase authorization request submitted for approval. No merchant authorization has occurred.';window.setAVCUView?.('operations')},true);
  ['workflow-form','transfer-form','deposit-form'].forEach(k=>$(k)?.addEventListener('submit',submit,true));
- $('workflow-type')?.addEventListener('change',fields);$('zelle-lookup')?.addEventListener('click',lookupZelle);$('check-front')?.addEventListener('change',()=>preview('check-front','check-front-preview','Front'));$('check-back')?.addEventListener('change',()=>preview('check-back','check-back-preview','Back'));
+ $('workflow-type')?.addEventListener('change',fields);$('zelle-lookup')?.addEventListener('click',lookupZelle);$('fx-quote')?.addEventListener('click',getFxQuote);$('workflow-amount')?.addEventListener('input',()=>{if($('fx-quote-result'))$('fx-quote-result').textContent='Amount changed. Request a fresh FX quote.'});$('workflow-currency')?.addEventListener('change',()=>{if($('fx-quote-result'))$('fx-quote-result').textContent='Currency changed. Request a fresh FX quote.'});$('check-front')?.addEventListener('change',()=>preview('check-front','check-front-preview','Front'));$('check-back')?.addEventListener('change',()=>preview('check-back','check-back-preview','Back'));
  $('workflow-member-queue')?.addEventListener('click',review);$('workflow-operator-queue')?.addEventListener('click',review);fields();render();window.renderWorkflowWorkspace=render;
  window.setAVCUView=v=>document.querySelector('[data-nav="'+v+'"]')?.click();window.addEventListener('avcu:member-state-updated',()=>window.renderAll?.());
 }
