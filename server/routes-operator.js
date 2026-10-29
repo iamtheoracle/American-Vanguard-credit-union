@@ -538,7 +538,7 @@ router.post('/operator/migrations/validate', ...guard('management', 'operator'),
             typeof row.status === 'string' && ['pending','posted','settled','failed','reversed'].includes(row.status) ? row.status : null,
             typeof row.description === 'string' ? row.description.slice(0, 2000) : '',
             typeof row.reference === 'string' ? row.reference.slice(0, 250) : null,
-            accepted ? 'accepted' : 'exception', exception?.code || 'unknown_exception',
+            accepted ? 'accepted' : 'exception', accepted ? null : (exception?.code || 'unknown_exception'),
             JSON.stringify(exception?.fields || []), JSON.stringify(row)]);
       }
       await audit(client, {
