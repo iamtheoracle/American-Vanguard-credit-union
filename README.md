@@ -12,7 +12,7 @@ AVCU is a software prototype with a responsive browser demo and a separate Expre
 - Express API for member registration/login, unique 10-digit numeric member IDs (separate from email), sessions, account and transaction endpoints, operator workflows, server-enforced roles, approval separation of duties, ledger entries, audit events, idempotency, and sandbox integrations.
 - PostgreSQL migrations and seed data for API development.
 - Activity-based membership tiers: New Member, Active Member, Established Member, Priority Service, and Review Required; tier changes are recorded in history and manual overrides are audited.
-- Gmail API notification adapter for membership and transaction status events, with delivery history. Gmail delivery is skipped until OAuth environment variables are configured.
+- Gmail API notification adapter for membership and transaction status events, with delivery history and a persistent PostgreSQL outbox, bounded retries, and event-key deduplication. Gmail delivery is skipped until OAuth environment variables are configured.
 - Automated syntax, demo smoke, and PostgreSQL-backed API tests in GitHub Actions.
 
 **Important integration boundary:** The original demo at `/` still uses local browser storage and simulated data. The API-connected member and operator portals are separate pages that use the authenticated API. This remains a development prototype, not a production-ready banking system.
@@ -22,7 +22,7 @@ AVCU is a software prototype with a responsive browser demo and a separate Expre
 - Node.js 22+
 - PostgreSQL 16+ (or a compatible PostgreSQL release)
 
-Install and configure the database:
+The development seed includes public demo credentials and is explicitly blocked when `NODE_ENV=production`. Production must set `DATABASE_URL` explicitly; the local fallback is for development only. The notification worker persists email events before attempting delivery. Delivery is at-least-once: a process crash after a provider accepts an email but before the outbox is marked sent can still result in a duplicate email, so the application deduplicates queued business events but does not claim exactly-once provider delivery.\n\nInstall and configure the database:
 
 ```sh
 npm ci
