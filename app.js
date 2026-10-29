@@ -4,14 +4,14 @@
   const STORAGE_KEY = 'avcu.member.v1';
   const MAX_TRANSACTIONS = 100;
   const accounts = {
-    draft: { name: 'Share Draft (Checking)', suffix: '2048', kind: 'EVERYDAY' },
-    primary: { name: 'Primary Share (Savings)', suffix: '3812', kind: 'SAVINGS' },
-    market: { name: 'Money Market', suffix: '6621', kind: 'GROWTH' },
-    holiday: { name: 'Holiday Club', suffix: '9055', kind: 'GOAL SAVINGS' },
-    business: { name: 'Business Operating Account', suffix: '7314', kind: 'BUSINESS' },
-    ira: { name: 'Traditional IRA', suffix: '4472', kind: 'RETIREMENT' },
-    certificate: { name: 'Share Certificate', suffix: '1189', kind: 'TERM SAVINGS' },
-    retirement401k: { name: '401(k) Retirement', suffix: '401K', kind: 'RETIREMENT' }
+    draft: { name: 'Share Draft (Checking)', kind: 'EVERYDAY' },
+    primary: { name: 'Primary Share (Savings)', kind: 'SAVINGS' },
+    market: { name: 'Money Market', kind: 'GROWTH' },
+    holiday: { name: 'Holiday Club', kind: 'GOAL SAVINGS' },
+    business: { name: 'Business Operating Account', kind: 'BUSINESS' },
+    ira: { name: 'Traditional IRA', kind: 'RETIREMENT' },
+    certificate: { name: 'Share Certificate', kind: 'TERM SAVINGS' },
+    retirement401k: { name: '401(k) Retirement', kind: 'RETIREMENT' }
   };
   const seed = {
     balances: { draft: 0, primary: 0, market: 0, holiday: 0, business: 0, ira: 0, certificate: 0, retirement401k: 0 },
@@ -43,7 +43,7 @@
             !Number.isSafeInteger(t.amount) || typeof t.account !== 'string' || !accounts[t.account] || typeof t.date !== 'string')) {
         return cloneSeed();
       }
-      // Migrate older local demo saves without discarding balances or history.
+      // Migrate older locally stored account records without discarding balances or history.
       const balances = { ...seed.balances, ...parsed.balances };
       for (const key of Object.keys(accounts)) if (!Object.hasOwn(parsed.balances, key)) balances[key] = 0;
       for (const key of Object.keys(accounts)) if (!Object.hasOwn(balances, key)) balances[key] = 0;
@@ -169,7 +169,7 @@
 
   function renderCard() {
     $('#freeze-overlay').classList.toggle('hidden', !state.frozen);
-    $('#large-demo-card').setAttribute('aria-label', state.frozen ? 'Card controls frozen locally' : 'Card issuer not connected');
+    $('#large-card-preview').setAttribute('aria-label', state.frozen ? 'Card controls frozen locally' : 'Card issuer not connected');
     $('#card-state-indicator').classList.toggle('frozen', state.frozen);
     $('#card-state-heading').textContent = state.frozen ? 'Card frozen locally' : 'Issuer not connected';
     $('#card-state-description').textContent = state.frozen ? 'New purchase authorizations will be declined locally.' : 'Purchase authorizations can be recorded locally.';
@@ -301,7 +301,7 @@
     showToast('Purchase authorization workflow is unavailable. No merchant authorization or account debit occurred.', 'error');
   }
 
-  function resetDemo() {
+  function resetLocalWorkspace() {
     showConfirm({
       title: 'Reset local account workspace?',
       description: 'This clears locally stored account records and restores empty account balances on this device. It does not change records held by any financial institution.',
@@ -371,7 +371,7 @@
     });
     $('#freeze-toggle').addEventListener('click', toggleFreeze);
     $('#simulate-purchase').addEventListener('click', simulatePurchase);
-    $('#reset-demo').addEventListener('click', resetDemo);
+    $('#reset-local-workspace').addEventListener('click', resetLocalWorkspace);
     $('#help-button').addEventListener('click', showHelp);
     $('#confirm-dialog').addEventListener('close', () => { pendingAction = null; });
     $('#confirm-dialog').addEventListener('submit', event => {
