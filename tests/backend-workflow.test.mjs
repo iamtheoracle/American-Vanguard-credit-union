@@ -81,7 +81,7 @@ test('Identity roles are granted only by server-side email allowlists', () => {
 test('backend requires Identity roles and prevents operators from reviewing their own requests', async () => {
   const source = await readFile(new URL('../netlify/functions/workflow.mjs', import.meta.url), 'utf8');
   assert.ok(source.includes("if (!user) return respond({ error:'Sign in is required.' },401)"));
-  assert.ok(source.includes('verifyRequestOrigin(request)'), 'workflow mutations must reject cross-origin requests');
+  assert.ok(source.includes('dependencies.verifyRequestOrigin || verifyRequestOrigin') && source.includes('verifyOrigin(request)'), 'workflow mutations must reject cross-origin requests');
   assert.ok(source.includes("if (!isOperator(user)) return respond({ error:'Authorized operator role required.' },403)"));
   assert.ok(source.includes("if (row.created_by === user.id)"));
   assert.ok(source.includes('function publicRequest(row)'), 'API responses must be explicitly allow-listed');
