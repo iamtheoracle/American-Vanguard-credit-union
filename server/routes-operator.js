@@ -52,7 +52,8 @@ router.use('/operator', operatorAuth);
 const TIERS = {
   operator: ['operator'],
   management: ['management', 'super_admin'],
-  super_admin: ['super_admin']
+  super_admin: ['super_admin'],
+  auditor: ['auditor']
 };
 
 router.get('/operator/queue', ...guard('management', 'operator'), async (req, res, next) => {
@@ -584,7 +585,7 @@ router.get('/operator/migrations/:id', ...guard('management', 'operator', 'audit
 });
 
 // ---- audit trail -----------------------------------------------------------------
-router.get('/operator/audit', ...guard('management', 'super_admin'), async (req, res, next) => {
+router.get('/operator/audit', ...guard('management', 'super_admin', 'auditor'), async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
     const { rows } = await query(
