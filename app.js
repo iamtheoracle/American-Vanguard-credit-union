@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'avcu.member-demo.v1';
+  const STORAGE_KEY = 'avcu.member.v1';
   const MAX_TRANSACTIONS = 100;
   const accounts = {
     draft: { name: 'Share Draft (Checking)', suffix: '2048', kind: 'EVERYDAY' },
@@ -10,16 +10,13 @@
     holiday: { name: 'Holiday Club', suffix: '9055', kind: 'GOAL SAVINGS' },
     business: { name: 'Business Operating Account', suffix: '7314', kind: 'BUSINESS' },
     ira: { name: 'Traditional IRA', suffix: '4472', kind: 'RETIREMENT' },
-    certificate: { name: 'Share Certificate', suffix: '1189', kind: 'TERM SAVINGS' }
+    certificate: { name: 'Share Certificate', suffix: '1189', kind: 'TERM SAVINGS' },
+    retirement401k: { name: '401(k) Retirement', suffix: '401K', kind: 'RETIREMENT' }
   };
   const seed = {
-    balances: { draft: 324065, primary: 684000, market: 190000, holiday: 50000, business: 475000, ira: 200000, certificate: 500000 },
+    balances: { draft: 0, primary: 0, market: 0, holiday: 0, business: 0, ira: 0, certificate: 0, retirement401k: 0 },
     frozen: false,
-    transactions: [
-      { id: 'seed-1', account: 'draft', title: 'Demo payroll deposit', amount: 215000, date: '2026-10-19T08:15:00.000Z', detail: 'Sample deposit' },
-      { id: 'seed-2', account: 'draft', title: 'Harbor Market', amount: -6435, date: '2026-10-18T15:20:00.000Z', detail: 'Sample card purchase' },
-      { id: 'seed-3', account: 'primary', title: 'Share transfer', amount: -25000, date: '2026-10-16T12:30:00.000Z', detail: 'Sample transfer' }
-    ]
+    transactions: []
   };
   let state = loadState();
   let currentView = 'home';
@@ -32,7 +29,7 @@
   const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value / 100);
   const safeMoneyInput = value => { const amount = Number(value); return Number.isFinite(amount) && amount > 0 && amount <= 1000000 && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-7 && Number.isSafeInteger(Math.round(amount * 100)); };
   const total = () => Object.values(state.balances).reduce((sum, value) => sum + value, 0);
-  const createId = () => (window.crypto && typeof window.crypto.randomUUID === 'function') ? window.crypto.randomUUID() : `demo-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const createId = () => (window.crypto && typeof window.crypto.randomUUID === 'function') ? window.crypto.randomUUID() : `avcu-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   function loadState() {
     try {
@@ -49,6 +46,7 @@
       // Migrate older local demo saves without discarding balances or history.
       const balances = { ...seed.balances, ...parsed.balances };
       for (const key of Object.keys(accounts)) if (!Object.hasOwn(parsed.balances, key)) balances[key] = 0;
+      for (const key of Object.keys(accounts)) if (!Object.hasOwn(balances, key)) balances[key] = 0;
       return { balances, frozen: parsed.frozen, transactions: parsed.transactions.slice(0, MAX_TRANSACTIONS) };
     } catch {
       return cloneSeed();
@@ -105,7 +103,7 @@
   }
 
   function setView(view) {
-    if (!['home', 'move', 'deposit', 'card', 'more'].includes(view)) return;
+    if (!['home', 'move', 'deposit', 'card', 'operations', 'more'].includes(view)) return;
     currentView = view;
     $$('.page-view').forEach(el => el.classList.toggle('hidden', el.dataset.view !== view));
     $$('[data-nav]').forEach(button => {
@@ -114,15 +112,17 @@
       if (button.matches('button')) button.setAttribute('aria-current', active ? 'page' : 'false');
     });
     const copy = {
-      home: ['MEMBER OVERVIEW', 'Good morning, Jordan'],
+      home: ['MEMBER OVERVIEW', 'Welcome to AVCU'],
       move: ['MOVE MONEY', 'Move money'],
       deposit: ['DEPOSIT', 'Deposit a sample check'],
       card: ['CARD CONTROLS', 'Your debit card'],
+      operations: ['PAYMENT WORKSPACE', 'Payments & approvals'],
       more: ['MEMBER RESOURCES', 'More from AVCU']
     }[view];
     $('#top-eyebrow').textContent = copy[0];
     $('#page-title').textContent = copy[1];
     if (view === 'move') renderMoveBalances();
+    if (view === 'operations' && typeof window.renderWorkflowWorkspace === 'function') window.renderWorkflowWorkspace();
     if (view === 'more') renderAllTransactions();
     $('#main-content').focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
@@ -145,9 +145,9 @@
       if (accounts[account]) el.textContent = money(state.balances[account]);
     });
     const recent = [...state.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4);
-    $('#recent-transactions').innerHTML = recent.length ? recent.map(transactionMarkup).join('') : '<p class="empty-state">No demo activity yet. Try a transfer or deposit.</p>';
+    $('#recent-transactions').innerHTML = recent.length ? recent.map(transactionMarkup).join('') : '<p class="empty-state">No account activity yet. Start a payment or deposit request.</p>';
     $('#card-status-dot').classList.toggle('frozen', state.frozen);
-    $('#card-status-text').textContent = state.frozen ? 'Card is frozen in this demo' : 'Card is active in this demo';
+    $('#card-status-text').textContent = state.frozen ? 'Card is frozen' : 'Card is active';
     $('#today-label').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
     $('#ledger-count').textContent = String(state.transactions.length);
     $('#ledger-card-status').textContent = state.frozen ? 'Frozen' : 'Active';
@@ -172,7 +172,7 @@
     $('#large-demo-card').setAttribute('aria-label', state.frozen ? 'Demo debit card, frozen' : 'Demo debit card, active');
     $('#card-state-indicator').classList.toggle('frozen', state.frozen);
     $('#card-state-heading').textContent = state.frozen ? 'Your card is frozen' : 'Your card is active';
-    $('#card-state-description').textContent = state.frozen ? 'Simulated purchases will be declined.' : 'Simulated purchases can be approved.';
+    $('#card-state-description').textContent = state.frozen ? 'New purchase authorizations will be declined locally.' : 'Purchase authorizations can be recorded locally.';
     $('#freeze-toggle').textContent = state.frozen ? 'Unfreeze card' : 'Freeze card';
     $('#freeze-toggle').classList.toggle('danger-button', !state.frozen);
     $('#card-status-dot').classList.toggle('frozen', state.frozen);
@@ -222,9 +222,9 @@
   function renderAccountGuidance() {
     const selected = [$('#transfer-from')?.value, $('#transfer-to')?.value].filter(Boolean);
     const messages = {
-      ira: 'Traditional IRA is illustrative only. This demo does not model tax, contribution, eligibility, or withdrawal rules.',
-      certificate: 'Share Certificate is illustrative only. This demo does not model maturity dates, early-withdrawal penalties, or actual certificate terms.',
-      business: 'Business Operating Account is a sample category only; no business verification or business-banking services are provided.'
+      ira: 'Traditional IRA requests require eligibility, tax, contribution, and withdrawal rules to be verified by the authorized provider.',
+      certificate: 'Share Certificate terms, maturity dates, and early-withdrawal rules must be verified before processing.',
+      business: 'Business account activity requires appropriate business verification and permissions.'
     };
     const uniqueMessages = [...new Set(selected.map(key => messages[key]).filter(Boolean))];
     const transferNote = $('#account-guidance');
@@ -235,7 +235,7 @@
     const depositNote = $('#deposit-account-guidance');
     if (depositNote) {
       const key = $('#deposit-account')?.value;
-      depositNote.textContent = messages[key] || 'This is a simulated deposit into sample data only.';
+      depositNote.textContent = messages[key] || 'This is a local request record; final posting requires an authorized deposit-processing connection.';
       depositNote.classList.toggle('hidden', !messages[key]);
     }
   }
@@ -279,7 +279,7 @@
     const memo = String(data.get('memo') || '').trim();
     const payee = String(data.get('payee') || '').trim();
     if (!accounts[from] || (kind === 'share' && (!accounts[to] || to === from))) {
-      showToast('Choose two different shares for a transfer.', 'error');
+      showToast('Choose two different accounts for a transfer.', 'error');
       return;
     }
     if (!safeMoneyInput(amount) || !Number.isSafeInteger(cents(amount))) {
@@ -288,7 +288,7 @@
     }
     const amountCents = cents(amount);
     if (state.balances[from] < amountCents) {
-      showToast(`Not enough available funds in ${accounts[from].name} for this demo transfer.`, 'error');
+      showToast(`Not enough available funds in ${accounts[from].name} for this request.`, 'error');
       return;
     }
     if (kind === 'bill' && (!payee || payee.length > 80)) {
@@ -296,13 +296,13 @@
       $('#bill-payee').focus();
       return;
     }
-    const title = kind === 'bill' ? `Demo bill payment · ${payee}` : 'Share transfer';
+    const title = kind === 'bill' ? `Bill payment · ${payee}` : 'Account transfer';
     const destination = kind === 'share' ? accounts[to].name : payee;
     showConfirm({
-      title: kind === 'bill' ? 'Review demo bill payment' : 'Review share transfer',
-      description: kind === 'bill' ? 'This sample payment will only reduce your local Share Draft balance.' : 'This simulated transfer moves value between two local demo shares.',
+      title: kind === 'bill' ? 'Review bill payment request' : 'Review account transfer request',
+      description: 'This request will be routed for operator approval before any account posting. External payment execution requires a connected provider.',
       summary: `<div>From <strong>${escapeHtml(accounts[from].name)}</strong></div>${kind === 'share' ? `<div>To <strong>${escapeHtml(destination)}</strong></div>` : `<div>Payee <strong>${escapeHtml(payee)}</strong></div>`}<div>Amount <strong>${money(amountCents)}</strong></div>${memo ? `<div>Memo <strong>${escapeHtml(memo)}</strong></div>` : ''}`,
-      confirmText: kind === 'bill' ? 'Pay demo bill' : 'Confirm transfer',
+      confirmText: 'Submit for approval',
       onConfirm: () => {
         if (state.balances[from] < amountCents) {
           showToast('The available demo balance changed. Review the transfer again.', 'error');
@@ -321,7 +321,7 @@
         $('#transfer-from').disabled = false;
         $('#transfer-to').value = 'primary';
         updateTransferMode();
-        showToast(kind === 'bill' ? 'Demo bill payment recorded.' : 'Demo share transfer completed.');
+        showToast(kind === 'bill' ? 'Bill payment request recorded.' : 'Account transfer request recorded.');
       }
     });
   }
@@ -341,10 +341,10 @@
     }
     const amountCents = cents(amount);
     showConfirm({
-      title: 'Post sample check deposit?',
-      description: 'This is a simulated deposit. It does not submit a real check or connect to a bank.',
+      title: 'Submit check deposit request?',
+      description: 'This request will enter the review queue. The check must be captured and processed by an authorized deposit service before funds are posted.',
       summary: `<div>Share <strong>${escapeHtml(accounts[account].name)}</strong></div><div>Description <strong>${escapeHtml(description)}</strong></div><div>Deposit <strong>+${money(amountCents)}</strong></div>`,
-      confirmText: 'Post demo deposit',
+      confirmText: 'Submit for approval',
       onConfirm: () => {
         state.balances[account] += amountCents;
         addTransaction(account, description, amountCents, 'Sample check deposit');
@@ -353,7 +353,7 @@
         form.reset();
         $('#deposit-description').value = 'Sample check deposit';
         $('#check-preview-amount').textContent = '$0.00';
-        showToast('Sample deposit posted to your local demo ledger.');
+        showToast('Check deposit request submitted for approval.');
       }
     });
   }
@@ -361,16 +361,16 @@
   function toggleFreeze() {
     const next = !state.frozen;
     showConfirm({
-      title: next ? 'Freeze this demo card?' : 'Unfreeze this demo card?',
+      title: next ? 'Freeze this card?' : 'Unfreeze this card?',
       description: next ? 'Simulated purchases will decline until you unfreeze the card.' : 'Simulated purchases can be approved again while the card is active.',
-      summary: `<div>Card <strong>•••• 4826</strong></div><div>New status <strong>${next ? 'Frozen' : 'Active'}</strong></div><div>Effect <strong>Demo only</strong></div>`,
-      confirmText: next ? 'Freeze demo card' : 'Unfreeze demo card',
+      summary: `<div>Card <strong>•••• 4826</strong></div><div>New status <strong>${next ? 'Frozen' : 'Active'}</strong></div>`,
+      confirmText: next ? 'Freeze card' : 'Unfreeze card',
       onConfirm: () => {
         state.frozen = next;
         saveState();
         renderCard();
         renderHome();
-        showToast(next ? 'Demo card frozen. Test purchases will decline.' : 'Demo card unfrozen. Test purchases can be approved.');
+        showToast(next ? 'Card frozen. New local purchase authorizations will decline.' : 'Card unfrozen. Local purchase authorizations can be recorded.');
       }
     });
   }
@@ -408,25 +408,25 @@
 
   function resetDemo() {
     showConfirm({
-      title: 'Reset the demo ledger?',
-      description: 'This replaces the local demo balances, transactions, and card state with the original sample data on this device.',
-      summary: '<div>Accounts <strong>7 sample accounts</strong></div><div>Activity <strong>3 sample transactions</strong></div><div>Card <strong>Active</strong></div>',
-      confirmText: 'Reset demo data',
+      title: 'Reset local account workspace?',
+      description: 'This clears locally stored account records and restores empty account balances on this device. It does not change records held by any financial institution.',
+      summary: '<div>Accounts <strong>8 local account records</strong></div><div>Activity <strong>Local transaction history</strong></div><div>Card <strong>Active</strong></div>',
+      confirmText: 'Reset local records',
       onConfirm: () => {
         state = cloneSeed();
         saveState();
         renderAll();
         renderAllTransactions();
-        showToast('Demo reset to the original sample data on this device.');
+        showToast('Local account workspace reset.');
       }
     });
   }
 
   function showHelp() {
     showConfirm({
-      title: 'About this demonstration',
-      description: 'Atchison Village Credit Union is represented here as a fictional member-banking concept. Jordan Hale, all balances, transactions, rates, and community-area references shown here are sample demo data. This demo is not NCUA-insured.',
-      summary: '<div>Real account connection <strong>None</strong></div><div>Money movement <strong>Simulated only</strong></div><div>Deposit insurance <strong>Not applicable; not a real institution</strong></div><div>Storage <strong>This browser only</strong></div>',
+      title: 'About standalone operations',
+      description: 'Standalone mode stores local records and approval requests in this browser. External payment execution, account verification, and settlement require authorized financial-institution and provider integrations. This workspace does not establish deposit insurance or a banking charter.',
+      summary: '<div>External provider connection <strong>Not configured</strong></div><div>Request tracking <strong>Available locally</strong></div><div>External settlement <strong>Unavailable until connected</strong></div><div>Storage <strong>This browser only</strong></div>',
       confirmText: 'Got it',
       onConfirm: () => {}
     });
