@@ -173,6 +173,19 @@ export async function processNotificationOutbox() {
         `INSERT INTO email_delivery_log (member_id, recipient, event_type, subject, status, provider_message_id, error_code)
          VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [row.member_id, row.recipient, row.event_type, row.email_subject, deliveryLogStatus, providerMessageId, errorCode]);
+      if (row.event_type === 'auth.password_reset' && status !== 'retry') {
+        if (status !== 'sent') {
+          const resetId = String(row.event_key || '').startsWith('password-reset:')
+            ? String(row.event_key).slice('password-reset:'.length) : '';
+          if (/^[0-9a-f-]{36}$/i.test(resetId)) {
+            await client.query(
+              'UPDATE password_reset_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL',
+              [resetId]);
+          }
+        }
+        await client.query(
+          `UPDATE notification_outbox SET body = '', email_text = '' WHERE id = $1`, [row.id]);
+      }
     });
   }
   return { processed: claimed.length };
