@@ -12,7 +12,10 @@ export default async function handler(req) {
   if (req.method !== "GET" && req.method !== "POST") {
     return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
   }
-  if (!req.headers.get("authorization")?.startsWith("Bearer ")) return fail(401, "Sign in to continue.");
+  if (req.method === "POST") {
+    const origin = req.headers.get("origin");
+    if (!origin || origin !== new URL(req.url).origin) return fail(403, "Request origin could not be verified.");
+  }
   let user;
   try { user = await getUser(); } catch { return fail(401, "Your session could not be verified. Sign in again."); }
   if (!user?.id || !user.email) return fail(401, "Sign in to continue.");
