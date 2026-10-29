@@ -89,8 +89,7 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
         subject: 'AVCU transfer status update'
       });
       await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
-      await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
-    return { transaction: tx, approvalId };
+      return { transaction: tx, approvalId };
     });
       return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
   }
@@ -124,9 +123,9 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
       body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
       subject: 'AVCU transfer status update'
     });
+    await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
     return { transaction: tx, approvalId };
   });
-  await consumeIdempotencyOutsideTx(idempotencyKey, `transfer:${member.id}`, serializeTransfer(result.transaction));
   return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
 }
 
