@@ -356,6 +356,49 @@ router.post('/loans/applications/:id/information', memberAuth, async (req, res, 
   }
 });
 
+// ---- funding pool discovery -------------------------------------------------
+router.get('/funding-pools', memberAuth, async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT p.id, p.name, p.description, p.target_amount_cents AS "targetAmountCents",
+              p.currency, p.opens_at AS "opensAt", p.closes_at AS "closesAt",
+              p.eligibility_requirements AS "eligibilityRequirements",
+              p.fees_and_terms AS "feesAndTerms", p.risk_disclosure AS "riskDisclosure",
+              p.return_assumptions AS "returnAssumptions",
+              p.calculation_methodology AS "calculationMethodology",
+              p.synthetic,
+              COALESCE(sum(c.amount_cents) FILTER (WHERE c.status = 'verified' AND c.currency = p.currency), 0) AS "verifiedAmountCents"
+       FROM funding_pools p
+       LEFT JOIN funding_contributions c ON c.funding_pool_id = p.id
+       WHERE p.status = 'published'
+       GROUP BY p.id
+       ORDER BY p.opens_at NULLS LAST, p.created_at DESC LIMIT 50`);
+    const pools = rows.map(pool => {
+      const target = Number(pool.targetAmountCents);
+      const verified = Number(pool.verifiedAmountCents);
+      return {
+        ...pool,
+        targetAmountCents: target,
+        verifiedAmountCents: verified,
+        progressPercent: target > 0 ? Math.min(100, Math.floor(verified / target * 100)) : 0,
+        participationEnabled: false,
+        participationStatus: pool.synthetic
+          ? 'Synthetic preview only; not an actual investment.'
+          : 'Live contributions are disabled until the authorized provider and release controls are verified.'
+      };
+    });
+    res.json({ pools, liveContributionsEnabled: false });
+  } catch (error) { next(error); }
+});
+
+router.post('/funding-pools/:id/contributions', memberAuth, async (req, res) => {
+  res.status(503).json({
+    error: 'Contributions are disabled. No funds were requested or transferred.',
+    code: 'funding_provider_not_authorized',
+    liveContributionsEnabled: false
+  });
+});
+
 // ---- notifications ----------------------------------------------------------
 router.get('/notifications', memberAuth, async (req, res, next) => {
   try {
