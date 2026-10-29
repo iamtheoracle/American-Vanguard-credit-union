@@ -37,6 +37,12 @@ test('authentication and session lifecycle', async t => {
     method: 'POST', body: { token: resetToken, password: 'NewSecurePassphrase!' }
   });
   assert.equal(resetComplete.status, 200);
+  const { rows: scrubbedResetPayload } = await db.query(
+    "SELECT email_text, body FROM notification_outbox WHERE event_type = 'auth.password_reset' AND member_id = $1",
+    [reg.data.member.id]
+  );
+  assert.equal(scrubbedResetPayload[0].email_text, '');
+  assert.equal(scrubbedResetPayload[0].body, '');
   const oldPasswordLogin = await api(env.base, '/api/auth/login', {
     method: 'POST', body: { identifier: reg.data.member.username, password: 'Str0ngPassphrase!' }
   });
