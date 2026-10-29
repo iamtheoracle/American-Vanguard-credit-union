@@ -4,52 +4,85 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#102b4e">
-<meta name="description" content="American Vanguard Credit Union member access, onboarding and verification status.">
-<title>American Vanguard Credit Union | Member Access</title>
+<meta name="description" content="American Vanguard Credit Union membership applications, member access and share-account information.">
+<title>American Vanguard Credit Union | Membership</title>
 <link rel="stylesheet" href="./auth.css">
 <script type="module" src="./auth.bundle.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<header class="top"><a class="brand" href="/" aria-label="American Vanguard Credit Union"><span class="mark">AV</span><span><strong>AMERICAN VANGUARD</strong><small>CREDIT UNION</small></span></a><span class="secure"><span></span> SECURE MEMBER ACCESS</span></header>
+<div class="institution-notice"><strong>IMPORTANT INSTITUTIONAL NOTICE</strong><span>This is not a chartered credit union and it is not deposit-insured. No live payment network is connected.</span></div>
+<header class="top">
+  <a class="brand" href="/" aria-label="American Vanguard Credit Union home">
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M20 3 35 11v18L20 37 5 29V11Z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 26 20 11l8 15M15.5 20h9" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>
+    <span><strong>AMERICAN VANGUARD</strong><small>CREDIT UNION</small></span>
+  </a>
+  <nav class="top-nav" aria-label="Main navigation"><a href="#membership">Membership</a><a href="#how-it-works">How it works</a><span class="secure"><span></span> PRIVATE MEMBER ACCESS</span></nav>
+</header>
 <main id="main">
 <section class="hero" id="welcome">
-<div class="hero-copy"><p class="eyebrow">YOUR MEMBERSHIP STARTS HERE</p><h1>Banking built around <em>your life.</em></h1><p class="intro">Create your sign-in, submit your membership application, and track verification. Membership approval is a separate review step. Financial information is shown only when an authorized banking data source is connected.</p><div class="trust"><span>✓ Private sign-in</span><span>✓ Email confirmation</span><span>✓ Review before approval</span></div></div>
-<section class="auth-card" aria-labelledby="form-title">
-<div class="tabs" role="tablist" aria-label="Member access"><button type="button" class="tab active" data-mode="login" role="tab" aria-selected="true">Sign in</button><button type="button" class="tab" data-mode="signup" role="tab" aria-selected="false">Create account</button></div>
-<div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
-<h2 id="form-title">Welcome back</h2><p id="form-description" class="muted">Sign in to continue to your member space.</p>
-<form id="auth-form">
-<label for="full-name" id="name-label" hidden>Full legal name</label><input id="full-name" name="fullName" autocomplete="name" placeholder="Full legal name" hidden>
-<label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
-<label for="password" id="password-label">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="At least 8 characters" required>
-<div id="password-help" class="muted tiny" hidden>Use at least 8 characters. Never reuse a password from another site.</div>
-<button class="primary" id="submit" type="submit">Sign in securely <span aria-hidden="true">→</span></button>
-<button class="text-button" type="button" id="forgot">Forgot password?</button>
-</form>
-<div class="rule"></div><p class="footnote">Email confirmation proves control of an email address; it does not prove identity or approve membership.</p>
+  <div class="hero-copy">
+    <p class="eyebrow"><span class="eyebrow-line"></span> MEMBERSHIP BY APPLICATION</p>
+    <h1>A share in<br>the <em>institution.</em></h1>
+    <p class="intro">Membership begins with an application and an operator review. Sign in with your email and password to access your member space and follow your application.</p>
+    <div class="hero-rule"></div>
+    <div class="process-list" id="how-it-works">
+      <div><span class="step-no">01</span><span><strong>Apply for membership</strong><small>Submit your application securely.</small></span></div>
+      <div><span class="step-no">02</span><span><strong>Operator review</strong><small>Your application stays pending until reviewed.</small></span></div>
+      <div><span class="step-no">03</span><span><strong>Member access</strong><small>Share information appears only when backed by an authoritative ledger.</small></span></div>
+    </div>
+    <p class="signin-policy">Sign-in is email and password only. Google, Apple and X sign-in are not accepted.</p>
+  </div>
+  <section class="auth-card" id="membership" aria-labelledby="form-title">
+    <div class="card-kicker"><span class="card-kicker-icon">AV</span><span>MEMBERSHIP SERVICES</span></div>
+    <div class="tabs" role="tablist" aria-label="Member access"><button type="button" class="tab active" data-mode="login" role="tab" aria-selected="true">Sign in</button><button type="button" class="tab" data-mode="signup" role="tab" aria-selected="false">Apply / register</button></div>
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <h2 id="form-title">Member sign in</h2><p id="form-description" class="muted">Use the email address and password registered to your member profile.</p>
+    <form id="auth-form">
+      <label for="full-name" id="name-label" hidden>Full legal name</label><input id="full-name" name="fullName" autocomplete="name" placeholder="Full legal name" hidden>
+      <label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" placeholder="name@example.com" required>
+      <label for="password" id="password-label">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="Enter your password" required>
+      <div id="password-help" class="muted tiny" hidden>Use at least 8 characters. Do not reuse another site's password.</div>
+      <button class="primary" id="submit" type="submit">Sign in <span aria-hidden="true">→</span></button>
+      <button class="text-button" type="button" id="forgot">Forgot password?</button>
+    </form>
+    <div class="card-foot"><span class="lock-icon" aria-hidden="true">⌑</span><p>Email confirmation verifies access to an email address; it does not verify identity or approve membership.</p></div>
+  </section>
 </section>
+
+<section class="institution-strip">
+  <div><span class="strip-label">MEMBERSHIP</span><strong>Application first.</strong><p>Every membership application starts in pending review.</p></div>
+  <div><span class="strip-label">SHARE ACCOUNTS</span><strong>Ledger-backed only.</strong><p>Share Draft and Primary Share information requires an authoritative data source.</p></div>
+  <div><span class="strip-label">OPERATIONS</span><strong>Separate approval.</strong><p>High-value transfers and bill-pay requests require a different operator's approval.</p></div>
 </section>
 
 <section id="member-panel" class="member-panel" hidden>
-<div><p class="eyebrow">MEMBER ACCESS</p><h2 id="member-heading">Your member space</h2><p id="member-copy" class="muted"></p></div>
-<div id="member-notice" class="notice" role="status" aria-live="polite" hidden></div>
-<div class="status-card"><span class="status-icon" aria-hidden="true">✓</span><div><strong id="member-status">Application not submitted</strong><p id="member-status-copy">Complete your application to begin verification.</p></div></div>
-<form id="application-form">
-<h3>Membership application</h3><p class="muted">Provide only the information requested here. Do not upload identity documents or enter account numbers or financial credentials.</p>
-<label for="application-name">Full legal name</label><input id="application-name" name="applicationName" autocomplete="name" maxlength="160" required>
-<label for="application-statement">Application statement</label><textarea id="application-statement" name="statement" rows="4" maxlength="2000" minlength="10" placeholder="Tell us briefly why you are applying and confirm the information is accurate." required></textarea>
-<button class="primary" id="application-submit" type="submit">Submit for verification <span aria-hidden="true">→</span></button>
-</form>
-<div id="admin-entry" hidden><div class="rule"></div><h3>Staff workspace</h3><p class="muted">Staff access is checked by the server. Being signed in does not grant review permissions.</p><button class="secondary" id="open-admin" type="button">Open verification dashboard</button></div>
-<button class="secondary" id="signout" type="button">Sign out</button>
+  <div class="member-welcome"><div><p class="eyebrow"><span class="eyebrow-line"></span> PRIVATE MEMBER AREA</p><h2 id="member-heading">Member relationship</h2><p id="member-copy" class="muted"></p></div><button class="secondary" id="signout" type="button">Sign out</button></div>
+  <div id="member-notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div class="section-heading"><span class="section-number">01</span><div><h3>Share accounts</h3><p>Balances are not displayed until an authoritative ledger is connected.</p></div></div>
+  <div class="share-grid">
+    <article class="share-card"><div class="share-top"><span class="share-icon">SD</span><span class="share-type">SHARE ACCOUNT</span></div><h3>Share Draft</h3><p>Everyday share account</p><div class="balance-placeholder">Balance unavailable</div><div class="data-source-note">No authoritative account data connected</div></article>
+    <article class="share-card"><div class="share-top"><span class="share-icon">PS</span><span class="share-type">SHARE ACCOUNT</span></div><h3>Primary Share</h3><p>Membership share account</p><div class="balance-placeholder">Balance unavailable</div><div class="data-source-note">No authoritative account data connected</div></article>
+  </div>
+  <div class="section-heading"><span class="section-number">02</span><div><h3>Membership status</h3><p>Application status is separate from share-account status.</p></div></div>
+  <div class="status-card"><span class="status-icon" aria-hidden="true">i</span><div><strong id="member-status">Application not submitted</strong><p id="member-status-copy">Complete the membership application below to begin review.</p></div></div>
+  <form id="application-form" class="application-form">
+    <h3>Membership application</h3><p class="muted">Submit an application for operator review. Do not enter account numbers, card details or online banking credentials.</p>
+    <label for="application-name">Full legal name</label><input id="application-name" name="applicationName" autocomplete="name" maxlength="160" required>
+    <label for="application-statement">Application statement</label><textarea id="application-statement" name="statement" rows="4" maxlength="2000" minlength="10" placeholder="Briefly explain your membership request and confirm your information is accurate." required></textarea>
+    <button class="primary" id="application-submit" type="submit">Submit membership application <span aria-hidden="true">→</span></button>
+  </form>
+  <div class="section-heading"><span class="section-number">03</span><div><h3>Account activity</h3><p>Append-only ledger activity appears here only when connected to the authoritative ledger.</p></div></div>
+  <div class="empty-ledger"><span class="ledger-icon">≡</span><div><strong>No ledger connected</strong><p>There is no financial activity to display. A requested credit is not a deposit.</p></div></div>
+  <div class="policy-grid"><article><span class="policy-index">CONTROL 01</span><h4>Transfer approval</h4><p>Transfers above $2,500 must wait for approval from a different operator. No live payment network is connected.</p></article><article><span class="policy-index">CONTROL 02</span><h4>Bill-pay review</h4><p>Bill-pay requests remain pending until a different operator approves them. Requests do not move money here.</p></article></div>
+  <div id="admin-entry" class="admin-entry" hidden><div class="section-heading"><span class="section-number">04</span><div><h3>Operator workspace</h3><p>Staff access is enforced by the server.</p></div></div><button class="secondary" id="open-admin" type="button">Open verification dashboard</button></div>
 </section>
 
 <section id="admin-panel" class="member-panel admin-panel" hidden>
-<div class="admin-heading"><div><p class="eyebrow">STAFF WORKSPACE</p><h2>Verification review</h2><p class="muted">Decisions and notes are recorded in the server-side review history.</p></div><button class="secondary" id="back-member" type="button">Back to member space</button></div>
-<div id="admin-notice" class="notice" role="status" aria-live="polite" hidden></div>
-<div id="review-list" class="review-list"></div>
+  <div class="member-welcome"><div><p class="eyebrow"><span class="eyebrow-line"></span> STAFF ONLY</p><h2>Membership review queue</h2><p class="muted">Review applications and record decisions with notes.</p></div><button class="secondary" id="back-member" type="button">Back to member area</button></div>
+  <div id="admin-notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div id="review-list" class="review-list"></div>
 </section>
 </main>
-<footer><span>American Vanguard Credit Union</span><span>Member access · Privacy · Security</span></footer>
+<footer><a class="footer-brand" href="/">AMERICAN VANGUARD CREDIT UNION</a><div><span>Privacy: application and account data is scoped to the signed-in member.</span><span>No live payment network connected.</span><span>This is not a chartered credit union and it is not deposit-insured.</span></div><p class="ai-notice">When an AI assistant is configured, your question and share identifiers may be sent to the model provider. Do not include passwords, authentication codes or other secrets.</p></footer>
 </body></html>
