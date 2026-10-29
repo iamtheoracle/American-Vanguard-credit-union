@@ -85,11 +85,30 @@ router.get('/operator/queue', ...guard('management', 'operator'), async (req, re
 
 router.get('/operator/approvals', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const status = ['pending', 'escalated', 'approved', 'rejected', 'info_requested']
-      .includes(req.query.status) ? req.query.status : null;
+    const allowedStatuses = ['pending', 'escalated', 'approved', 'rejected', 'info_requested'];
+    const allowedTypes = ['membership', 'transaction', 'money_request', 'loan'];
+    const status = allowedStatuses.includes(req.query.status) ? req.query.status : null;
+    const itemType = allowedTypes.includes(req.query.type) ? req.query.type : null;
+    const search = String(req.query.search || '').trim().slice(0, 80);
+    const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
+    const limit = Math.max(10, Math.min(100, Number.parseInt(req.query.limit || '50', 10) || 50));
     const params = [];
-    let where = 'TRUE';
-    if (status) { params.push(status); where = `a.status = $${params.length}`; }
+    const filters = [];
+    if (status) { params.push(status); filters.push(`a.status = $${params.length}`); }
+    if (itemType) { params.push(itemType); filters.push(`a.item_type = $${params.length}`); }
+    if (search) {
+      params.push(`%${search}%`);
+      filters.push(`(m.full_name ILIKE $${params.length} OR m.email ILIKE $${params.length} OR t.reference ILIKE $${params.length} OR l.reference ILIKE $${params.length} OR mr.reference ILIKE $${params.length} OR a.id::text ILIKE $${params.length})`);
+    }
+    const where = filters.length ? filters.join(' AND ') : 'TRUE';
+    const count = await query(
+      `SELECT count(*)::int AS total FROM approvals a
+       LEFT JOIN transactions t ON t.id = a.transaction_id
+       LEFT JOIN loan_applications l ON l.approval_id = a.id
+       LEFT JOIN money_requests mr ON mr.approval_id = a.id
+       LEFT JOIN members m ON m.id = a.member_id
+       WHERE ${where}`, params);
+    const pageParams = [...params, limit, (page - 1) * limit];
     const { rows } = await query(
       `SELECT a.id, a.item_type AS "itemType", a.status, a.required_role AS "requiredRole",
               a.payload, a.created_at AS "createdAt", a.decided_at AS "decidedAt",
@@ -104,9 +123,9 @@ router.get('/operator/approvals', ...guard('management', 'operator'), async (req
        LEFT JOIN money_requests mr ON mr.approval_id = a.id
        LEFT JOIN members m ON m.id = a.member_id
        WHERE ${where}
-       ORDER BY CASE a.status WHEN 'escalated' THEN 0 ELSE 1 END, a.created_at DESC
-       LIMIT 100`, params);
-    res.json({ approvals: rows });
+       ORDER BY CASE a.status WHEN 'escalated' THEN 0 WHEN 'pending' THEN 1 WHEN 'info_requested' THEN 2 ELSE 3 END, a.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`, pageParams);
+    res.json({ approvals: rows, pagination: { page, limit, total: Number(count.rows[0].total), pages: Math.ceil(Number(count.rows[0].total) / limit) } });
   } catch (error) { next(error); }
 });
 
