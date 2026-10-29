@@ -67,7 +67,7 @@ router.get('/operator/queue', ...guard('management', 'operator'), async (req, re
              FROM support_cases`),
       query(`SELECT count(*) AS failed FROM ai_tasks WHERE status = 'failed'`),
       query(`SELECT count(*) AS pending FROM members WHERE status = 'pending'`),
-      query(`SELECT count(*) AS pending FROM operations_alerts WHERE status = 'pending'`),
+      query(`SELECT count(*) AS pending FROM operations_alerts WHERE status = 'pending' AND alert_type = 'loan_application_submitted'`),
       query(`SELECT count(*) AS pending FROM approvals WHERE item_type = 'money_request' AND status IN ('pending','escalated','info_requested')`),
       integrationHealth()
     ]);
