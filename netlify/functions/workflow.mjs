@@ -38,6 +38,7 @@ export function validateRequest(body) {
   if (['bill-payment','wire-transfer','zelle','fx','withdrawal','ira','401k','card-authorization'].includes(type) && (!recipient || recipient.length > 100)) return { error:'A recipient or institution name is required.' };
   if (['wire-transfer','withdrawal'].includes(type) && (!destinationDetails || destinationDetails.length > 160)) return { error:'Destination details are required for this request.' };
   if (!/^[A-Z]{3}$/.test(currency)) return { error:'Use a valid three-letter currency code.' };
+  if (type !== 'fx' && currency !== 'USD') return { error:'Non-FX requests must be denominated in USD.' };
   if (type === 'check-deposit') return { unavailable:'Secure check-image storage is not configured. No check image or deposit request was accepted.' };
   if (type === 'fx') return { unavailable:'Live FX quoting is not connected. A client-supplied rate or quote cannot be trusted.' };
   return { value:{ type, sourceAccount:source, destinationAccount:type === 'internal-transfer' ? destination : null, amountCents, purpose, recipient, destinationDetails, currency, assignedTeam:routing[type][0], assignedRole:routing[type][1] } };
