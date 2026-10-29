@@ -88,10 +88,11 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
         body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
         subject: 'AVCU transfer status update'
       });
-      return { transaction: tx, approvalId };
+      await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
+      await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
+    return { transaction: tx, approvalId };
     });
-    await consumeIdempotencyOutsideTx(idempotencyKey, `transfer:${member.id}`, serializeTransfer(result.transaction));
-    return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
+      return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
   }
 
   const needsApproval = amountCents > POLICY.TRANSFER_APPROVAL_LIMIT_CENTS;
@@ -131,6 +132,10 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
 
 export async function submitMemberDeposit({ member, body, idempotencyKey }) {
   await assertVerifiedMember(member);
+  if (idempotencyKey) {
+    const prior = await lookupIdempotent(idempotencyKey, `deposit:${member.id}`);
+    if (prior) return { ...prior, status: prior.transaction.status, replayed: true };
+  }
   const amountCents = body.amountCents;
   if (!validAmountCents(amountCents, { maxCents: POLICY.SINGLE_TRANSFER_MAX_CENTS })) {
     throw new LedgerError('Enter a valid check amount', 400, 'invalid_amount');
@@ -171,8 +176,8 @@ export async function submitMemberDeposit({ member, body, idempotencyKey }) {
       body: `Your deposit ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
       subject: 'AVCU deposit status update'
     });
-    await consumeIdempotency(client, idempotencyKey, `deposit:${member.id}`,
-      { reference: tx.reference, status: tx.status });
+    const serialized = { transaction: { id: tx.id, reference: tx.reference, status: tx.status, amountCents: Number(tx.amount_cents) }, approvalId };
+    await consumeIdempotency(client, idempotencyKey, `deposit:${member.id}`, serialized);
     return { transaction: tx, approvalId, status: tx.status };
   });
 }
@@ -268,13 +273,6 @@ export async function createSupportCase({ member, subject, body }) {
   return result;
 }
 
-function serializeTransfer(tx) {
-  return { reference: tx.reference, status: tx.status, id: tx.id, approvalId: null };
-}
-
-async function consumeIdempotencyOutsideTx(key, scope, result) {
-  if (!key) return;
-  await query(
-    `INSERT INTO idempotency_keys (key, scope, result) VALUES ($1,$2,$3) ON CONFLICT (key) DO NOTHING`,
-    [key, scope, JSON.stringify(result)]);
+function serializeTransfer(tx, approvalId = null) {
+  return { reference: tx.reference, status: tx.status, id: tx.id, approvalId, amountCents: Number(tx.amount_cents) };
 }
