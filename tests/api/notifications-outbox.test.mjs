@@ -114,3 +114,70 @@ test('financial rejection, audit, and member notification are committed together
   );
   assert.equal(outboxRows.length, 1, 'the terminal decision creates one durable member notification');
 });
+
+
+test('loan application review, information request, operations alert, and final decision work end to end', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { cookie: memberCookie } = await loginMember(env.base);
+  const submitted = await api(env.base, '/api/loans/applications', {
+    method: 'POST',
+    cookie: memberCookie,
+    body: {
+      requestedAmountCents: 250000,
+      currency: 'USD',
+      requestedTermMonths: 24,
+      purpose: 'Synthetic integration test for a small emergency expense.'
+    }
+  });
+  assert.equal(submitted.status, 201);
+  assert.equal(submitted.data.application.status, 'submitted');
+  assert.match(submitted.data.application.reference, /^AVCU-LA-[A-F0-9]{12}$/);
+
+  const { cookie: operatorCookie } = await loginOperator(env.base, 'teller@avcu.demo');
+  const alerts = await api(env.base, '/api/operator/loan-alerts?status=pending', { cookie: operatorCookie });
+  assert.equal(alerts.status, 200);
+  const alert = alerts.data.alerts.find(item => item.applicationId === submitted.data.application.id);
+  assert.ok(alert, 'submission creates a persistent operations alert');
+  const ack = await api(env.base, `/api/operator/loan-alerts/${alert.id}/acknowledge`, {
+    method: 'POST', cookie: operatorCookie, body: {}
+  });
+  assert.equal(ack.status, 200);
+  assert.equal(ack.data.alert.status, 'acknowledged');
+
+  const info = await api(env.base, `/api/operator/approvals/${submitted.data.application.approvalId}/decide`, {
+    method: 'POST', cookie: operatorCookie,
+    body: { action: 'request_info', reason: 'Please provide a little more detail about the requested amount.' }
+  });
+  assert.equal(info.status, 200);
+  const waiting = await api(env.base, '/api/loans/applications', { cookie: memberCookie });
+  assert.equal(waiting.data.applications[0].status, 'information_required');
+
+  const response = await api(env.base, `/api/loans/applications/${submitted.data.application.id}/information`, {
+    method: 'POST', cookie: memberCookie,
+    body: { response: 'This is additional synthetic detail to support the application review.' }
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.data.application.status, 'submitted');
+
+  const unauthorizedFinal = await api(env.base, `/api/operator/approvals/${submitted.data.application.approvalId}/decide`, {
+    method: 'POST', cookie: operatorCookie,
+    body: { action: 'approve', reason: 'Operator cannot make a final loan decision.' }
+  });
+  assert.equal(unauthorizedFinal.status, 403);
+
+  const { cookie: managerCookie } = await loginOperator(env.base, 'manager@avcu.demo');
+  const approved = await api(env.base, `/api/operator/approvals/${submitted.data.application.approvalId}/decide`, {
+    method: 'POST', cookie: managerCookie,
+    body: { action: 'approve', reason: 'Approved for application workflow testing only.' }
+  });
+  assert.equal(approved.status, 200);
+  assert.equal(approved.data.approval.status, 'approved');
+
+  const history = await api(env.base, '/api/loans/applications', { cookie: memberCookie });
+  assert.equal(history.data.applications[0].status, 'approved');
+  assert.equal(history.data.applications[0].decisionReason, 'Approved for application workflow testing only.');
+
+  const { rows: loans } = await query('SELECT count(*)::int AS count FROM loan_applications WHERE id = $1', [submitted.data.application.id]);
+  assert.equal(loans[0].count, 1, 'approval records the application only; no loan balance or disbursement is created');
+});
