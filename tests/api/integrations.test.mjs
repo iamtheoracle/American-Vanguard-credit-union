@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { startTestServer, api, loginMember, loginOperator, getAccounts } from './helpers.mjs';
 import { outbound, IntegrationError } from '../../server/integrations/index.js';
-import { webhookSecret } from '../../server/integrations/index.js';
+import { webhookSecret, verifyWebhookSignature } from '../../server/integrations/index.js';
 
 test('integration health reports sandbox mode and honors failure injection', async t => {
   const env = await startTestServer();
@@ -36,6 +36,34 @@ test('sandbox failure injection classifies errors and opens the circuit', async 
   await assert.rejects(
     () => outbound('payments', async () => ({ ok: true })),
     error => error.code === 'circuit_open');
+});
+
+test('production webhook secrets fail closed and malformed timestamps are rejected', t => {
+  const previous = {
+    nodeEnv: process.env.NODE_ENV,
+    providerSecret: process.env.AVCU_WEBHOOK_SECRET_PAYMENTS,
+    sandboxSecret: process.env.AVCU_WEBHOOK_SECRET_SANDBOX
+  };
+  t.after(() => {
+    if (previous.nodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.nodeEnv;
+    if (previous.providerSecret === undefined) delete process.env.AVCU_WEBHOOK_SECRET_PAYMENTS;
+    else process.env.AVCU_WEBHOOK_SECRET_PAYMENTS = previous.providerSecret;
+    if (previous.sandboxSecret === undefined) delete process.env.AVCU_WEBHOOK_SECRET_SANDBOX;
+    else process.env.AVCU_WEBHOOK_SECRET_SANDBOX = previous.sandboxSecret;
+  });
+
+  process.env.NODE_ENV = 'production';
+  delete process.env.AVCU_WEBHOOK_SECRET_PAYMENTS;
+  delete process.env.AVCU_WEBHOOK_SECRET_SANDBOX;
+  assert.equal(webhookSecret('payments'), null, 'production must not use the development fallback');
+
+  const secret = 'test-provider-secret';
+  const timestamp = String(Date.now());
+  const body = '{"event":"test"}';
+  const signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+  assert.equal(verifyWebhookSignature({ secret, body, signature, timestamp }), true);
+  assert.equal(verifyWebhookSignature({ secret, body, signature, timestamp: 'not-a-timestamp' }), false);
+  assert.equal(verifyWebhookSignature({ secret: '', body, signature, timestamp }), false);
 });
 
 test('webhooks verify signatures and reject replays', async t => {
