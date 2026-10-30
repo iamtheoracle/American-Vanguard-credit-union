@@ -211,6 +211,7 @@
       status.textContent = 'Sign in with your member account to view private transaction history.';
       ['history-credits','history-debits','history-pending-wires','history-pending-bills'].forEach(id => { if ($('#'+id)) $('#'+id).textContent = '—'; });
       $('#history-monthly').innerHTML = '<p class="empty-state">Member sign-in is required to view account activity.</p>';
+      $('#history-monthly-requests').innerHTML = '<p class="empty-state">Member sign-in is required to view request activity.</p>';
       $('#history-entries').innerHTML = '<p class="empty-state">No shared account entries are displayed while signed out.</p>';
       $('#history-requests').innerHTML = '<p class="empty-state">Sign in to view your wire and payment requests.</p>';
       $('#history-entry-count').textContent = '0 entries';
@@ -225,6 +226,7 @@
     if (historyError) {
       status.textContent = 'Transaction history is unavailable: ' + historyError;
       $('#history-monthly').innerHTML = '<p class="empty-state">The shared history service could not be reached. Local sample data was not substituted.</p>';
+      $('#history-monthly-requests').innerHTML = '<p class="empty-state">The shared request summary could not be loaded.</p>';
       $('#history-entries').innerHTML = '<p class="empty-state">Posted transactions could not be loaded.</p>';
       $('#history-requests').innerHTML = '<p class="empty-state">Wire and payment requests could not be loaded.</p>';
       copy.disabled = true;
@@ -234,6 +236,7 @@
     const snapshot = historySnapshot || { ledger: [], monthly: [], requests: [] };
     const ledger = Array.isArray(snapshot.ledger) ? snapshot.ledger : [];
     const monthly = Array.isArray(snapshot.monthly) ? snapshot.monthly : [];
+    const monthlyRequests = Array.isArray(snapshot.monthly_requests) ? snapshot.monthly_requests : [];
     const requests = Array.isArray(snapshot.requests) ? snapshot.requests : [];
     const credits = ledger.filter(row => row.direction === 'credit').reduce((sum,row) => sum + safeCents(row.amount_cents), 0);
     const debits = ledger.filter(row => row.direction === 'debit').reduce((sum,row) => sum + safeCents(row.amount_cents), 0);
@@ -248,14 +251,25 @@
     copy.disabled = false;
 
     const monthMap = new Map(monthly.map(row => [row.month_key, row]));
+    const requestMonthMap = new Map(monthlyRequests.map(row => [row.month_key, row]));
     const now = new Date();
-    const monthRows = Array.from({ length: 12 }, (_, index) => new Date(now.getFullYear(), now.getMonth() - 11 + index, 1));
+    const periodStart = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const monthRows = [];
+    const monthCursor = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1);
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    while (monthCursor <= currentMonth) { monthRows.push(new Date(monthCursor)); monthCursor.setMonth(monthCursor.getMonth() + 1); }
     $('#history-monthly').innerHTML = '<table class="history-table"><thead><tr><th>Month</th><th>Money in</th><th>Money out</th><th>Net movement</th></tr></thead><tbody>' +
       monthRows.map(date => {
         const key = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0');
         const row = monthMap.get(key) || {};
         const incoming = safeCents(row.credits_cents), outgoing = safeCents(row.debits_cents), net = incoming - outgoing;
         return '<tr><td>' + escapeHtml(date.toLocaleDateString('en-US',{month:'short',year:'numeric'})) + '</td><td class="history-positive">' + money(incoming) + '</td><td>' + money(outgoing) + '</td><td class="' + (net >= 0 ? 'history-positive' : 'history-negative') + '">' + (net > 0 ? '+' : net < 0 ? '−' : '') + money(Math.abs(net)) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    $('#history-monthly-requests').innerHTML = '<table class="history-table"><thead><tr><th>Month</th><th>Wire requests</th><th>Gift-described wires</th><th>Bill requests</th></tr></thead><tbody>' +
+      monthRows.map(date => {
+        const key = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0');
+        const row = requestMonthMap.get(key) || {};
+        return '<tr><td>' + escapeHtml(date.toLocaleDateString('en-US',{month:'short',year:'numeric'})) + '</td><td>' + money(safeCents(row.wire_request_cents)) + '</td><td>' + money(safeCents(row.gift_wire_request_cents)) + '</td><td>' + money(safeCents(row.bill_request_cents)) + '</td></tr>';
       }).join('') + '</tbody></table>';
 
     const sortedLedger = [...ledger].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
@@ -292,6 +306,7 @@
       historySnapshot = {
         ledger: Array.isArray(data.ledger) ? data.ledger : [],
         monthly: Array.isArray(data.monthly) ? data.monthly : [],
+        monthly_requests: Array.isArray(data.monthly_requests) ? data.monthly_requests : [],
         requests: Array.isArray(data.requests) ? data.requests : []
       };
       historyError = '';
@@ -313,6 +328,11 @@
     lines.push('Posted money in: '+money(credits),'Posted money out: '+money(debits),'Net movement: '+money(credits-debits),'','POSTED TRANSACTIONS');
     for (const row of [...ledger].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at))) {
       lines.push(formatHistoryDate(row.created_at)+' | '+(row.direction==='credit'?'Credit':'Debit')+' | '+(accountLabels[row.account_type]||row.account_type)+' | '+money(safeCents(row.amount_cents))+' | Ref '+String(row.request_id||'').slice(0,8).toUpperCase());
+    }
+    lines.push('','MONTHLY REQUEST TOTALS · NOT POSTED');
+    const requestMonths = new Map((historySnapshot.monthly_requests || []).map(row=>[row.month_key,row]));
+    for (const row of [...requestMonths.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
+      lines.push(row[0]+' | Wire requests '+money(safeCents(row[1].wire_request_cents))+' | Gift-described wires '+money(safeCents(row[1].gift_wire_request_cents))+' | Bill requests '+money(safeCents(row[1].bill_request_cents)));
     }
     lines.push('','WIRE & PAYMENT REQUESTS');
     for (const row of [...requests].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at))) {
