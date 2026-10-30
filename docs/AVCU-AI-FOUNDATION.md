@@ -35,7 +35,8 @@ Environment variables:
 - Provider-specific model variables: `OPENROUTER_MODEL`, `GROQ_MODEL`, `OPENAI_MODEL`, `ANTHROPIC_MODEL`, `GEMINI_MODEL`.
 - Legacy compatible endpoint: `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`.
 
-The current gateway provides text completion only. Provider-native function calling and streaming remain the next gateway milestone; do not parse free-form model text as executable tool calls. The model is explicitly told not to claim that it performed a banking action.
+Provider-native function calling is now implemented for OpenAI-compatible providers (including OpenRouter and Groq), Anthropic, and Gemini. The gateway normalizes structured calls but never executes them; AVCU validates every tool name and argument against its server-side allowlist and strict schemas before invoking the broker or read-only handlers. Malformed arguments fail closed.
+- Authenticated `POST /api/ai/chat/stream` streams text deltas using server-sent events, with provider-specific streaming adapters and failover only before the first emitted token. This endpoint is deliberately text-only and cannot execute tools or move money; action requests use the audited `/api/ai/chat` flow. The model is explicitly told not to claim that it performed a banking action.
 
 ## 3. Genuine member memory engine
 
@@ -82,4 +83,4 @@ The full platform suite becomes authoritative only when CI and staging collect r
 - Read-only account information must be scoped to the authenticated member.
 - AI-originated money movement is always a proposal/approval workflow, never a direct ledger posting.
 - ECHO, chat, and future agents use the same gateway, understanding, memory, execution, and benchmark contracts.
-- No live provider credentials are provisioned by this change; tests use mocked providers. Step-up re-authentication has PostgreSQL integration coverage; real staging deployment, live provider tool-calling/streaming, and end-to-end operational validation remain outstanding.
+- No live provider credentials are provisioned by this change; tests use mocked providers. Step-up re-authentication has PostgreSQL integration coverage. Provider tool-calling and streaming currently have mocked adapter tests; real staging deployment, live provider validation, and end-to-end operational validation remain outstanding.
