@@ -4,6 +4,7 @@ const PROVIDERS = {
   openrouter: { kind: 'openai', baseUrl: 'https://openrouter.ai/api/v1', keyEnv: 'OPENROUTER_API_KEY', modelEnv: 'OPENROUTER_MODEL', defaultModel: 'openai/gpt-4o-mini' },
   groq: { kind: 'openai', baseUrl: 'https://api.groq.com/openai/v1', keyEnv: 'GROQ_API_KEY', modelEnv: 'GROQ_MODEL', defaultModel: 'llama-3.3-70b-versatile' },
   openai: { kind: 'openai', baseUrl: 'https://api.openai.com/v1', keyEnv: 'OPENAI_API_KEY', modelEnv: 'OPENAI_MODEL', defaultModel: 'gpt-4o-mini' },
+  compat: { kind: 'openai', baseUrl: null, keyEnv: 'AI_API_KEY', modelEnv: 'AI_MODEL', defaultModel: 'gpt-4o-mini' },
   anthropic: { kind: 'anthropic', keyEnv: 'ANTHROPIC_API_KEY', modelEnv: 'ANTHROPIC_MODEL', defaultModel: 'claude-3-5-haiku-latest' },
   gemini: { kind: 'gemini', keyEnv: 'GEMINI_API_KEY', modelEnv: 'GEMINI_MODEL', defaultModel: 'gemini-2.5-flash' }
 };
@@ -42,7 +43,7 @@ function providerConfig(name) {
   if (!config) throw new ModelGatewayError('Unknown AI provider', 'unknown_provider', { provider: name });
   const key = process.env[config.keyEnv];
   if (!key) throw new ModelGatewayError('AI provider credentials are not configured', 'provider_not_configured', { provider: name });
-  return { ...config, key, model: process.env[config.modelEnv] || config.defaultModel };
+  return { ...config, baseUrl: config.baseUrl || process.env.AI_BASE_URL?.replace(/\\/$/, ''), key, model: process.env[config.modelEnv] || config.defaultModel };
 }
 
 async function fetchJson(url, options, timeoutMs) {
