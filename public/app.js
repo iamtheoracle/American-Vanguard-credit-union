@@ -196,6 +196,23 @@
     }).format(date);
   };
   const safeCents = value => Number.isSafeInteger(Number(value)) ? Number(value) : 0;
+  function merchantEnrichmentMarkup(row) {
+    const merchant = row.merchant && typeof row.merchant === 'object' ? row.merchant : row;
+    const name = typeof merchant.merchant_name === 'string' ? merchant.merchant_name.trim() : '';
+    const category = merchant.personal_finance_category && typeof merchant.personal_finance_category === 'object'
+      ? (merchant.personal_finance_category.detailed || merchant.personal_finance_category.primary || '') : '';
+    const channel = typeof merchant.payment_channel === 'string' ? merchant.payment_channel : '';
+    const location = merchant.location && typeof merchant.location === 'object' ? merchant.location : {};
+    const place = [location.address, location.city, location.region, location.postal_code].filter(value => typeof value === 'string' && value.trim()).join(', ');
+    const logo = typeof merchant.logo_url === 'string' && /^https:\/\/plaid-merchant-logos\.plaid\.com\//i.test(merchant.logo_url)
+      ? merchant.logo_url : '';
+    const details = [category.replaceAll('_', ' ').toLowerCase(), channel, place].filter(Boolean);
+    if (!name && !details.length) return '';
+    const logoMarkup = logo ? '<img class="merchant-enrichment-logo" src="' + escapeHtml(logo) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '';
+    return '<div class="merchant-enrichment">' + logoMarkup +
+      (name ? '<span class="merchant-enrichment-name">' + escapeHtml(name) + '</span>' : '') +
+      (details.length ? '<small>' + escapeHtml(details.join(' · ')) + '</small>' : '') + '</div>';
+  }
 
   function renderTransactionHistory() {
     const status = $('#history-status');
@@ -279,7 +296,7 @@
       const label = row.request_type === 'internal-transfer' ? 'Account transfer' : (requestLabels[row.request_type] || 'Account activity');
       const title = row.purpose || label;
       const amount = safeCents(row.amount_cents);
-      return '<article class="history-entry"><div class="history-entry-main"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(formatHistoryDate(row.created_at)) + ' · ' + escapeHtml(accountLabels[row.account_type] || row.account_type) + '</small><small>Reference ' + escapeHtml(String(row.request_id || '').slice(0,8).toUpperCase()) + ' · Posted</small></div><strong class="' + (positive ? 'history-positive' : 'history-negative') + '">' + (positive ? '+' : '−') + money(amount) + '</strong></article>';
+      return '<article class="history-entry"><div class="history-entry-main"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(formatHistoryDate(row.created_at)) + ' · ' + escapeHtml(accountLabels[row.account_type] || row.account_type) + '</small>' + merchantEnrichmentMarkup(row) + '<small>Reference ' + escapeHtml(String(row.request_id || '').slice(0,8).toUpperCase()) + ' · Posted</small></div><strong class="' + (positive ? 'history-positive' : 'history-negative') + '">' + (positive ? '+' : '−') + money(amount) + '</strong></article>';
     }).join('') : '<p class="empty-state">No posted account entries were found in the last 365 days. Requests awaiting review or provider settlement appear below.</p>';
 
     const sortedRequests = [...requests].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
