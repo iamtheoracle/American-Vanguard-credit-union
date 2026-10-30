@@ -120,8 +120,8 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
                  JOIN accounts a ON a.id = le.account_id WHERE a.member_id = $1) AS "lastLedgerActivityAt",
                 (SELECT t.created_at FROM transactions t
                  JOIN accounts a ON a.id = t.from_account_id
-                 WHERE a.member_id = $1 AND t.type IN ('withdrawal','cash_withdrawal')
-                 ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS "lastWithdrawalInitiatedAt"`, [member.id])
+                 WHERE a.member_id = $1
+                 ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS "lastOutgoingInitiatedAt"`, [member.id])
     ]);
     const asNumber = rows => rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) =>
       [key, typeof value === 'string' && /Cents$/.test(key) ? Number(value) : value])));
