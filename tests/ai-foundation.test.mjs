@@ -107,3 +107,8 @@ test('full-platform benchmark requires every real control metric and fails close
   } });
   assert.equal(complete.passed, true);
 });
+
+test('ordinary greetings do not trigger unnecessary clarification', () => {
+  assert.equal(understandMessage('Hi, can you help me?').clarificationRequired, false);
+  assert.equal(understandMessage('Please connect me to a human representative').clarificationRequired, false);
+});
