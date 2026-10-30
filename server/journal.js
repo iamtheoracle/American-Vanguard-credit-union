@@ -17,7 +17,7 @@ function normalizePostings(postings) {
   }
   return postings.map((posting, index) => {
     const amountText = String(posting?.amountMinor ?? '');
-    if (!/^\\d{1,38}$/.test(amountText) || BigInt(amountText) <= 0n || BigInt(amountText) > MAX_AMOUNT) {
+    if (!/^\d{1,38}$/.test(amountText) || BigInt(amountText) <= 0n || BigInt(amountText) > MAX_AMOUNT) {
       throw new JournalError(`Posting ${index + 1} has an invalid exact amount`);
     }
     if (!['debit', 'credit'].includes(posting.direction)) {
