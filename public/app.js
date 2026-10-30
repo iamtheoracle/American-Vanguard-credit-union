@@ -258,7 +258,7 @@
     const monthCursor = new Date(periodStart.getFullYear(), periodStart.getMonth(), 1);
     const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     while (monthCursor <= currentMonth) { monthRows.push(new Date(monthCursor)); monthCursor.setMonth(monthCursor.getMonth() + 1); }
-    $('#history-monthly').innerHTML = '<table class="history-table"><thead><tr><th>Month</th><th>Money in</th><th>Money out</th><th>Net movement</th></tr></thead><tbody>' +
+    $('#history-monthly').innerHTML = '<table class="history-table"><thead><tr><th>Month</th><th>Credits</th><th>Debits</th><th>Net ledger movement</th></tr></thead><tbody>' +
       monthRows.map(date => {
         const key = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0');
         const row = monthMap.get(key) || {};
@@ -325,7 +325,11 @@
     const lines = ['ATCHISON VILLAGE CREDIT UNION', 'MEMBER TRANSACTION HISTORY', 'Period: Last 365 days', ''];
     const credits = ledger.filter(row=>row.direction==='credit').reduce((sum,row)=>sum+safeCents(row.amount_cents),0);
     const debits = ledger.filter(row=>row.direction==='debit').reduce((sum,row)=>sum+safeCents(row.amount_cents),0);
-    lines.push('Posted money in: '+money(credits),'Posted money out: '+money(debits),'Net movement: '+money(credits-debits),'','POSTED TRANSACTIONS');
+    lines.push('Posted credits: '+money(credits),'Posted debits: '+money(debits),'Net ledger movement: '+money(credits-debits),'','MONTHLY POSTED ACCOUNT ACTIVITY');
+    for (const row of [...(historySnapshot.monthly || [])].sort((a,b)=>a.month_key.localeCompare(b.month_key))) {
+      lines.push(row.month_key+' | Credits '+money(safeCents(row.credits_cents))+' | Debits '+money(safeCents(row.debits_cents))+' | Net '+money(safeCents(row.credits_cents)-safeCents(row.debits_cents)));
+    }
+    lines.push('','POSTED TRANSACTIONS');
     for (const row of [...ledger].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at))) {
       lines.push(formatHistoryDate(row.created_at)+' | '+(row.direction==='credit'?'Credit':'Debit')+' | '+(accountLabels[row.account_type]||row.account_type)+' | '+money(safeCents(row.amount_cents))+' | Ref '+String(row.request_id||'').slice(0,8).toUpperCase());
     }
@@ -336,7 +340,7 @@
     }
     lines.push('','WIRE & PAYMENT REQUESTS');
     for (const row of [...requests].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at))) {
-      lines.push(formatHistoryDate(row.created_at)+' | '+(requestLabels[row.type]||row.type)+' | '+money(safeCents(row.amount_cents))+' | '+(statusLabels[row.status]||row.status)+' | Ref '+String(row.id||'').slice(0,8).toUpperCase());
+      lines.push(formatHistoryDate(row.created_at)+' | '+(requestLabels[row.type]||row.type)+' | '+(row.recipient||'')+' | '+(row.purpose||'')+' | '+money(safeCents(row.amount_cents))+' | '+(statusLabels[row.status]||row.status)+' | Ref '+String(row.id||'').slice(0,8).toUpperCase());
     }
     try { await navigator.clipboard.writeText(lines.join('\n')); showToast('Member transaction statement copied.'); }
     catch { showToast('Copy is unavailable in this browser. Open the history and copy the visible records.', 'error'); }
