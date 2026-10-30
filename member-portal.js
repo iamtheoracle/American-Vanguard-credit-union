@@ -127,11 +127,9 @@
   }
   $('show-reset-request').addEventListener('click', () => {
     $('login-form').classList.add('hidden');
-    $('register-form').classList.add('hidden');
     $('password-reset-form').classList.add('hidden');
     $('reset-request-form').classList.remove('hidden');
     $('show-login').classList.add('hidden');
-    $('show-register').classList.add('hidden');
     showMessage('auth-message', '');
   });
   $('reset-request-back').addEventListener('click', () => switchAuth(false));
@@ -291,7 +289,6 @@
       $('reset-request-form').classList.add('hidden');
       $('password-reset-form').classList.remove('hidden');
       $('show-login').classList.add('hidden');
-      $('show-register').classList.add('hidden');
       $('reset-token').value = resetToken;
       try { window.history.replaceState(null, '', '/member-portal.html'); } catch {}
       return;
