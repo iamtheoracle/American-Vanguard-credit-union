@@ -111,3 +111,18 @@ test('documentation and scripts describe standalone and provider boundaries', ()
   assert.ok(netlify.includes("connect-src 'self'"));
   assert.ok(netlify.includes('camera=(self)'));
 });
+
+
+test('member transaction history shows calculated annual totals and copyable statements', () => {
+  for (const id of ['view-transactions','history-status','history-credits','history-debits','history-pending-wires','history-pending-bills','history-monthly','history-monthly-requests','history-entries','history-requests','copy-history']) {
+    assert.ok(html.includes('id="' + id + '"'), 'missing transaction history element ' + id);
+  }
+  assert.ok(html.includes('data-nav="transactions"'));
+  assert.ok(app.includes("fetch('/api/workflow?scope=history'"));
+  assert.ok(app.includes('copyTransactionStatement'));
+  assert.ok(app.includes('historySnapshot.monthly_requests'));
+  assert.ok(app.includes('timeZoneName: \'short\''));
+  assert.ok(css.includes('.history-summary-grid'));
+  assert.ok(css.includes('.history-table'));
+  assert.ok(workflow.includes('avcu:workflow-history-updated'));
+});
