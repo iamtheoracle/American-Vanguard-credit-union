@@ -49,6 +49,11 @@ CREATE TABLE IF NOT EXISTS financial_accounts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (
+    (asset_kind = 'fiat' AND custody_domain IN ('bank','internal')) OR
+    (asset_kind = 'stablecoin' AND custody_domain IN ('digital_asset','internal')) OR
+    (asset_kind = 'internal' AND custody_domain = 'internal')
+  ),
+  CHECK (
     (owner_type = 'member' AND member_id IS NOT NULL AND business_id IS NULL) OR
     (owner_type = 'business' AND business_id IS NOT NULL AND member_id IS NULL) OR
     (owner_type = 'system' AND member_id IS NULL AND business_id IS NULL)
@@ -175,9 +180,28 @@ CREATE TRIGGER journal_entries_immutable
 BEFORE INSERT OR UPDATE OR DELETE ON journal_entries
 FOR EACH ROW EXECUTE FUNCTION avcu_reject_journal_entry_mutation();
 
+CREATE OR REPLACE FUNCTION avcu_guard_finalized_journal() RETURNS trigger
+LANGUAGE plpgsql AS $
+BEGIN
+  IF OLD.status IN ('posted','reversed') THEN
+    IF OLD.status = 'posted' AND NEW.status = 'reversed' AND
+       (to_jsonb(NEW) - 'status') = (to_jsonb(OLD) - 'status') THEN
+      RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'Finalized journal transactions are immutable; use a compensating journal'
+      USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END;
+$;
+DROP TRIGGER IF EXISTS journal_transactions_finalized_guard ON journal_transactions;
+CREATE TRIGGER journal_transactions_finalized_guard
+BEFORE UPDATE ON journal_transactions
+FOR EACH ROW EXECUTE FUNCTION avcu_guard_finalized_journal();
+
 CREATE TABLE IF NOT EXISTS balance_holds (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  financial_account_id UUID NOT NULL REFERENCES financial_accounts(id) ON DELETE RESTRICT,
+  financial_account_id UUID NOT NULL,
   asset_code TEXT NOT NULL,
   amount_minor NUMERIC(38,0) NOT NULL CHECK (amount_minor > 0),
   reason TEXT NOT NULL,
@@ -198,7 +222,7 @@ CREATE INDEX IF NOT EXISTS idx_balance_holds_active
 CREATE TABLE IF NOT EXISTS external_payment_intents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   reference TEXT NOT NULL UNIQUE,
-  financial_account_id UUID NOT NULL REFERENCES financial_accounts(id) ON DELETE RESTRICT,
+  financial_account_id UUID NOT NULL,
   rail TEXT NOT NULL CHECK (rail IN ('ach_credit','ach_debit','wire','stablecoin')),
   asset_code TEXT NOT NULL,
   amount_minor NUMERIC(38,0) NOT NULL CHECK (amount_minor > 0),
@@ -215,13 +239,46 @@ CREATE TABLE IF NOT EXISTS external_payment_intents (
   submitted_at TIMESTAMPTZ,
   settled_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (financial_account_id, asset_code)
+    REFERENCES financial_accounts(id, asset_code) ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS idx_external_payment_intents_account
   ON external_payment_intents(financial_account_id, created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_external_payment_provider_ref
   ON external_payment_intents(provider_name, provider_payment_ref)
   WHERE provider_name IS NOT NULL AND provider_payment_ref IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION avcu_validate_external_payment_asset() RETURNS trigger
+LANGUAGE plpgsql AS $
+DECLARE
+  account_asset_kind TEXT;
+  account_custody_domain TEXT;
+  account_status TEXT;
+BEGIN
+  SELECT asset_kind, custody_domain, status
+    INTO account_asset_kind, account_custody_domain, account_status
+    FROM financial_accounts WHERE id = NEW.financial_account_id;
+  IF account_status IS DISTINCT FROM 'open' THEN
+    RAISE EXCEPTION 'External payments require an open financial account'
+      USING ERRCODE = '23514';
+  END IF;
+  IF NEW.rail = 'stablecoin' THEN
+    IF account_asset_kind <> 'stablecoin' OR account_custody_domain <> 'digital_asset' THEN
+      RAISE EXCEPTION 'Stablecoin payments require a digital-asset custody account'
+        USING ERRCODE = '23514';
+    END IF;
+  ELSIF account_asset_kind <> 'fiat' OR account_custody_domain <> 'bank' THEN
+    RAISE EXCEPTION 'ACH and wire payments require a bank-held fiat account'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$;
+DROP TRIGGER IF EXISTS external_payment_asset_guard ON external_payment_intents;
+CREATE TRIGGER external_payment_asset_guard
+BEFORE INSERT OR UPDATE OF financial_account_id, asset_code, rail ON external_payment_intents
+FOR EACH ROW EXECUTE FUNCTION avcu_validate_external_payment_asset();
 
 CREATE TABLE IF NOT EXISTS provider_events (
   id BIGSERIAL PRIMARY KEY,
