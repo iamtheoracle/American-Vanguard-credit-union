@@ -103,11 +103,16 @@ async function loadMemberStatus() {
 async function probeAdminAccess() {
   try {
     const response = await fetch('/api/admin/reviews', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
-    if (!response.ok) return;
-    $('#admin-entry').hidden = false;
-    const data = await response.json();
-    renderReviews(data.reviews || []);
-  } catch { /* staff entry stays hidden until the server confirms access */ }
+    if (response.ok) {
+      $('#admin-entry').hidden = false;
+      const data = await response.json();
+      renderReviews(data.reviews || []);
+    }
+  } catch { /* membership review access is optional */ }
+  try {
+    const response = await fetch('/api/admin/wire-confirmations', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+    if (response.ok) $('#admin-entry').hidden = false;
+  } catch { /* wire queue entry remains hidden without server authorization */ }
 }
 
 let wirePermissions = {};
@@ -316,13 +321,18 @@ $('#signout').addEventListener('click', async () => {
   location.reload();
 });
 $('#open-admin').addEventListener('click', async () => {
-  try {
-    await refreshReviews();
-    await loadWireQueue();
-    $('#member-panel').hidden = true;
-    $('#admin-panel').hidden = false;
-    $('#admin-notice').hidden = true;
-  } catch (error) { showNotice(error.message, 'error', $('#member-notice')); }
+  $('#member-panel').hidden = true;
+  $('#admin-panel').hidden = false;
+  $('#admin-notice').hidden = true;
+  $('#review-list').replaceChildren();
+  try { await refreshReviews(); }
+  catch { $('#review-list').append(el('p','muted','Membership review permission is not assigned to this account.')); }
+  try { await loadWireQueue(); }
+  catch (error) {
+    $('#wire-create-form').hidden = true;
+    $('#wire-case-list').replaceChildren();
+    showNotice(error.message,'error',$('#wire-notice'));
+  }
 });
 $('#back-member').addEventListener('click', () => { $('#admin-panel').hidden = true; $('#member-panel').hidden = false; });
 $('#wire-create-form').addEventListener('submit', async event => {
