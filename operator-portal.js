@@ -28,7 +28,8 @@
     const raw=String(cents);const negative=raw.startsWith('-');const digits=negative?raw.slice(1):raw;
     if(!/^\\d+$/.test(digits))return '—';
     const value=BigInt(digits);const dollars=value/100n;const fraction=String(value%100n).padStart(2,'0');
-    return (negative?'-':'')+'
+    return (negative?'-':'')+'$'+dollars.toLocaleString('en-US')+'.'+fraction;
+  };
   async function loadMemberHistory(event){
     event?.preventDefault();
     const memberId=$('history-member-id').value.trim();
