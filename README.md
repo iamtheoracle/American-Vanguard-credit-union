@@ -37,6 +37,15 @@ Browser automation is not a substitute for real-device/manual accessibility test
 - Wire, bill-payment, withdrawal, IRA/401(k), and card-authorization approvals remain Approved · Awaiting Provider. No provider is configured to send funds or authorize a merchant. Zelle approval is blocked without server-verified recipient data. FX requests are blocked without a live server-side quote. Check deposits are blocked in authenticated shared mode until secure image storage and review are implemented.
 - Only enter sign-in credentials after confirming this is the institution-authorized deployment. Do not enter real account numbers, government identifiers, or check images until the institution has completed security, privacy, regulatory, provider, and compliance reviews.
 
+## Member transaction history
+
+- The member Transaction History view reads the signed-in member's own workflow requests and posted account-ledger entries for the trailing 365 days.
+- Monthly posted credits and debits are calculated from `avcu_account_ledger`; request submissions are not treated as posted cash movement.
+- Monthly wire requests, gift-described wire requests (purpose text containing “gift”), and bill-payment requests are shown in a separate table and are explicitly labeled as request amounts, not deposits or completed payments.
+- Pending wires and bills remain separate from posted totals. A wire is not represented as received or settled unless an authorized provider confirms settlement and a trusted ledger records the posting.
+- The Copy statement action copies the displayed member history, including timestamps, references, posted totals, monthly request amounts, and request statuses.
+- The endpoint filters requests and ledger rows by the authenticated Identity user and limits the reporting window to 365 days. No browser-local sample activity is substituted when the shared service is unavailable.
+
 ## Production readiness
 
 The backend foundation is now in the branch, but the shared queue is not production-ready until the target Netlify site has Identity enabled, the database migration has applied successfully, operator roles have been assigned, and authenticated API flows have been tested against the deployed preview. Real payment execution, secure check-image retention, live Zelle verification, FX conversion, core-account balance feeds, issuer card controls, signed provider webhooks, and reconciliation still require authorized providers and institution configuration. Only provider-confirmed outcomes may be marked settled.
