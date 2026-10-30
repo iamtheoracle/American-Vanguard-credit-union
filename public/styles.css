@@ -138,3 +138,10 @@ body{background:var(--wash);color:var(--ink)}
 /* Printable member wire-request receipt action */
 .receipt-open-button{min-height:34px;padding:7px 11px;font-size:10px;white-space:nowrap}
 @media(max-width:620px){.receipt-open-button{width:100%;margin-top:4px}}
+
+
+/* Plaid merchant enrichment in posted transaction history */
+.merchant-enrichment{display:flex;align-items:center;flex-wrap:wrap;gap:5px 8px;margin:2px 0}
+.merchant-enrichment-logo{width:22px;height:22px;object-fit:contain;border:1px solid #edf0eb;border-radius:6px;background:#fff;padding:2px}
+.merchant-enrichment-name{font-size:10px;font-weight:700;color:#344b3f}
+.merchant-enrichment small{flex-basis:100%;font-size:9px;color:#788780;line-height:1.45}
