@@ -4,7 +4,7 @@ import { startTestServer, api, loginMember, loginOperator, MEMBER_PASSWORD } fro
 import { query } from '../../server/db.js';
 import { executeAiAction } from '../../server/ai/execution.js';
 import { rememberMemberFact, recallMemberFacts } from '../../server/ai/memory.js';
-import { hashPassword } from '../../server/auth.js';
+import { hashPassword, verifyPassword } from '../../server/auth.js';
 
 test('AI transfer proposal is brokered, approval-gated, audited and atomic in PostgreSQL', async t => {
   const env = await startTestServer();
@@ -182,6 +182,8 @@ test('AI transfer step-up requires password re-authentication and binds exact ap
   assert.equal(rows.length, 1);
   assert.equal(rows[0].member_confirmed_at, null);
   const approvalId = rows[0].id;
+  const memberRow = await query("SELECT password_hash FROM members WHERE email = 'jordan@avcu.demo'");
+  assert.equal(await verifyPassword(MEMBER_PASSWORD, memberRow.rows[0].password_hash), true, 'seeded member password must match its stored hash');
 
   const bad = await api(env.base, `/api/ai/approvals/${approvalId}/confirm`, {
     method: 'POST', cookie, body: { password: 'incorrect-password' }
