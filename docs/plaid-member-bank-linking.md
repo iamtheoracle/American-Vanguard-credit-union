@@ -17,7 +17,7 @@ Set these as Netlify environment variables. Never commit values to Git or put th
 
 - `PLAID_CLIENT_ID`: Plaid application client ID.
 - `PLAID_SECRET`: secret for the selected Plaid environment.
-- `PLAID_ENV`: `sandbox` or `production`; defaults to sandbox.
+- `PLAID_ENV`: must be exactly `production`. The server now refuses to call Plaid if this is missing or set to Sandbox.
 - `PLAID_TOKEN_ENCRYPTION_KEY`: base64-encoded 32-byte random key used for AES-256-GCM encryption of stored access tokens.
 - `PLAID_WEBHOOK_URL`: optional HTTPS webhook URL. Do not configure until a verified webhook receiver is deployed.
 
@@ -26,9 +26,9 @@ Generate an encryption key with a secure secret manager or a cryptographically s
 ## Important production controls
 
 1. Rotate any Plaid secret that has been pasted into chat, source code, logs, or tickets. Treat it as compromised.
-2. Start with Sandbox and confirm Link, token exchange, account retrieval, and manual verification against Plaid's documented test cases.
-3. Plaid Production credentials and product access must be approved in the Plaid Dashboard. Setting `PLAID_ENV=production` does not grant production approval.
-4. Do not set production credentials until AVCU's legal entity, actual operating model, geography, sponsor-bank relationship where required, and intended Plaid products have been approved by Plaid.
+2. Plaid Production credentials and product access must be approved in the Plaid Dashboard. Setting `PLAID_ENV=production` does not grant production approval.
+3. Do not set production credentials until AVCU's legal entity, actual operating model, geography, sponsor-bank relationship where required, and intended Plaid products have been approved by Plaid.
+4. The deployed function is production-only: it refuses to call Plaid unless `PLAID_ENV=production`, and accepts only production public tokens. This is a fail-closed deployment guard, not evidence that production credentials or product approvals exist.
 5. The current Link integration requests Auth only. It does not request Transactions, Identity, Liabilities, or Transfer.
 6. A verified Auth account is not a funded AVCU deposit account and is not proof of available funds. It does not authorize ACH or domestic wire payments.
 7. Do not put account/routing numbers or access tokens in browser storage, application logs, analytics, request descriptions, or audit notes.
