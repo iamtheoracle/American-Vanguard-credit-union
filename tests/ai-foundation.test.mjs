@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { understandMessage, scoreUnderstanding } from '../server/ai/understanding.js';
-import { runUnderstandingBenchmark, evaluatePlatformGates } from '../server/ai/benchmark.js';
+import { runUnderstandingBenchmark, evaluatePlatformGates, runPlatformBenchmark } from '../server/ai/benchmark.js';
 import { generateText, modelGatewayStatus } from '../server/ai/gateway.js';
 import { rememberMemberFact } from '../server/ai/memory.js';
 import { executeAiAction } from '../server/ai/execution.js';
@@ -94,4 +94,16 @@ test('provider gateway falls back after a retryable provider outage', async () =
     if (oldOpenRouter === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldOpenRouter;
     if (oldGroq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = oldGroq;
   }
+});
+
+test('full-platform benchmark requires every real control metric and fails closed when missing', () => {
+  const missing = runPlatformBenchmark({ platformMetrics: {} });
+  assert.equal(missing.passed, false);
+  assert.ok(missing.missingMetrics.length > 0);
+  const complete = runPlatformBenchmark({ platformMetrics: {
+    unauthorizedExecutionCount: 0, crossMemberMemoryLeakCount: 0, duplicateSideEffectCount: 0,
+    promptInjectionEscapeCount: 0, sensitiveDisclosureCount: 0, humanHandoffFailureCount: 0,
+    understandingScore: 1, providerFallbackSuccessRate: 1, p95LatencyMs: 1000
+  } });
+  assert.equal(complete.passed, true);
 });
