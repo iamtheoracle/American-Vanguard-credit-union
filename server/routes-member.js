@@ -716,6 +716,59 @@ router.post('/support/cases/:id/messages', memberAuth, async (req, res, next) =>
   } catch (error) { next(error); }
 });
 
+// Re-authenticate the member and bind confirmation to the exact AI transfer payload.
+const aiStepUpLimiter = rateLimiter({ windowMs: 15 * 60_000, max: 5 });
+router.post('/ai/approvals/:approvalId/confirm', memberAuth, async (req, res, next) => {
+  try {
+    if (!aiStepUpLimiter(`member-step-up:${req.member.id}:${clientKey(req)}`)) {
+      return res.status(429).json({ error: 'Too many confirmation attempts. Try again later.' });
+    }
+    const password = String(req.body?.password || '');
+    if (!password) return res.status(400).json({ error: 'Re-enter your password to confirm this transfer proposal.' });
+    const { rows: memberRows } = await query('SELECT password_hash FROM members WHERE id = $1', [req.member.id]);
+    if (!memberRows[0] || !await verifyPassword(password, memberRows[0].password_hash)) {
+      await audit(null, { actorType: 'member', actorId: req.member.id, action: 'ai.transfer_step_up.failed',
+        entityType: 'approval', entityId: req.params.approvalId });
+      return res.status(401).json({ error: 'Password verification failed.' });
+    }
+    const confirmed = await withTx(async client => {
+      const { rows } = await client.query(
+        `SELECT a.id, a.member_id, a.submitted_by, a.submitted_by_type, a.item_type, a.payload,
+                t.id AS txn_id, t.type AS txn_type, t.amount_cents AS txn_amount,
+                t.memo AS txn_memo, t.payee AS txn_payee, t.reference AS txn_reference,
+                t.from_account_id AS txn_from_account_id, t.to_account_id AS txn_to_account_id
+         FROM approvals a JOIN transactions t ON t.id = a.transaction_id
+         WHERE a.id = $1 AND a.member_id = $2 FOR UPDATE OF a, t`,
+        [req.params.approvalId, req.member.id]);
+      const approval = rows[0];
+      if (!approval || approval.item_type !== 'transaction' || approval.submitted_by_type !== 'member' ||
+          String(approval.submitted_by) !== String(req.member.id) || approval.payload?.source !== 'ai_assistant') {
+        const error = new Error('This AI transfer confirmation is not available for your account.');
+        error.status = 404; throw error;
+      }
+      const binding = createHash('sha256').update(JSON.stringify([
+        approval.txn_id, approval.txn_type, Number(approval.txn_amount),
+        approval.txn_memo || '', approval.txn_payee || '', approval.txn_reference || '',
+        approval.txn_from_account_id || '', approval.txn_to_account_id || ''
+      ])).digest('hex');
+      await client.query(
+        `UPDATE approvals SET member_confirmed_at = now(), member_confirmation_hash = $2,
+           member_confirmation_method = 'password_reauthentication', updated_at = now()
+         WHERE id = $1 AND status IN ('pending','escalated')`,
+        [approval.id, binding]);
+      await audit(client, { actorType: 'member', actorId: req.member.id, action: 'ai.transfer_step_up.confirmed',
+        entityType: 'approval', entityId: approval.id,
+        metadata: { method: 'password_reauthentication', payloadBound: true } });
+      return { approvalId: approval.id, amountCents: Number(approval.txn_amount),
+        reference: approval.txn_reference, confirmedAt: new Date().toISOString() };
+    });
+    res.json({ ...confirmed, message: 'Your confirmation is bound to this exact transfer proposal. It still requires the normal AVCU approval process.' });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
+
 // ---- ECHO voice notification preferences/status -------------------------------
 router.get('/echo/status', memberAuth, async (req, res, next) => {
   try {
