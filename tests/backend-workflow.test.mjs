@@ -146,3 +146,12 @@ test('member history returns only the signed-in member 365-day ledger and monthl
   assert.ok(ledgerQuery.query.includes("interval '365 days'"));
   assert.ok(memberRequestsQuery.query.includes("interval '365 days'"));
 });
+
+
+test('wire requests reject raw bank account and routing details in free-text destination fields', () => {
+  const base = { type:'wire-transfer', sourceAccount:'draft', amountCents:500000, purpose:'Domestic wire', recipient:'Judith' };
+  assert.ok(validateRequest({ ...base, destinationDetails:'Goldenwest Credit Union 123456789' }).error?.includes('Do not enter account numbers'));
+  assert.ok(validateRequest({ ...base, destinationDetails:'Goldenwest Credit Union routing number 021000021' }).error?.includes('Do not enter account numbers'));
+  assert.ok(validateRequest({ ...base, destinationDetails:'Goldenwest Credit Union account number 123456789012' }).error?.includes('Do not enter account numbers'));
+  assert.equal(validateRequest({ ...base, destinationDetails:'Goldenwest Credit Union' }).error, undefined);
+});
