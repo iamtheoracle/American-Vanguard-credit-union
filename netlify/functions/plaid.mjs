@@ -6,7 +6,7 @@ const respond=(body,status=200)=>Response.json(body,{status,headers:{'cache-cont
 const env=()=>({
   clientId:process.env.PLAID_CLIENT_ID,
   secret:process.env.PLAID_SECRET,
-  env:process.env.PLAID_ENV==='production'?'production':'sandbox',
+  env:process.env.PLAID_ENV||'',
   key:process.env.PLAID_TOKEN_ENCRYPTION_KEY,
   webhook:process.env.PLAID_WEBHOOK_URL
 });
@@ -30,7 +30,8 @@ function decrypt(value,key){
 }
 async function plaid(path,body){
   const c=env();
-  if(!c.clientId||!c.secret) throw new Error('Plaid server credentials are not configured');
+  if(c.env!=='production') throw new Error('AVCU Plaid is production-only. Set PLAID_ENV=production after production approval; Sandbox is deliberately disabled.');
+  if(!c.clientId||!c.secret) throw new Error('Plaid production server credentials are not configured');
   const response=await fetch('https://'+c.env+'.plaid.com'+path,{
     method:'POST',headers:{'content-type':'application/json'},
     body:JSON.stringify({...body,client_id:c.clientId,secret:c.secret})
@@ -72,7 +73,9 @@ export async function handlePlaidRequest(request,deps={}){
   try { user=await getUserFn(); } catch { return respond({error:'Identity is unavailable.'},503); }
   if(!user||!Array.isArray(user.roles)||!user.roles.some(role=>['member','operator','admin'].includes(role))) return respond({error:'Sign in with an authorized AVCU account.'},401);
   const c=env();
-  if(!c.clientId||!c.secret) return respond({configured:false,error:'Plaid is not configured for this deployment. Add server-side Plaid credentials.'},503);
+  if(c.env!=='production') return respond({configured:false,live:false,error:'AVCU live Plaid is not activated. Set PLAID_ENV=production only after Plaid approves the production account and credentials. Sandbox connections are disabled.'},503);
+  if(!c.clientId||!c.secret) return respond({configured:false,live:false,error:'Plaid production credentials are not configured in the deployment environment.'},503);
+  if(!c.key) return respond({configured:false,live:false,error:'Secure Plaid token encryption is not configured.'},503);
   let db;
   try { db=getDatabaseFn(); } catch { return respond({error:'The secure database is unavailable.'},503); }
   try {
@@ -96,7 +99,7 @@ export async function handlePlaidRequest(request,deps={}){
     }
     if(body.action==='exchange_public_token'){
       const publicToken=String(body.public_token||'');
-      if(!/^public-(sandbox|production)-[a-f0-9-]+$/i.test(publicToken)) return respond({error:'A valid Plaid public token is required.'},400);
+      if(!/^public-production-[a-f0-9-]+$/i.test(publicToken)) return respond({error:'A valid Plaid public token is required.'},400);
       const exchanged=await plaid('/item/public_token/exchange',{public_token:publicToken});
       const item=await plaid('/item/get',{access_token:exchanged.access_token});
       // Same-Day micro-deposit Items can be pending. accounts/get exposes the
