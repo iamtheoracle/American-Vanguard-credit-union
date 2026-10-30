@@ -25,7 +25,8 @@ export async function createTransactionApproval(client, transaction, { submitted
     [submittedByType === 'member' ? submittedBy : null,
      transaction.id,
      JSON.stringify({ type: transaction.type, amountCents,
-       memo: transaction.memo, payee: transaction.payee, reference: transaction.reference }),
+       memo: transaction.memo, payee: transaction.payee, reference: transaction.reference,
+       source: transaction.memo === 'Requested via AI assistant' ? 'ai_assistant' : 'member' }),
      requiredRole, submittedBy || null, submittedByType]);
   return rows[0].id;
 }
