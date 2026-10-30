@@ -7,7 +7,7 @@ ECHO AVCU is the professional AI-powered voice service for American Vanguard Cre
 - Runs inside the existing Express + PostgreSQL AVCU service.
 - Uses existing member, account, transaction, ledger, and audit records.
 - Migration 999_echo_voice.sql creates verified-contact/consent records and a durable call outbox.
-- A PostgreSQL trigger records each transaction status transition in the same database transaction as the status update.
+- A PostgreSQL trigger records a transaction's initial status on insert and every subsequent status transition in the same database transaction as the source write.
 - Events are deduplicated by transaction, member, and resulting status.
 - Calls are suppressed unless the member has a verified E.164 phone number and explicit current voice-call consent.
 - Consent revocation cancels unsent work. A future worker must re-check consent immediately before dispatch.
