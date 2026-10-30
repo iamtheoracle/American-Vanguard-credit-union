@@ -378,7 +378,7 @@ async function* streamProvider(name, messages, options) {
     while (true) {
       const { value, done } = await reader.read();
       buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-      const lines = buffer.split(/\\r?\\n/);
+      const lines = buffer.split(/\r?\n/);
       buffer = lines.pop() || '';
       for (const line of lines) {
         const delta = processLine(line);
