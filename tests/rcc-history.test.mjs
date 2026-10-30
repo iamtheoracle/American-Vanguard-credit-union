@@ -96,3 +96,11 @@ test('history API paginates transaction and ledger rows without silent truncatio
   assert.match(operatorScript, /data-history-page/);
   assert.match(operatorScript, /pageSize:'100'/);
 });
+
+test('history endpoint enforces the supported date window and safe pagination bounds', () => {
+  assert.match(operatorRoutes, /from < '2018-03-25' \|\| to > '2026-10-31'/);
+  assert.match(operatorRoutes, /Number\.isSafeInteger\(parsed\)/);
+  assert.match(operatorRoutes, /parsed <= 1000000000/);
+  assert.match(operatorRoutes, /pageSize = Math\.min\(250, requestedPageSize\)/);
+  assert.match(operatorRoutes, /Pagination offsets must be whole numbers/);
+});
