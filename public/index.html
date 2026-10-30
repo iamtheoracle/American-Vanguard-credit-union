@@ -26,6 +26,7 @@
       <div class="nav-label">MEMBER SPACE</div>
       <nav class="nav-list">
         <button class="nav-item active" data-nav="home"><span class="nav-icon" aria-hidden="true">⌂</span><span>Overview</span></button>
+        <button class="nav-item" data-nav="transactions"><span class="nav-icon" aria-hidden="true">↕</span><span>Transaction history</span></button>
         <button class="nav-item" data-nav="move"><span class="nav-icon" aria-hidden="true">⇄</span><span>Move money</span></button>
         <button class="nav-item" data-nav="deposit"><span class="nav-icon" aria-hidden="true">↙</span><span>Deposit</span></button>
         <button class="nav-item" data-nav="card"><span class="nav-icon" aria-hidden="true">▰</span><span>Debit card</span></button>
@@ -125,6 +126,30 @@
           <div class="panel workflow-queue-panel"><div class="panel-heading"><div><p class="eyebrow">OPERATIONS QUEUE</p><h3>My requests</h3></div><span id="workflow-pending-count" class="sample-tag">0 pending</span></div><div id="workflow-member-queue" class="workflow-list"><p class="empty-state">No requests yet.</p></div></div>
           <div class="panel workflow-queue-panel"><div class="panel-heading"><div><p class="eyebrow">OPERATOR WORKSPACE</p><h3>Requests awaiting review</h3></div><span class="sample-tag">LOCAL WORKSPACE</span></div><p class="fine-print">This local review screen is a workflow scaffold, not secure role-based access. Before production, enforce operator identity, permissions, separation of duties, audit logs, and approval policy on a trusted server.</p><div id="workflow-operator-queue" class="workflow-list"><p class="empty-state">No requests awaiting review.</p></div></div>
         </section>
+        <section class="page-view hidden" id="view-transactions" data-view="transactions">
+          <div class="page-intro"><span class="page-icon">↕</span><div><p class="eyebrow">MEMBER ACCOUNT ACTIVITY</p><h2>Transaction history</h2><p>Review posted account entries, monthly totals, and the status of wire transfers and bill payments.</p></div></div>
+          <div class="history-toolbar"><p id="history-status" class="history-status" role="status" aria-live="polite">Sign in to view your shared account history.</p><button class="secondary-button" id="copy-history" type="button" disabled>Copy statement</button></div>
+          <div class="history-summary-grid">
+            <article class="panel history-summary-card"><span>Posted money in</span><strong id="history-credits">—</strong><small>Credits recorded in the member ledger</small></article>
+            <article class="panel history-summary-card"><span>Posted money out</span><strong id="history-debits">—</strong><small>Debits recorded in the member ledger</small></article>
+            <article class="panel history-summary-card"><span>Pending wire requests</span><strong id="history-pending-wires">—</strong><small>Not counted as settled money</small></article>
+            <article class="panel history-summary-card"><span>Pending bill payments</span><strong id="history-pending-bills">—</strong><small>Awaiting provider settlement</small></article>
+          </div>
+          <section class="panel history-panel">
+            <div class="panel-heading"><div><p class="eyebrow">LAST 12 MONTHS</p><h3>Monthly account activity</h3></div><span class="sample-tag">POSTED LEDGER</span></div>
+            <div id="history-monthly" class="history-table-wrap"><p class="empty-state">Sign in to load monthly account activity.</p></div>
+            <p class="fine-print">Monthly credits and debits are calculated from posted account-ledger entries only. Pending wires and bill-payment requests are shown separately.</p>
+          </section>
+          <section class="panel history-panel">
+            <div class="panel-heading"><div><p class="eyebrow">ACCOUNT LEDGER</p><h3>Posted transactions</h3></div><span class="sample-tag" id="history-entry-count">0 entries</span></div>
+            <div id="history-entries" class="history-entry-list"><p class="empty-state">Sign in to view posted transactions.</p></div>
+          </section>
+          <section class="panel history-panel">
+            <div class="panel-heading"><div><p class="eyebrow">WIRE &amp; PAYMENT TRACKING</p><h3>Requests and transfer status</h3></div><span class="sample-tag">REQUEST HISTORY</span></div>
+            <div id="history-requests" class="history-entry-list"><p class="empty-state">Sign in to view wire and payment requests.</p></div>
+            <p class="fine-print">A submitted or approved wire is not a completed transfer. External wires and bill payments remain outside posted account totals until an authorized provider confirms settlement and the ledger records the posting.</p>
+          </section>
+        </section>
         <section class="page-view hidden" id="view-more" data-view="more">
           <div class="page-intro"><span class="page-icon more-page-icon">⋯</span><div><p class="eyebrow">MEMBER RESOURCES</p><h2>Account services</h2><p>Manage retirement requests, review local records, and check provider connection status.</p></div></div>
           <div class="more-grid">
@@ -141,6 +166,7 @@
   </div>
   <nav class="mobile-nav" aria-label="Mobile navigation">
     <button class="mobile-nav-item active" data-nav="home"><span>⌂</span><small>Home</small></button>
+    <button class="mobile-nav-item" data-nav="transactions"><span>↕</span><small>History</small></button>
     <button class="mobile-nav-item" data-nav="move"><span>⇄</span><small>Move</small></button>
     <button class="mobile-nav-item" data-nav="deposit"><span>↙</span><small>Deposit</small></button>
     <button class="mobile-nav-item" data-nav="card"><span>▰</span><small>Card</small></button>
