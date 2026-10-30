@@ -31,7 +31,7 @@ function assertEligible(preflight) {
   // This object must be assembled by trusted AVCU server code, never from request input.
   const required = [
     'phoneVerified', 'consentActive', 'notDoNotCall', 'withinCallingWindow',
-    'callerIdApproved', 'complianceApproved'
+    'callerIdApproved', 'recordingDisclosureApproved', 'retentionApproved', 'complianceApproved'
   ];
   if (!preflight || required.some(key => preflight[key] !== true)) {
     throw new CalleIntegrationError('ECHO call did not pass every dispatch preflight gate', 'echo_preflight_blocked', { status: 403 });
