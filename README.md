@@ -49,6 +49,10 @@ Browser automation is not a substitute for real-device/manual accessibility test
 ## Production readiness
 
 The backend foundation is now in the branch, but the shared queue is not production-ready until the target Netlify site has Identity enabled, the database migration has applied successfully, operator roles have been assigned, and authenticated API flows have been tested against the deployed preview. Real payment execution, secure check-image retention, live Zelle verification, FX conversion, core-account balance feeds, issuer card controls, signed provider webhooks, and reconciliation still require authorized providers and institution configuration. Only provider-confirmed outcomes may be marked settled.
+## External bank transfer integration
 
-
-
+- External wire/payment requests can be submitted for operator review, but approval remains `Approved · Awaiting Provider`; this branch is not connected to ACH, a wire network, a sponsoring bank, or a receiving bank.
+- The receiver must be a customer of any bank supported by the selected provider and rail; the receiver does not need AVCU membership. Whether the receiver's own banking app shows an incoming item as pending is controlled by that receiving bank.
+- Do not create receiver credits or mark a transfer delivered/completed from request submission, operator approval, or a provider's preliminary acceptance alone. Post only from authenticated, deduplicated provider/core settlement events and reconcile returns/reversals.
+- Recipient account/routing details must be collected through provider-hosted secure tokenization; never store raw bank credentials in browser state, workflow text fields, logs, or audit notes.
+- See [External bank transfer requirements](docs/external-bank-transfer-requirements.md) for the provider contract, status mapping, human-readable description rules, and release blockers.
