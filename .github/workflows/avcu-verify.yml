@@ -44,6 +44,8 @@ jobs:
         run: |
           npm audit --json > /tmp/avcu-npm-audit.json || true
           node -e "const a=JSON.parse(require('node:fs').readFileSync('/tmp/avcu-npm-audit.json','utf8')); for (const [name,v] of Object.entries(a.vulnerabilities || {})) console.log(JSON.stringify({name,severity:v.severity,range:v.range,via:v.via,fixAvailable:v.fixAvailable}));"
+      - name: Enforce high-severity dependency audit
+        run: npm audit --audit-level=high
       - name: Syntax and unit checks
         run: npm run check && npm test
       - name: PostgreSQL API and integration tests
