@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { understandMessage, scoreUnderstanding } from '../server/ai/understanding.js';
 import { runUnderstandingBenchmark, evaluatePlatformGates, runPlatformBenchmark } from '../server/ai/benchmark.js';
-import { generateText, modelGatewayStatus } from '../server/ai/gateway.js';
+import { generateText, generateWithTools, modelGatewayStatus } from '../server/ai/gateway.js';
 import { rememberMemberFact } from '../server/ai/memory.js';
 import { executeAiAction } from '../server/ai/execution.js';
 import { transferRequiresApproval } from '../server/services-member.js';
@@ -118,4 +118,56 @@ test('full-platform benchmark requires every real control metric and fails close
 test('ordinary greetings do not trigger unnecessary clarification', () => {
   assert.equal(understandMessage('Hi, can you help me?').clarificationRequired, false);
   assert.equal(understandMessage('Please connect me to a human representative').clarificationRequired, false);
+});
+
+
+test('gateway requests provider-native structured function calls and normalizes arguments', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldKey = process.env.OPENROUTER_API_KEY;
+  try {
+    process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
+    let requestBody;
+    globalThis.fetch = async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ choices: [{ message: {
+        content: 'Preparing your request.',
+        tool_calls: [{ id: 'call_123', type: 'function', function: {
+          name: 'create_support_case', arguments: '{"subject":"Need a person","body":"Please call me"}'
+        } }]
+      } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const result = await generateWithTools({
+      provider: 'openrouter', fallbacks: [],
+      messages: [{ role: 'user', content: 'Connect me to support' }],
+      tools: [{ name: 'create_support_case', description: 'Create a support case', parameters: {
+        type: 'object', properties: { subject: { type: 'string' } }, required: ['subject'], additionalProperties: false
+      } }]
+    });
+    assert.equal(requestBody.tool_choice, 'auto');
+    assert.equal(requestBody.tools[0].function.name, 'create_support_case');
+    assert.equal(result.toolCalls[0].name, 'create_support_case');
+    assert.deepEqual(result.toolCalls[0].input, { subject: 'Need a person', body: 'Please call me' });
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldKey;
+  }
+});
+
+test('gateway rejects malformed provider tool arguments instead of passing them to execution', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldKey = process.env.OPENROUTER_API_KEY;
+  try {
+    process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
+    globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: {
+      tool_calls: [{ id: 'call_bad', function: { name: 'create_support_case', arguments: 'not-json' } }]
+    } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    await assert.rejects(generateWithTools({
+      provider: 'openrouter', fallbacks: [],
+      messages: [{ role: 'user', content: 'Do something' }],
+      tools: [{ name: 'create_support_case', description: 'Create a support case', parameters: { type: 'object' } }]
+    }), error => error.code === 'provider_invalid_tool_arguments');
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldKey;
+  }
 });
