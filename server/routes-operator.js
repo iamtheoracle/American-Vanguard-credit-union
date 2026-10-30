@@ -12,6 +12,7 @@ import { notifyMember } from './notifications.js';
 import { MEMBERSHIP_TIERS, recalculateMemberTier, overrideMemberTier, clearMemberTierOverride } from './membership-tiers.js';
 import { validateLegacyTransactions } from './migration-validation.js';
 import { inspectEchoQueue } from './echo.js';
+import { runUnderstandingBenchmark } from './ai/benchmark.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -631,6 +632,25 @@ router.get('/operator/audit', ...guard('management', 'super_admin', 'auditor'), 
               created_at AS "createdAt"
        FROM audit_events ORDER BY id DESC LIMIT ${limit}`);
     res.json({ events: rows });
+  } catch (error) { next(error); }
+});
+
+// ---- AI platform benchmark ------------------------------------------------------
+router.get('/operator/ai/benchmark', ...guard('management', 'super_admin', 'auditor'), async (req, res, next) => {
+  try {
+    const result = runUnderstandingBenchmark();
+    await withTx(async client => {
+      await client.query(
+        `INSERT INTO ai_benchmark_runs (suite, version, score, metrics, passed)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [result.benchmark, '1.0.0', result.score, JSON.stringify(result.metrics), result.score >= 0.85]);
+      await audit(client, {
+        actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
+        action: 'ai.benchmark.executed', entityType: 'ai_benchmark', entityId: result.benchmark,
+        metadata: { score: result.score, caseCount: result.caseCount }
+      });
+    });
+    res.json(result);
   } catch (error) { next(error); }
 });
 
