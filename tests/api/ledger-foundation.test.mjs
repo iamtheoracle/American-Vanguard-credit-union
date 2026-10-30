@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestServer } from './helpers.mjs';
-import { query } from '../../server/db.js';
+import { query, withTx } from '../../server/db.js';
+import { postJournalTransaction } from '../../server/journal.js';
 
 test('asset-aware ledger schema enforces ownership, per-asset balancing and append-only entries', async t => {
   const env = await startTestServer();
@@ -66,4 +67,72 @@ test('asset code foreign key prevents cross-asset journal postings', async t => 
       `INSERT INTO journal_entries (journal_transaction_id, financial_account_id, asset_code, direction, amount_minor)
        VALUES ($1,$2,'USD','debit',100)`, [tx[0].id, rows[0].id]),
     /foreign key/);
+});
+
+test('journal posting is balanced, exact, atomic and idempotent', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { rows: members } = await query("SELECT id FROM members WHERE email = 'jordan@avcu.demo'");
+  const memberId = members[0].id;
+  const { rows: memberAccount } = await query(
+    `INSERT INTO financial_accounts
+      (member_id, owner_type, account_code, display_name, account_type, asset_code, asset_kind, asset_precision, custody_domain, status)
+     VALUES ($1,'member','post-usd','Posting account','checking','USD','fiat',2,'bank','open') RETURNING id`,
+    [memberId]);
+  const { rows: clearing } = await query(
+    `INSERT INTO financial_accounts
+      (owner_type, account_code, display_name, account_type, asset_code, asset_kind, asset_precision, custody_domain, status)
+     VALUES ('system','post-clearing','Posting clearing','clearing','USD','fiat',2,'bank','open') RETURNING id`);
+  const postings = [
+    { financialAccountId: memberAccount[0].id, direction: 'debit', amountMinor: '2500' },
+    { financialAccountId: clearing[0].id, direction: 'credit', amountMinor: 2500n }
+  ];
+  const first = await withTx(client => postJournalTransaction(client, {
+    transactionType: 'member_transfer', idempotencyKey: 'journal-idem-0001', postings
+  }));
+  assert.equal(first.replayed, false);
+  assert.equal(first.transaction.status, 'posted');
+
+  const replay = await withTx(client => postJournalTransaction(client, {
+    transactionType: 'member_transfer', idempotencyKey: 'journal-idem-0001', postings
+  }));
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.transaction.id, first.transaction.id);
+
+  await assert.rejects(() => withTx(client => postJournalTransaction(client, {
+    transactionType: 'member_transfer', idempotencyKey: 'journal-idem-0001',
+    postings: [{ ...postings[0], amountMinor: '2600' }, { ...postings[1], amountMinor: '2600' }]
+  })), error => error.code === 'idempotency_conflict');
+
+  await assert.rejects(() => withTx(client => postJournalTransaction(client, {
+    transactionType: 'member_transfer', idempotencyKey: 'journal-idem-0002',
+    postings: [{ ...postings[0], amountMinor: '1000' }, { ...postings[1], amountMinor: '999' }]
+  })), error => error.code === 'unbalanced_journal');
+});
+
+test('journal service rejects cross-asset balancing and floating point amounts', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { rows: usd } = await query(
+    `INSERT INTO financial_accounts
+      (owner_type, account_code, display_name, account_type, asset_code, asset_kind, asset_precision, custody_domain, status)
+     VALUES ('system','cross-usd','USD','clearing','USD','fiat',2,'bank','open') RETURNING id`);
+  const { rows: usdc } = await query(
+    `INSERT INTO financial_accounts
+      (owner_type, account_code, display_name, account_type, asset_code, asset_kind, asset_precision, custody_domain, status)
+     VALUES ('system','cross-usdc','USDC','clearing','USDC','stablecoin',6,'digital_asset','open') RETURNING id`);
+  await assert.rejects(() => withTx(client => postJournalTransaction(client, {
+    transactionType: 'asset_transfer', idempotencyKey: 'journal-cross-asset-01',
+    postings: [
+      { financialAccountId: usd[0].id, direction: 'debit', amountMinor: '1000000' },
+      { financialAccountId: usdc[0].id, direction: 'credit', amountMinor: '1000000' }
+    ]
+  })), error => error.code === 'unbalanced_journal');
+  await assert.rejects(() => withTx(client => postJournalTransaction(client, {
+    transactionType: 'asset_transfer', idempotencyKey: 'journal-float-amount',
+    postings: [
+      { financialAccountId: usd[0].id, direction: 'debit', amountMinor: 1.5 },
+      { financialAccountId: usd[0].id, direction: 'credit', amountMinor: 1.5 }
+    ]
+  })), /invalid exact amount/);
 });
