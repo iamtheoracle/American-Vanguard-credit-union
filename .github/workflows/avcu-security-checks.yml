@@ -1,0 +1,27 @@
+name: AVCU build and security checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/avcu-auth-verification-admin]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Bundle authenticated client
+        run: npm run build
+      - name: Run syntax and security tests
+        run: npm run check

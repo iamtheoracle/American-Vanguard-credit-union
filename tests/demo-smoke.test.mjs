@@ -2,62 +2,88 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, js, css, netlify] = await Promise.all([
-  readFile(new URL('../index.html', import.meta.url), 'utf8'),
-  readFile(new URL('../app.js', import.meta.url), 'utf8'),
-  readFile(new URL('../styles.css', import.meta.url), 'utf8'),
-  readFile(new URL('../netlify.toml', import.meta.url), 'utf8'),
+const root = new URL('../', import.meta.url);
+const read = path => readFile(new URL(path, root), 'utf8');
+const [html, js, css, netlify, memberApi, adminApi, identityHook] = await Promise.all([
+  read('index.html'),
+  read('app.js'),
+  read('auth.css'),
+  read('netlify.toml'),
+  read('netlify/functions/member-api.mjs'),
+  read('netlify/functions/admin-reviews.mjs'),
+  read('netlify/functions/identity.mjs')
 ]);
 
-test('initial member overview renders balances and demo disclaimer in HTML before JavaScript runs', () => {
-  assert.match(html, /id="total-balance"[^>]*>\$12,480\.65/);
-  assert.match(html, /Share Draft[\s\S]*?\$3,240\.65/);
-  assert.match(html, /Primary Share[\s\S]*?\$6,840\.00/);
-  assert.match(html, /Money Market[\s\S]*?\$1,900\.00/);
-  assert.match(html, /Holiday Club[\s\S]*?\$500\.00/);
-  assert.match(html, /DEMONSTRATION ONLY/);
-  assert.match(html, /not a real credit union account/i);
+test('member landing page presents the institutional disclaimer and email/password access', () => {
+  assert.match(html, /not a chartered credit union/i);
+  assert.match(html, /not deposit-insured/i);
+  assert.match(html, /No live payment network is connected/i);
+  assert.match(html, /A share in/);
+  assert.match(html, /type="email"/);
+  assert.match(html, /type="password"/);
+  assert.match(html, /Forgot password\?/);
+  assert.match(html, /Google, Apple and X sign-in are not accepted/i);
 });
 
-test('all promised demo journeys have their controls and handlers', () => {
-  for (const id of [
-    'transfer-form', 'transfer-kind', 'transfer-from', 'transfer-to', 'bill-payee',
-    'deposit-form', 'deposit-amount', 'freeze-toggle', 'simulate-purchase',
-    'purchase-result', 'reset-demo', 'confirm-dialog', 'all-transactions'
-  ]) assert.ok(html.includes(`id="${id}"`), `expected UI control #${id}`);
-  for (const feature of [
-    'submitTransfer', 'submitDeposit', 'toggleFreeze', 'simulatePurchase',
-    'resetDemo', 'renderAll', 'renderAllTransactions'
-  ]) assert.ok(js.includes(feature), `expected handler ${feature}`);
-  assert.match(js, /state\.balances\[from\] < amountCents/);
-  assert.match(js, /if \(state\.frozen\)/);
-  assert.match(js, /state\.frozen = next/);
-  assert.match(js, /localStorage\.setItem\(STORAGE_KEY/);
-  assert.ok(js.includes('Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-7'));
-  assert.ok(js.includes('amount > 10000'));
+test('member interface does not fabricate balances or ledger activity', () => {
+  assert.match(html, /Balance unavailable/);
+  assert.match(html, /No authoritative account data connected/);
+  assert.match(html, /No ledger connected/);
+  assert.match(html, /A requested credit is not a deposit/i);
+  assert.doesNotMatch(html, /\$12,480\.65|\$3,240\.65|\$6,840\.00/);
 });
 
-test('member-facing navigation supports desktop and mobile layouts', () => {
-  for (const view of ['home', 'move', 'deposit', 'card', 'more']) {
-    assert.match(html, new RegExp(`data-nav="${view}"`));
-    assert.match(html, new RegExp(`id="view-${view}"`));
-  }
-  assert.match(css, /@media\(max-width:620px\)/);
-  assert.match(css, /\.mobile-nav\{[^}]*display:grid/s);
-  assert.match(css, /prefers-reduced-motion/);
+test('registration, confirmation, recovery and member submission have UI handlers', () => {
+  assert.match(js, /signup\(/);
+  assert.match(js, /handleAuthCallback\(/);
+  assert.match(js, /recovery_token/);
+  assert.match(js, /recoverPassword\(/);
+  assert.match(js, /memberRequest\('POST'/);
+  assert.match(html, /id="auth-form"/);
+  assert.match(html, /id="application-form"/);
 });
 
-test('the demo does not connect to external services or use remote fonts', () => {
-  assert.doesNotMatch(js, /\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource/);
-  assert.doesNotMatch(html, /https?:\/\//);
-  assert.doesNotMatch(css, /@import\s+url\s*\(/i);
-  assert.match(netlify, /connect-src 'none'/);
-  assert.match(netlify, /publish = "\."/);
+test('member API scopes application reads and writes to authenticated identity', () => {
+  assert.match(memberApi, /await getUser\(\)/);
+  assert.match(memberApi, /WHERE a\.identity_user_id = \$\{String\(user\.id\)\}/);
+  assert.match(memberApi, /identity_user_id, email, full_name/);
+  assert.match(memberApi, /Request origin could not be verified/);
+  assert.match(memberApi, /Cache-Control.*no-store/);
 });
 
-test('user-entered strings are escaped before HTML rendering', () => {
-  assert.match(js, /function escapeHtml\(value\)/);
-  assert.match(js, /escapeHtml\(transaction\.title\)/);
-  assert.match(js, /escapeHtml\(merchant\)/);
-  assert.match(js, /escapeHtml\(payee\)/);
+test('staff review API requires server-side admin role, a note and a valid decision', () => {
+  assert.match(adminApi, /user\.roles\.includes\("admin"\)/);
+  assert.match(adminApi, /\["approved", "rejected", "resubmission"\]/);
+  assert.match(adminApi, /note\.length < 3/);
+  assert.match(adminApi, /INSERT INTO verification_review_events/);
+  assert.match(adminApi, /already been decided/);
+  assert.match(adminApi, /origin !== new URL\(req\.url\)\.origin/);
+});
+
+test('new accounts receive member role and cannot self-assign admin through signup', () => {
+  assert.match(identityHook, /userSignup\(event\)/);
+  assert.match(identityHook, /current\.filter\(role => role !== "admin"\)/);
+  assert.match(identityHook, /"member"/);
+  assert.doesNotMatch(identityHook, /roles\.push\(["']admin/);
+});
+
+test('Netlify build publishes generated frontend and configures same-origin security headers', () => {
+  assert.match(netlify, /command = "npm run build && npm run check"/);
+  assert.match(netlify, /publish = "public"/);
+  assert.match(netlify, /Content-Security-Policy/);
+  assert.match(netlify, /connect-src 'self'/);
+  assert.match(netlify, /node_bundler = "esbuild"/);
+});
+
+test('review interface supports approve, reject and resubmission with required notes', () => {
+  assert.match(js, /\['approved','Approve'\],\['rejected','Reject'\],\['resubmission','Request resubmission'\]/);
+  assert.match(js, /Review note \(required\)/);
+  assert.match(js, /note\.required = true/);
+  assert.match(js, /Decision recorded in review history/);
+});
+
+test('identity verification provider is not represented as integrated KYC', () => {
+  assert.match(html, /does not verify identity/i);
+  assert.match(html, /not a real credit union account|not a chartered credit union/i);
+  assert.doesNotMatch(js, /identity document verified|KYC complete|identity verification provider connected/i);
 });

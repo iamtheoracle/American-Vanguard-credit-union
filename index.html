@@ -1,95 +1,102 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#102b4e">
-  <meta name="description" content="American Vanguard Credit Union — local-only member banking demonstration.">
-  <title>American Vanguard Credit Union | Member Banking Demo</title>
-  <link rel="stylesheet" href="./styles.css">
-  <script src="./app.js" defer></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#102b4e">
+<meta name="description" content="American Vanguard Credit Union membership applications, member access and share-account information.">
+<title>American Vanguard Credit Union | Membership</title>
+<link rel="stylesheet" href="./auth.css">
+<script type="module" src="./auth.bundle.js"></script>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <div class="demo-ribbon"><span class="status-dot"></span> DEMONSTRATION ONLY <span class="ribbon-separator">•</span> No real accounts or money</div>
-  <div class="app-frame">
-    <aside class="sidebar" aria-label="Primary navigation">
-      <a class="brand" href="#" data-nav="home" aria-label="American Vanguard Credit Union home">
-        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 44 44"><path d="M22 3 39 10v12c0 9-7 15-17 19C12 37 5 31 5 22V10L22 3Z" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m12 26 7-13 5 10 3-6 6 12H11l1-3Z" fill="currentColor"/><path d="M10 31h24" stroke="currentColor" stroke-width="2"/></svg></span>
-        <span class="brand-copy"><strong>AMERICAN VANGUARD</strong><small>CREDIT UNION</small></span>
-      </a>
-      <div class="nav-label">MEMBER SPACE</div>
-      <nav class="nav-list">
-        <button class="nav-item active" data-nav="home"><span class="nav-icon" aria-hidden="true">⌂</span><span>Overview</span></button>
-        <button class="nav-item" data-nav="move"><span class="nav-icon" aria-hidden="true">⇄</span><span>Move money</span></button>
-        <button class="nav-item" data-nav="deposit"><span class="nav-icon" aria-hidden="true">↙</span><span>Deposit</span></button>
-        <button class="nav-item" data-nav="card"><span class="nav-icon" aria-hidden="true">▰</span><span>Debit card</span></button>
-        <button class="nav-item" data-nav="more"><span class="nav-icon" aria-hidden="true">⋯</span><span>More</span></button>
-      </nav>
-      <div class="sidebar-bottom">
-        <div class="privacy-note"><span class="privacy-lock" aria-hidden="true">⌑</span><div><strong>Private by design</strong><p>Demo data stays in this browser.</p></div></div>
-        <button class="member-mini" data-nav="more"><span class="avatar">JH</span><span><strong>Jordan Hale</strong><small>Demo member</small></span><span class="member-menu">⋯</span></button>
-      </div>
-    </aside>
-    <main id="main-content" class="main-content" tabindex="-1">
-      <header class="topbar">
-        <div><p class="eyebrow" id="top-eyebrow">MEMBER OVERVIEW</p><h1 id="page-title">Good morning, Jordan<span class="title-period">.</span></h1></div>
-        <div class="top-actions"><span class="local-badge"><span></span> Local demo</span><button class="icon-button" id="help-button" aria-label="About this demonstration" title="About this demo">?</button><div class="avatar avatar-top" aria-label="Jordan Hale">JH</div></div>
-      </header>
-      <div class="content-wrap">
-        <section class="page-view" id="view-home" data-view="home">
-          <div class="welcome-line"><span>Your money, organized.</span><span class="date-label" id="today-label">MEMBER SNAPSHOT</span></div>
-          <div class="balance-hero">
-            <div class="balance-copy"><div class="balance-label"><span class="balance-light"></span> TOTAL SHARE BALANCE <span class="info-dot" title="Sum of demo share balances">i</span></div><div class="total-balance" id="total-balance" aria-live="polite">$12,480.65</div><p class="balance-subtitle">Across your four demo shares</p><div class="balance-footer"><span class="trend-mark">↗</span><span>All balances are sample data</span></div></div>
-            <div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-core"><svg viewBox="0 0 80 80"><path d="M40 7 69 19v20c0 16-12 27-29 34C23 66 11 55 11 39V19L40 7Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M21 48 34 23l10 18 6-11 11 25H19l2-7Z" fill="currentColor"/><path d="M21 57h39" stroke="currentColor" stroke-width="2"/></svg></div></div>
-            <div class="hero-watermark" aria-hidden="true">AV</div>
-          </div>
-          <div class="quick-actions" aria-label="Quick actions">
-            <button class="quick-action" data-nav="move"><span class="quick-icon icon-move">⇄</span><span><strong>Move money</strong><small>Between shares or pay a bill</small></span><span class="action-arrow">↗</span></button>
-            <button class="quick-action" data-nav="deposit"><span class="quick-icon icon-deposit">↙</span><span><strong>Deposit a check</strong><small>Post a sample deposit</small></span><span class="action-arrow">↗</span></button>
-            <button class="quick-action" data-nav="card"><span class="quick-icon icon-card">▰</span><span><strong>Manage card</strong><small>Freeze or unfreeze your card</small></span><span class="action-arrow">↗</span></button>
-          </div>
-          <div class="section-heading"><div><p class="eyebrow">YOUR ACCOUNTS</p><h2>Share accounts</h2></div><button class="text-button" data-nav="more">View details <span>→</span></button></div>
-          <div class="shares-grid" id="shares-grid">
-            <article class="share-card share-draft"><div class="share-card-top"><span class="share-icon">↔</span><span class="share-type">EVERYDAY</span></div><h3>Share Draft</h3><p class="share-description">Checking for everyday spending</p><div class="share-amount" data-balance="draft">$3,240.65</div><div class="share-bottom"><span>•• 2048</span><button data-transfer-from="draft" aria-label="Move money from Share Draft">Move <span>→</span></button></div></article>
-            <article class="share-card"><div class="share-card-top"><span class="share-icon icon-blue">◈</span><span class="share-type">SAVINGS</span></div><h3>Primary Share</h3><p class="share-description">Your core savings share</p><div class="share-amount" data-balance="primary">$6,840.00</div><div class="share-bottom"><span>•• 3812</span><button data-transfer-from="primary" aria-label="Move money from Primary Share">Move <span>→</span></button></div></article>
-            <article class="share-card"><div class="share-card-top"><span class="share-icon icon-gold">✳</span><span class="share-type">GROWTH</span></div><h3>Money Market</h3><p class="share-description">A place for longer-term goals</p><div class="share-amount" data-balance="market">$1,900.00</div><div class="share-bottom"><span>•• 6621</span><button data-transfer-from="market" aria-label="Move money from Money Market">Move <span>→</span></button></div></article>
-            <article class="share-card"><div class="share-card-top"><span class="share-icon icon-coral">✦</span><span class="share-type">GOAL SAVINGS</span></div><h3>Holiday Club</h3><p class="share-description">Set aside for what matters</p><div class="share-amount" data-balance="holiday">$500.00</div><div class="share-bottom"><span>•• 9055</span><button data-transfer-from="holiday" aria-label="Move money from Holiday Club">Move <span>→</span></button></div></article>
-          </div>
-          <div class="lower-grid"><section class="panel activity-panel"><div class="panel-heading"><div><p class="eyebrow">YOUR LATEST ACTIVITY</p><h2>Recent transactions</h2></div><span class="sample-tag">SAMPLE LEDGER</span></div><div id="recent-transactions" class="transaction-list"><div class="transaction-row"><span class="transaction-icon positive">↙</span><span class="transaction-main"><strong>Demo payroll deposit</strong><small>Today · Share Draft</small></span><strong class="transaction-value positive-text">+$2,150.00</strong></div><div class="transaction-row"><span class="transaction-icon">⌂</span><span class="transaction-main"><strong>Harbor Market</strong><small>Yesterday · Share Draft</small></span><strong class="transaction-value">−$64.35</strong></div><div class="transaction-row"><span class="transaction-icon">⇄</span><span class="transaction-main"><strong>Share transfer</strong><small>Oct 16 · Primary Share</small></span><strong class="transaction-value">−$250.00</strong></div></div><button class="panel-link" data-nav="more">Explore demo ledger <span>→</span></button></section>
-          <aside class="panel card-teaser"><div class="panel-heading"><div><p class="eyebrow">YOUR DEBIT CARD</p><h2>Ready when you are</h2></div><span class="card-status-dot" id="card-status-dot"></span></div><div class="mini-card"><div class="mini-card-top"><span>AVCU</span><span class="mini-chip"></span></div><div class="mini-card-number">•••• &nbsp; •••• &nbsp; •••• &nbsp; 4826</div><div class="mini-card-bottom"><span>JORDAN HALE</span><span>VISA <small>DEMO</small></span></div><div class="mini-card-shine"></div></div><div class="card-teaser-bottom"><span id="card-status-text">Card is active in this demo</span><button class="text-button" data-nav="card">Manage <span>→</span></button></div></aside></div>
-          <div class="bottom-disclaimer"><span aria-hidden="true">ⓘ</span><p>This is a fictional, local-only demonstration for Jordan Hale. It is not a real credit union account, is not insured, and cannot send or receive real money.</p></div>
-        </section>
-        <section class="page-view hidden" id="view-move" data-view="move">
-          <div class="page-intro"><span class="page-icon">⇄</span><div><p class="eyebrow">MOVE MONEY</p><h2>Make a move</h2><p>Transfer between your demo shares or record a sample bill payment.</p></div></div>
-          <div class="form-layout"><form class="panel form-panel" id="transfer-form"><h3>Transfer details</h3><label for="transfer-kind">What would you like to do?</label><select id="transfer-kind" name="kind"><option value="share">Transfer between shares</option><option value="bill">Pay a bill from Share Draft</option></select><label for="transfer-from">From share</label><select id="transfer-from" name="from" required><option value="draft">Share Draft · •• 2048</option><option value="primary">Primary Share · •• 3812</option><option value="market">Money Market · •• 6621</option><option value="holiday">Holiday Club · •• 9055</option></select><div class="field-between" id="transfer-to-label"><label for="transfer-to">To share</label><button type="button" class="inline-link" id="swap-shares">Swap</button></div><select id="transfer-to" name="to" required><option value="primary">Primary Share · •• 3812</option><option value="draft">Share Draft · •• 2048</option><option value="market">Money Market · •• 6621</option><option value="holiday">Holiday Club · •• 9055</option></select><div id="bill-payee-field" class="hidden"><label for="bill-payee">Biller or payee</label><input id="bill-payee" name="payee" type="text" maxlength="80" placeholder="e.g. Harbor Electric"></div><label for="transfer-amount">Amount</label><div class="amount-input"><span>$</span><input id="transfer-amount" name="amount" type="number" inputmode="decimal" min="0.01" max="1000000" step="0.01" placeholder="0.00" required></div><label for="transfer-note">Memo <span class="optional">(optional)</span></label><input id="transfer-note" name="memo" type="text" maxlength="80" placeholder="e.g. Holiday savings"><div class="form-note"><span>ⓘ</span> Transfers are simulated and update only this browser's sample ledger.</div><button class="primary-button" type="submit">Review and transfer <span>→</span></button></form><aside class="panel side-summary"><p class="eyebrow">AVAILABLE SHARES</p><h3>Your balances</h3><div id="move-balances" class="balance-list"></div><div class="side-summary-foot"><span class="summary-check">✓</span><span>No external account is connected.</span></div></aside></div>
-        </section>
-        <section class="page-view hidden" id="view-deposit" data-view="deposit">
-          <div class="page-intro"><span class="page-icon deposit-page-icon">↙</span><div><p class="eyebrow">DEPOSIT</p><h2>Deposit a sample check</h2><p>Post a simulated deposit into Share Draft. No image upload or real payment rails are used.</p></div></div>
-          <div class="form-layout"><form class="panel form-panel" id="deposit-form"><h3>Demo check details</h3><label for="deposit-account">Deposit into</label><select id="deposit-account" name="account"><option value="draft">Share Draft · •• 2048</option><option value="primary">Primary Share · •• 3812</option><option value="market">Money Market · •• 6621</option><option value="holiday">Holiday Club · •• 9055</option></select><label for="deposit-amount">Check amount</label><div class="amount-input"><span>$</span><input id="deposit-amount" name="amount" type="number" inputmode="decimal" min="0.01" max="100000" step="0.01" placeholder="0.00" required></div><label for="deposit-description">Deposit description</label><input id="deposit-description" name="description" type="text" maxlength="80" value="Sample check deposit" required><div class="check-preview"><div class="check-preview-top"><span>AMERICAN VANGUARD</span><span>DEMO CHECK</span></div><div class="check-lines"><span>PAY TO THE ORDER OF</span><span class="check-amount" id="check-preview-amount">$0.00</span></div><div class="check-preview-bottom">VOID FOR REAL-WORLD USE <span>•••• 0000</span></div></div><div class="form-note"><span>ⓘ</span> This does not deposit an actual check. It only adds a sample entry to the local demo.</div><button class="primary-button" type="submit">Post demo deposit <span>→</span></button></form><aside class="panel side-summary"><p class="eyebrow">BEFORE YOU POST</p><h3>What happens next?</h3><ul class="simple-steps"><li><span>1</span><div><strong>Review your amount</strong><p>Enter a positive amount in dollars.</p></div></li><li><span>2</span><div><strong>Choose a share</strong><p>Select which demo balance to increase.</p></div></li><li><span>3</span><div><strong>See it instantly</strong><p>Your balance and ledger update in this browser.</p></div></li></ul></aside></div>
-        </section>
-        <section class="page-view hidden" id="view-card" data-view="card">
-          <div class="page-intro"><span class="page-icon card-page-icon">▰</span><div><p class="eyebrow">CARD CONTROLS</p><h2>Your debit card</h2><p>Try a simulated card freeze and purchase. No real card or payment network is connected.</p></div></div>
-          <div class="card-management-grid"><section class="panel card-detail-panel"><div class="large-demo-card" id="large-demo-card"><div class="large-card-brand"><span>AMERICAN VANGUARD</span><span class="large-card-mark">AV</span></div><div class="large-card-chip"></div><div class="large-card-number">•••• &nbsp; •••• &nbsp; •••• &nbsp; 4826</div><div class="large-card-footer"><div><small>CARDHOLDER</small><strong>JORDAN HALE</strong></div><div><small>EXPIRES</small><strong>08/29</strong></div><strong class="visa-word">VISA <small>DEMO</small></strong></div><div class="freeze-overlay hidden" id="freeze-overlay"><span>Ⅱ</span><strong>FROZEN</strong><small>Demo card is locked</small></div></div><div class="card-state-row"><span class="state-indicator" id="card-state-indicator"></span><div><strong id="card-state-heading">Your card is active</strong><p id="card-state-description">Simulated purchases can be approved.</p></div><button class="secondary-button" id="freeze-toggle" type="button">Freeze card</button></div><div class="security-list"><div><span class="security-icon">✓</span><div><strong>Instant demo control</strong><p>Freeze or unfreeze the card at any time.</p></div></div><div><span class="security-icon">⌑</span><div><strong>No real card data</strong><p>Only the demo card ending 4826 is shown.</p></div></div></div></section><section class="panel purchase-panel"><p class="eyebrow">TRY A TEST</p><h3>Simulate a purchase</h3><p class="muted">Run a sample authorization to see how the card status behaves.</p><label for="purchase-amount">Purchase amount</label><div class="amount-input"><span>$</span><input id="purchase-amount" type="number" min="0.01" max="10000" step="0.01" value="24.50"></div><label for="purchase-merchant">Merchant</label><input id="purchase-merchant" type="text" maxlength="80" value="Harbor Market"><button class="primary-button" id="simulate-purchase" type="button">Simulate purchase <span>→</span></button><div id="purchase-result" class="purchase-result hidden" role="status" aria-live="polite"></div><div class="form-note"><span>ⓘ</span> Test purchases never change your share balances and cannot reach a merchant.</div></section></div>
-        </section>
-        <section class="page-view hidden" id="view-more" data-view="more">
-          <div class="page-intro"><span class="page-icon more-page-icon">⋯</span><div><p class="eyebrow">MEMBER RESOURCES</p><h2>More from AVCU</h2><p>Explore illustrative rates, sample branch details, and local demo controls.</p></div></div>
-          <div class="more-grid"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">ILLUSTRATIVE ONLY</p><h3>Sample share rates</h3></div><span class="sample-tag">NOT AN OFFER</span></div><div class="rate-row"><div><strong>Primary Share</strong><small>Regular share savings</small></div><strong>0.25% <small>APY*</small></strong></div><div class="rate-row"><div><strong>Money Market</strong><small>Tiered demo share</small></div><strong>1.10% <small>APY*</small></strong></div><div class="rate-row"><div><strong>Holiday Club</strong><small>Goal-based savings</small></div><strong>0.50% <small>APY*</small></strong></div><p class="fine-print">*Illustrative rates only. Not current, promised, or available rates. No interest is calculated or paid in this demo.</p></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">SAMPLE LOCATIONS</p><h3>Find a branch</h3></div><span class="sample-tag">FICTIONAL</span></div><div class="branch-row"><span class="branch-pin">⌖</span><div><strong>Vanguard Member Center</strong><p>100 Liberty Avenue, Arlington, VA</p><small>Mon–Fri · 9:00 AM–5:00 PM</small></div></div><div class="branch-row"><span class="branch-pin">⌖</span><div><strong>Capitol Service Desk</strong><p>20 Union Square, Washington, DC</p><small>Mon–Fri · 9:00 AM–4:00 PM</small></div></div><p class="fine-print">These locations are fictional placeholders and are not real branch addresses.</p></section><section class="panel ledger-panel"><div class="panel-heading"><div><p class="eyebrow">LOCAL DEMO DATA</p><h3>Demo ledger</h3></div><span class="sample-tag">THIS DEVICE</span></div><div class="ledger-stats"><div><span>Transactions</span><strong id="ledger-count">3</strong></div><div><span>Card status</span><strong id="ledger-card-status">Active</strong></div></div><div id="all-transactions" class="transaction-list"></div><button class="secondary-button reset-button" id="reset-demo" type="button">Reset demo to sample data</button><p class="fine-print">Reset replaces local demo changes on this device. It does not affect any real account.</p></section><section class="panel about-panel"><div class="about-mark">AV</div><p class="eyebrow">ABOUT THIS PREVIEW</p><h3>Member-owned. Demo-built.</h3><p>This interactive prototype demonstrates common digital credit-union journeys. It is not a chartered financial institution and has no banking, deposit-taking, lending, or payment capability.</p><div class="about-checks"><span>✓ No sign-in required</span><span>✓ No backend connection</span><span>✓ No external payment rails</span></div></section></div>
-          <div class="bottom-disclaimer"><span aria-hidden="true">ⓘ</span><p>American Vanguard Credit Union is represented here as a fictional product concept. Nothing in this preview is an insured deposit, financial advice, or a real financial transaction.</p></div>
-        </section>
-      </div>
-      <footer class="app-footer"><span>© 2026 American Vanguard Credit Union <span class="footer-dot">·</span> Demo experience</span><span><span class="footer-lock">⌑</span> Stored locally in this browser</span></footer>
-    </main>
+<a class="skip" href="#main">Skip to content</a>
+<div class="institution-notice"><strong>IMPORTANT INSTITUTIONAL NOTICE</strong><span>This is not a chartered credit union and it is not deposit-insured. No live payment network is connected.</span></div>
+<header class="top">
+  <a class="brand" href="/" aria-label="American Vanguard Credit Union home">
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M20 3 35 11v18L20 37 5 29V11Z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 26 20 11l8 15M15.5 20h9" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>
+    <span><strong>AMERICAN VANGUARD</strong><small>CREDIT UNION</small></span>
+  </a>
+  <nav class="top-nav" aria-label="Main navigation"><a href="#membership">Membership</a><a href="#how-it-works">How it works</a><span class="secure"><span></span> PRIVATE MEMBER ACCESS</span></nav>
+</header>
+<main id="main">
+<section class="hero" id="welcome">
+  <div class="hero-copy">
+    <p class="eyebrow"><span class="eyebrow-line"></span> MEMBERSHIP BY APPLICATION</p>
+    <h1>A share in<br>the <em>institution.</em></h1>
+    <p class="intro">Membership begins with an application and an operator review. Sign in with your email and password to access your member space and follow your application.</p>
+    <div class="hero-rule"></div>
+    <div class="process-list" id="how-it-works">
+      <div><span class="step-no">01</span><span><strong>Apply for membership</strong><small>Submit your application securely.</small></span></div>
+      <div><span class="step-no">02</span><span><strong>Operator review</strong><small>Your application stays pending until reviewed.</small></span></div>
+      <div><span class="step-no">03</span><span><strong>Member access</strong><small>Share information appears only when backed by an authoritative ledger.</small></span></div>
+    </div>
+    <p class="signin-policy">Sign-in is email and password only. Google, Apple and X sign-in are not accepted.</p>
   </div>
-  <nav class="mobile-nav" aria-label="Mobile navigation">
-    <button class="mobile-nav-item active" data-nav="home"><span>⌂</span><small>Home</small></button>
-    <button class="mobile-nav-item" data-nav="move"><span>⇄</span><small>Move</small></button>
-    <button class="mobile-nav-item" data-nav="deposit"><span>↙</span><small>Deposit</small></button>
-    <button class="mobile-nav-item" data-nav="card"><span>▰</span><small>Card</small></button>
-    <button class="mobile-nav-item" data-nav="more"><span>⋯</span><small>More</small></button>
-  </nav>
-  <dialog id="confirm-dialog" class="app-dialog" aria-labelledby="dialog-title"><form method="dialog" class="dialog-card"><button class="dialog-close" value="cancel" aria-label="Close dialog">×</button><p class="eyebrow" id="dialog-eyebrow">CONFIRM ACTION</p><h2 id="dialog-title">Review this demo action</h2><p id="dialog-description"></p><div id="dialog-summary" class="dialog-summary"></div><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancel</button><button class="primary-button" id="dialog-confirm" value="confirm">Confirm demo action</button></div></form></dialog>
-  <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
-  <div class="screen-reader-only" id="live-announcer" aria-live="polite"></div>
-</body>
-</html>
+  <section class="auth-card" id="membership" aria-labelledby="form-title">
+    <div class="card-kicker"><span class="card-kicker-icon">AV</span><span>MEMBERSHIP SERVICES</span></div>
+    <div class="tabs" role="tablist" aria-label="Member access"><button type="button" class="tab active" data-mode="login" role="tab" aria-selected="true">Sign in</button><button type="button" class="tab" data-mode="signup" role="tab" aria-selected="false">Apply / register</button></div>
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <h2 id="form-title">Member sign in</h2><p id="form-description" class="muted">Use the email address and password registered to your member profile.</p>
+    <form id="auth-form">
+      <label for="full-name" id="name-label" hidden>Full legal name</label><input id="full-name" name="fullName" autocomplete="name" placeholder="Full legal name" hidden>
+      <label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" placeholder="name@example.com" required>
+      <label for="password" id="password-label">Password</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" placeholder="Enter your password" required>
+      <div id="password-help" class="muted tiny" hidden>Use at least 8 characters. Do not reuse another site's password.</div>
+      <button class="primary" id="submit" type="submit">Sign in <span aria-hidden="true">→</span></button>
+      <button class="text-button" type="button" id="forgot">Forgot password?</button>
+    </form>
+    <div class="card-foot"><span class="lock-icon" aria-hidden="true">⌑</span><p>Email confirmation verifies access to an email address; it does not verify identity or approve membership.</p></div>
+  </section>
+</section>
+
+<section class="institution-strip">
+  <div><span class="strip-label">MEMBERSHIP</span><strong>Application first.</strong><p>Every membership application starts in pending review.</p></div>
+  <div><span class="strip-label">SHARE ACCOUNTS</span><strong>Ledger-backed only.</strong><p>Share Draft and Primary Share information requires an authoritative data source.</p></div>
+  <div><span class="strip-label">OPERATIONS</span><strong>Separate approval.</strong><p>High-value transfers and bill-pay requests require a different operator's approval.</p></div>
+</section>
+
+<section id="member-panel" class="member-panel" hidden>
+  <div class="member-welcome"><div><p class="eyebrow"><span class="eyebrow-line"></span> PRIVATE MEMBER AREA</p><h2 id="member-heading">Member relationship</h2><p id="member-copy" class="muted"></p></div><button class="secondary" id="signout" type="button">Sign out</button></div>
+  <div id="member-notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div class="section-heading"><span class="section-number">01</span><div><h3>Share accounts</h3><p>Balances are not displayed until an authoritative ledger is connected.</p></div></div>
+  <div class="share-grid">
+    <article class="share-card"><div class="share-top"><span class="share-icon">SD</span><span class="share-type">SHARE ACCOUNT</span></div><h3>Share Draft</h3><p>Everyday share account</p><div class="balance-placeholder">Balance unavailable</div><div class="data-source-note">No authoritative account data connected</div></article>
+    <article class="share-card"><div class="share-top"><span class="share-icon">PS</span><span class="share-type">SHARE ACCOUNT</span></div><h3>Primary Share</h3><p>Membership share account</p><div class="balance-placeholder">Balance unavailable</div><div class="data-source-note">No authoritative account data connected</div></article>
+  </div>
+  <div class="section-heading"><span class="section-number">02</span><div><h3>Membership status</h3><p>Application status is separate from share-account status.</p></div></div>
+  <div class="status-card"><span class="status-icon" aria-hidden="true">i</span><div><strong id="member-status">Application not submitted</strong><p id="member-status-copy">Complete the membership application below to begin review.</p></div></div>
+  <form id="application-form" class="application-form">
+    <h3>Membership application</h3><p class="muted">Submit an application for operator review. Do not enter account numbers, card details or online banking credentials.</p>
+    <label for="application-name">Full legal name</label><input id="application-name" name="applicationName" autocomplete="name" maxlength="160" required>
+    <label for="application-statement">Application statement</label><textarea id="application-statement" name="statement" rows="4" maxlength="2000" minlength="10" placeholder="Briefly explain your membership request and confirm your information is accurate." required></textarea>
+    <button class="primary" id="application-submit" type="submit">Submit membership application <span aria-hidden="true">→</span></button>
+  </form>
+  <div class="section-heading"><span class="section-number">03</span><div><h3>Transaction history</h3><p>Completed and pending account transactions will appear here when an authenticated, authoritative ledger is connected.</p></div></div>
+  <div class="empty-ledger" role="status" aria-live="polite"><span class="ledger-icon">≡</span><div><strong>Transaction history unavailable</strong><p>No authoritative account ledger is connected, so this app cannot retrieve or verify deposits, withdrawals, transfers, fees, reversals, or running balances. No sample transactions are displayed.</p><p>When a trusted ledger is integrated, each entry must include its posting date, description, transaction type, amount, currency, status, reference, and authoritative balance where supplied by that ledger.</p></div></div>
+  <div class="policy-grid"><article><span class="policy-index">CONTROL 01</span><h4>Transfer approval</h4><p>Transfers above $2,500 must wait for approval from a different operator. No live payment network is connected.</p></article><article><span class="policy-index">CONTROL 02</span><h4>Bill-pay review</h4><p>Bill-pay requests remain pending until a different operator approves them. Requests do not move money here.</p></article></div>
+  <div id="admin-entry" class="admin-entry" hidden><div class="section-heading"><span class="section-number">04</span><div><h3>Operator workspace</h3><p>Staff access is enforced by the server.</p></div></div><button class="secondary" id="open-admin" type="button">Open verification dashboard</button></div>
+</section>
+
+<section id="admin-panel" class="member-panel admin-panel" hidden>
+  <div class="member-welcome"><div><p class="eyebrow"><span class="eyebrow-line"></span> STAFF ONLY</p><h2>Membership review queue</h2><p class="muted">Review applications and record decisions with notes.</p></div><button class="secondary" id="back-member" type="button">Back to member area</button></div>
+  <div id="admin-notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <div id="review-list" class="review-list"></div>
+  <div class="section-heading"><span class="section-number">W</span><div><h3>External wire confirmation</h3><p>Evidence review only. This screen cannot send a wire or change any balance.</p></div></div>
+  <div id="wire-notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <form id="wire-create-form" class="application-form" hidden>
+    <h3>Register an external wire case</h3><p class="muted">Register an existing authorized transfer reference. This does not initiate payment.</p>
+    <label>Sender name</label><input name="senderName" maxlength="160" required>
+    <label>Beneficiary name</label><input name="beneficiaryName" maxlength="160" required>
+    <label>Purpose</label><input name="purpose" maxlength="120" required>
+    <label>Amount</label><input name="amount" inputmode="decimal" required>
+    <label>Currency (3-letter code)</label><input name="currency" minlength="3" maxlength="3" placeholder="USD" required>
+    <label>Destination institution</label><input name="destinationInstitution" maxlength="160" required>
+    <label>External provider reference</label><input name="externalReference" maxlength="160" required>
+    <button class="primary" type="submit">Register case — no payment</button>
+  </form>
+  <div id="wire-case-list" class="review-list"></div>
+</section>
+</main>
+<footer><a class="footer-brand" href="/">AMERICAN VANGUARD CREDIT UNION</a><div><span>Privacy: membership application data is stored for the signed-in member. No authoritative share-account data is connected.</span><span>No live payment network connected.</span><span>This is not a chartered credit union and it is not deposit-insured.</span></div><p class="ai-notice">When an AI assistant is configured, your question and share identifiers may be sent to the model provider. Do not include passwords, authentication codes or other secrets.</p></footer>
+</body></html>
