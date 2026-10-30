@@ -93,8 +93,10 @@ export async function reverseTransaction(client, transactionId, { actor, reason 
   if (original.status !== 'posted') throw new LedgerError('Only posted transactions can be reversed', 400);
   const reversal = await createTransaction(client, {
     type: 'reversal',
-    fromAccountId: original.to_account_id || original.from_account_id,
-    toAccountId: original.from_account_id || original.to_account_id,
+    // Swap the original sides exactly. A one-sided deposit reverses as a debit
+    // from the member account to the system side; it must not target itself.
+    fromAccountId: original.to_account_id,
+    toAccountId: original.from_account_id,
     amountCents: original.amount_cents,
     status: 'pending_approval',
     memo: `Reversal of ${original.reference}: ${reason}`,
