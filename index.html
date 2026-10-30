@@ -82,6 +82,20 @@
   <div class="member-welcome"><div><p class="eyebrow"><span class="eyebrow-line"></span> STAFF ONLY</p><h2>Membership review queue</h2><p class="muted">Review applications and record decisions with notes.</p></div><button class="secondary" id="back-member" type="button">Back to member area</button></div>
   <div id="admin-notice" class="notice" role="status" aria-live="polite" hidden></div>
   <div id="review-list" class="review-list"></div>
+  <div class="section-heading"><span class="section-number">W</span><div><h3>External wire confirmation</h3><p>Evidence review only. This screen cannot send a wire or change any balance.</p></div></div>
+  <div id="wire-notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <form id="wire-create-form" class="application-form" hidden>
+    <h3>Register an external wire case</h3><p class="muted">Register an existing authorized transfer reference. This does not initiate payment.</p>
+    <label>Sender name</label><input name="senderName" maxlength="160" required>
+    <label>Beneficiary name</label><input name="beneficiaryName" maxlength="160" required>
+    <label>Purpose</label><input name="purpose" maxlength="120" required>
+    <label>Amount</label><input name="amount" inputmode="decimal" required>
+    <label>Currency (3-letter code)</label><input name="currency" minlength="3" maxlength="3" placeholder="USD" required>
+    <label>Destination institution</label><input name="destinationInstitution" maxlength="160" required>
+    <label>External provider reference</label><input name="externalReference" maxlength="160" required>
+    <button class="primary" type="submit">Register case — no payment</button>
+  </form>
+  <div id="wire-case-list" class="review-list"></div>
 </section>
 </main>
 <footer><a class="footer-brand" href="/">AMERICAN VANGUARD CREDIT UNION</a><div><span>Privacy: membership application data is stored for the signed-in member. No authoritative share-account data is connected.</span><span>No live payment network connected.</span><span>This is not a chartered credit union and it is not deposit-insured.</span></div><p class="ai-notice">When an AI assistant is configured, your question and share identifiers may be sent to the model provider. Do not include passwords, authentication codes or other secrets.</p></footer>
