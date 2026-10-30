@@ -70,18 +70,18 @@ const TOOLS = {
       return { amountCents: input.amountCents, from: input.fromAccountName.trim(), to: input.toAccountName.trim() };
     },
     exec: async (ctx, args) => {
-      const { rows } = await query(
-        `SELECT id, name, balance_cents FROM accounts WHERE member_id = $1 AND status = 'open'`, [ctx.member.id]);
-      const from = rows.find(r => r.name.toLowerCase() === args.from.toLowerCase());
-      const to = rows.find(r => r.name.toLowerCase() === args.to.toLowerCase());
-      if (!from || !to || from.id === to.id) throw new Error('Unknown account names; use exact share names');
-      if (from.balance_cents < args.amountCents) throw new Error('Insufficient available funds');
-      if (ctx.member.status !== 'verified') throw new Error('Membership is pending verification');
-      // Proposal only: money moves through the standard approval-limited pipeline.
+      // Resolve both accounts and create the proposal under the broker's single SQL transaction.
       const result = await executeAiAction({
         member: ctx.member, action: 'transfer.proposal.create',
         idempotencyKey: ctx.idempotencyKey('transfer'), request: args,
         execute: async client => {
+          const { rows } = await client.query(
+            `SELECT id, name, balance_cents FROM accounts WHERE member_id = $1 AND status = 'open' FOR UPDATE`,
+            [ctx.member.id]);
+          const from = rows.find(r => r.name.toLowerCase() === args.from.toLowerCase());
+          const to = rows.find(r => r.name.toLowerCase() === args.to.toLowerCase());
+          if (!from || !to || from.id === to.id) throw new Error('Unknown account names; use exact share names');
+          if (Number(from.balance_cents) < args.amountCents) throw new Error('Insufficient available funds');
           const submitted = await ctx.submitTransfer({
             fromAccountId: from.id, toAccountId: to.id,
             amountCents: args.amountCents, memo: 'Requested via AI assistant'
