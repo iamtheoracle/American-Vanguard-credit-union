@@ -108,6 +108,14 @@ export async function handleWorkflowRequest(request, dependencies = {}) {
         FROM avcu_account_ledger l
         WHERE l.member_id=${user.id} AND l.created_at >= now() - interval '365 days'
         GROUP BY date_trunc('month',l.created_at) ORDER BY month_key DESC`;
+      const monthlyRequestRows = await db.sql`SELECT to_char(date_trunc('month',r.created_at),'YYYY-MM') AS month_key,
+        SUM(CASE WHEN r.type='wire-transfer' THEN r.amount_cents ELSE 0 END)::bigint AS wire_request_cents,
+        SUM(CASE WHEN r.type='wire-transfer' AND r.purpose ILIKE '%gift%' THEN r.amount_cents ELSE 0 END)::bigint AS gift_wire_request_cents,
+        SUM(CASE WHEN r.type='bill-payment' THEN r.amount_cents ELSE 0 END)::bigint AS bill_request_cents,
+        COUNT(*)::int AS request_count
+        FROM avcu_workflow_requests r
+        WHERE r.created_by=${user.id} AND r.created_at >= now() - interval '365 days'
+        GROUP BY date_trunc('month',r.created_at) ORDER BY month_key DESC`;
       return respond({
         requests:rows.map(publicRequest),
         ledger:ledgerRows.map(row=>({
@@ -118,6 +126,11 @@ export async function handleWorkflowRequest(request, dependencies = {}) {
         monthly:monthlyRows.map(row=>({
           month_key:row.month_key,credits_cents:Number(row.credits_cents||0),
           debits_cents:Number(row.debits_cents||0),entry_count:Number(row.entry_count||0)
+        })),
+        monthly_requests:monthlyRequestRows.map(row=>({
+          month_key:row.month_key,wire_request_cents:Number(row.wire_request_cents||0),
+          gift_wire_request_cents:Number(row.gift_wire_request_cents||0),
+          bill_request_cents:Number(row.bill_request_cents||0),request_count:Number(row.request_count||0)
         })),
         period_days:365
       });
