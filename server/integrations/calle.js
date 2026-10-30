@@ -36,7 +36,7 @@ function assertEligible(preflight) {
 }
 
 function assertPhone(phone) {
-  if (typeof phone !== 'string' || !/^\\+[1-9][0-9]{7,14}$/.test(phone)) {
+  if (typeof phone !== 'string' || !/^\+[1-9][0-9]{7,14}$/.test(phone)) {
     throw new CalleIntegrationError('A verified E.164 recipient is required', 'invalid_recipient', { status: 400 });
   }
 }
