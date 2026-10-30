@@ -36,6 +36,10 @@ export async function lookupIdempotent(key, scope) {
   return rows[0] ? rows[0].result : null;
 }
 
+export function transferRequiresApproval({ amountCents, aiContext = false }) {
+  return Boolean(aiContext) || Number(amountCents) > POLICY.TRANSFER_APPROVAL_LIMIT_CENTS;
+}
+
 export async function submitMemberTransfer({ member, body, idempotencyKey, aiContext = false }) {
   await assertVerifiedMember(member);
   if (idempotencyKey) {
@@ -94,7 +98,7 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
       return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
   }
 
-  const needsApproval = amountCents > POLICY.TRANSFER_APPROVAL_LIMIT_CENTS;
+  const needsApproval = transferRequiresApproval({ amountCents, aiContext });
   const result = await withTx(async client => {
     const status = needsApproval ? 'pending_approval' : 'posted';
     const tx = await createTransaction(client, {
