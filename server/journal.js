@@ -35,10 +35,10 @@ function normalizePostings(postings) {
   });
 }
 
-function requestDigest(type, description, sourceSystem, sourceEventId, postings) {
+function requestDigest(type, description, sourceSystem, sourceEventId, createdByType, createdBy, postings) {
   return createHash('sha256').update(JSON.stringify({
     type, description: description || null, sourceSystem: sourceSystem || null,
-    sourceEventId: sourceEventId || null,
+    sourceEventId: sourceEventId || null, createdByType, createdBy: createdBy || null,
     postings: postings.map(({ financialAccountId, direction, amountMinor, memo }) =>
       ({ financialAccountId, direction, amountMinor, memo }))
   })).digest('hex');
@@ -64,7 +64,8 @@ export async function postJournalTransaction(client, {
     throw new JournalError('Invalid journal actor type');
   }
   const normalized = normalizePostings(postings);
-  const digest = requestDigest(transactionType, description, sourceSystem, sourceEventId, normalized);
+  const digest = requestDigest(transactionType, description, sourceSystem, sourceEventId,
+    createdByType, createdBy, normalized);
 
   const existing = await client.query(
     `SELECT id, reference, status, request_hash
