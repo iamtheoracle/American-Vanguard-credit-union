@@ -97,6 +97,17 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
     }
 
     const financial = approval.item_type === 'transaction';
+    if (action === 'approve' && financial && approval.payload?.source === 'ai_assistant') {
+      const binding = createHash('sha256').update(JSON.stringify([
+        approval.txn_id, approval.txn_type, Number(approval.txn_amount),
+        approval.txn_memo || '', approval.txn_payee || '', approval.txn_reference || '',
+        approval.txn_from_account_id || '', approval.txn_to_account_id || ''
+      ])).digest('hex');
+      if (!approval.member_confirmed_at || !approval.member_confirmation_hash ||
+          approval.member_confirmation_hash !== binding) {
+        throw new ApprovalError('Member must re-confirm this exact AI transfer before operator approval', 409, 'member_step_up_required');
+      }
+    }
     if (['loan', 'money_request'].includes(approval.item_type) && ['approve', 'reject'].includes(action) && (!reason || !String(reason).trim())) {
       throw new ApprovalError('A written decision reason is required for this final decision', 400, 'reason_required');
     }
