@@ -137,6 +137,6 @@ test('member wire request history offers a printable receipt without inventing s
   assert.ok(app.includes('Wire fee'));
   assert.ok(app.includes('Not confirmed'));
   assert.ok(app.includes('not a bank-issued wire confirmation'));
-  assert.ok(app.includes('recipient name entered'));
+  assert.ok(app.includes('Recipient name entered'));
   assert.ok(css.includes('.receipt-open-button'));
 });
