@@ -43,7 +43,7 @@ function providerConfig(name) {
   if (!config) throw new ModelGatewayError('Unknown AI provider', 'unknown_provider', { provider: name });
   const key = process.env[config.keyEnv];
   if (!key) throw new ModelGatewayError('AI provider credentials are not configured', 'provider_not_configured', { provider: name });
-  return { ...config, baseUrl: config.baseUrl || process.env.AI_BASE_URL?.replace(/\\/$/, ''), key, model: process.env[config.modelEnv] || config.defaultModel };
+  return { ...config, baseUrl: config.baseUrl || process.env.AI_BASE_URL?.replace(/\/$/, ''), key, model: process.env[config.modelEnv] || config.defaultModel };
 }
 
 async function fetchJson(url, options, timeoutMs) {
