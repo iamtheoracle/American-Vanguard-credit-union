@@ -181,7 +181,7 @@ BEFORE INSERT OR UPDATE OR DELETE ON journal_entries
 FOR EACH ROW EXECUTE FUNCTION avcu_reject_journal_entry_mutation();
 
 CREATE OR REPLACE FUNCTION avcu_guard_finalized_journal() RETURNS trigger
-LANGUAGE plpgsql AS $
+LANGUAGE plpgsql AS $$
 BEGIN
   IF OLD.status IN ('posted','reversed') THEN
     IF OLD.status = 'posted' AND NEW.status = 'reversed' AND
@@ -193,7 +193,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 DROP TRIGGER IF EXISTS journal_transactions_finalized_guard ON journal_transactions;
 CREATE TRIGGER journal_transactions_finalized_guard
 BEFORE UPDATE ON journal_transactions
@@ -250,7 +250,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_external_payment_provider_ref
   WHERE provider_name IS NOT NULL AND provider_payment_ref IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION avcu_validate_external_payment_asset() RETURNS trigger
-LANGUAGE plpgsql AS $
+LANGUAGE plpgsql AS $$
 DECLARE
   account_asset_kind TEXT;
   account_custody_domain TEXT;
@@ -274,7 +274,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 DROP TRIGGER IF EXISTS external_payment_asset_guard ON external_payment_intents;
 CREATE TRIGGER external_payment_asset_guard
 BEFORE INSERT OR UPDATE OF financial_account_id, asset_code, rail ON external_payment_intents
