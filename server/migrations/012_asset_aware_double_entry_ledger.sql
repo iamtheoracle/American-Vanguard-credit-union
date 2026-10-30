@@ -153,15 +153,26 @@ AFTER INSERT OR UPDATE OF status ON journal_transactions DEFERRABLE INITIALLY DE
 FOR EACH ROW EXECUTE FUNCTION avcu_assert_journal_balanced();
 
 CREATE OR REPLACE FUNCTION avcu_reject_journal_entry_mutation() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql AS $
+DECLARE
+  parent_status TEXT;
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    SELECT status INTO parent_status FROM journal_transactions
+      WHERE id = NEW.journal_transaction_id;
+    IF parent_status IN ('posted','reversed') THEN
+      RAISE EXCEPTION 'Journal entries are append-only; post a compensating transaction'
+        USING ERRCODE = '55000';
+    END IF;
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'Journal entries are append-only; post a compensating transaction'
     USING ERRCODE = '55000';
 END;
-$$;
+$;
 DROP TRIGGER IF EXISTS journal_entries_immutable ON journal_entries;
 CREATE TRIGGER journal_entries_immutable
-BEFORE UPDATE OR DELETE ON journal_entries
+BEFORE INSERT OR UPDATE OR DELETE ON journal_entries
 FOR EACH ROW EXECUTE FUNCTION avcu_reject_journal_entry_mutation();
 
 CREATE TABLE IF NOT EXISTS balance_holds (
