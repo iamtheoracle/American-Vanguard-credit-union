@@ -53,6 +53,105 @@ const TIERS = {
   super_admin: ['super_admin']
 };
 
+// Read-only historical account dossier. It reports only records actually stored in AVCU;
+// it never synthesizes missing transactions or inserts a lifecycle/death event.
+router.get('/operator/members/:memberId/account-history', requireOperatorRole('management', 'super_admin'), async (req, res, next) => {
+  try {
+    const validDate = value => {
+      if (!value || typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+      const date = new Date(value + 'T00:00:00Z');
+      return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+    };
+    const from = req.query.from || '2018-01-01';
+    const to = req.query.to || '2026-10-30';
+    if (!validDate(from) || !validDate(to) || from > to) {
+      return res.status(400).json({ error: 'Use valid from/to dates in YYYY-MM-DD format; from must not be after to.' });
+    }
+    const memberResult = await query(
+      `SELECT id, member_number AS "memberNumber", full_name AS "fullName", email,
+              status AS "membershipStatus", created_at AS "memberSince"
+       FROM members WHERE id = $1`, [req.params.memberId]);
+    const member = memberResult.rows[0];
+    if (!member) return res.status(404).json({ error: 'Member account not found' });
+
+    const [accountResult, transactionResult, ledgerResult, weeklyResult, monthlyResult, lastResult] = await Promise.all([
+      query(`SELECT id, kind, name, suffix, status, balance_cents AS "currentBalanceCents",
+                    created_at AS "openedAt"
+             FROM accounts WHERE member_id = $1 ORDER BY created_at, id`, [member.id]),
+      query(`SELECT t.id, t.reference, t.type, t.status, t.amount_cents AS "amountCents",
+                    t.memo, t.payee, t.created_at AS "initiatedAt", t.updated_at AS "lastUpdatedAt",
+                    fa.name AS "fromAccount", ta.name AS "toAccount"
+             FROM transactions t
+             JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
+             LEFT JOIN accounts fa ON fa.id = t.from_account_id
+             LEFT JOIN accounts ta ON ta.id = t.to_account_id
+             WHERE a.member_id = $1 AND t.created_at >= $2::date
+               AND t.created_at < ($3::date + INTERVAL '1 day')
+             GROUP BY t.id, fa.name, ta.name
+             ORDER BY t.created_at DESC, t.id DESC LIMIT 5000`, [member.id, from, to]),
+      query(`SELECT le.id, le.account_id AS "accountId", a.name AS "accountName",
+                    le.transaction_id AS "transactionId", t.reference, le.direction,
+                    le.amount_cents AS "amountCents", le.balance_after_cents AS "balanceAfterCents",
+                    le.memo, le.created_at AS "recordedAt"
+             FROM ledger_entries le JOIN accounts a ON a.id = le.account_id
+             LEFT JOIN transactions t ON t.id = le.transaction_id
+             WHERE a.member_id = $1 AND le.created_at >= $2::date
+               AND le.created_at < ($3::date + INTERVAL '1 day')
+             ORDER BY le.created_at DESC, le.id DESC LIMIT 10000`, [member.id, from, to]),
+      query(`SELECT date_trunc('week', t.created_at)::date AS period,
+                    count(*)::int AS "transactionCount",
+                    sum(t.amount_cents)::bigint AS "grossAmountCents"
+             FROM transactions t JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
+             WHERE a.member_id = $1 AND t.created_at >= $2::date
+               AND t.created_at < ($3::date + INTERVAL '1 day')
+             GROUP BY 1 ORDER BY 1`, [member.id, from, to]),
+      query(`SELECT date_trunc('month', t.created_at)::date AS period,
+                    count(*)::int AS "transactionCount",
+                    sum(t.amount_cents)::bigint AS "grossAmountCents"
+             FROM transactions t JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
+             WHERE a.member_id = $1 AND t.created_at >= $2::date
+               AND t.created_at < ($3::date + INTERVAL '1 day')
+             GROUP BY 1 ORDER BY 1`, [member.id, from, to]),
+      query(`SELECT
+                (SELECT max(t.created_at) FROM transactions t
+                 JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
+                 WHERE a.member_id = $1) AS "lastTransactionAt",
+                (SELECT max(le.created_at) FROM ledger_entries le
+                 JOIN accounts a ON a.id = le.account_id WHERE a.member_id = $1) AS "lastLedgerActivityAt",
+                (SELECT t.created_at FROM transactions t
+                 JOIN accounts a ON a.id = t.from_account_id
+                 WHERE a.member_id = $1 AND t.type IN ('withdrawal','cash_withdrawal')
+                 ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS "lastWithdrawalInitiatedAt"`, [member.id])
+    ]);
+    const asNumber = rows => rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) =>
+      [key, typeof value === 'string' && /Cents$/.test(key) ? Number(value) : value])));
+    await audit(null, {
+      actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
+      action: 'member.account_history.viewed', entityType: 'member', entityId: member.id,
+      metadata: { from, to }
+    });
+    res.set('Cache-Control', 'no-store, private, max-age=0');
+    res.json({
+      source: 'recorded_avcu_data_only',
+      range: { from, to },
+      member,
+      accounts: asNumber(accountResult.rows),
+      transactions: asNumber(transactionResult.rows),
+      ledgerEntries: asNumber(ledgerResult.rows),
+      weekly: asNumber(weeklyResult.rows),
+      monthly: asNumber(monthlyResult.rows),
+      lastRecordedActivity: lastResult.rows[0] || null,
+      limitations: [
+        'Only records present in the AVCU database are included.',
+        'A missing period is not evidence that no external banking activity occurred.',
+        'Current account balances are not historical daily balances.',
+        'Withdrawal initiation is distinct from a completed or settled withdrawal.',
+        'No daily balance is inferred where ledger evidence is absent.'
+      ]
+    });
+  } catch (error) { next(error); }
+});
+
 router.get('/operator/queue', ...guard('management', 'operator'), async (req, res, next) => {
   try {
     const [approvals, cases, aiFailed, membership, health] = await Promise.all([
