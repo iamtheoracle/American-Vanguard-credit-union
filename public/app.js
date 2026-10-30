@@ -286,9 +286,49 @@
     $('#history-requests').innerHTML = sortedRequests.length ? sortedRequests.map(row => {
       const title = requestLabels[row.type] || row.type;
       const recipient = row.recipient ? ' · ' + row.recipient : '';
-      return '<article class="history-entry"><div class="history-entry-main"><strong>' + escapeHtml(title + recipient) + '</strong><small>' + escapeHtml(formatHistoryDate(row.created_at)) + ' · ' + escapeHtml(row.purpose || '') + '</small><small>Reference ' + escapeHtml(String(row.id || '').slice(0,8).toUpperCase()) + '</small></div><span class="history-status-pill">' + escapeHtml(statusLabels[row.status] || row.status) + '</span><strong>' + money(safeCents(row.amount_cents)) + '</strong></article>';
+      const receiptAction = row.type === 'wire-transfer' ? '<button class="secondary-button receipt-open-button" type="button" data-receipt-request="' + escapeHtml(row.id) + '">View receipt</button>' : '';
+      return '<article class="history-entry"><div class="history-entry-main"><strong>' + escapeHtml(title + recipient) + '</strong><small>' + escapeHtml(formatHistoryDate(row.created_at)) + ' · ' + escapeHtml(row.purpose || '') + '</small><small>AVCU request reference ' + escapeHtml(String(row.id || '').slice(0,8).toUpperCase()) + '</small></div><span class="history-status-pill">' + escapeHtml(statusLabels[row.status] || row.status) + '</span><strong>' + money(safeCents(row.amount_cents)) + '</strong>' + receiptAction + '</article>';
     }).join('') : '<p class="empty-state">No wire or payment requests were found in the last 365 days.</p>';
   }
+
+  function openWireReceipt(requestId) {
+    const row = (historySnapshot?.requests || []).find(item => item.id === requestId && item.type === 'wire-transfer');
+    if (!row) { showToast('That wire request is no longer available in the loaded history.', 'error'); return; }
+    const popup = window.open('', '_blank');
+    if (!popup) { showToast('Allow pop-ups to open the printable receipt.', 'error'); return; }
+    const status = statusLabels[row.status] || String(row.status || 'Status unavailable');
+    const created = new Date(row.created_at);
+    const submittedAt = Number.isNaN(created.getTime()) ? 'Unavailable' : new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York', timeZoneName: 'short'
+    }).format(created);
+    const amount = money(safeCents(row.amount_cents));
+    const recipient = row.recipient || 'Not provided';
+    const destination = row.destination_details || 'Not provided';
+    const reference = String(row.id || '');
+    const processingNote = row.status === 'processing'
+      ? 'The provider accepted the instruction for processing. Final settlement and receiving-bank credit have not been confirmed.'
+      : row.status === 'settled'
+        ? 'The provider reports settlement. Refer to the institution’s authoritative ledger for the posted entry.'
+        : 'This receipt records the AVCU wire request and its current workflow status. It is not evidence of funds being sent or received.';
+    const esc = escapeHtml;
+    popup.document.open();
+    popup.document.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AVCU Wire Request Receipt</title><style>' +
+      'body{margin:0;padding:28px;background:#eef1f4;color:#152b45;font:14px/1.45 Arial,sans-serif}.paper{max-width:680px;margin:0 auto;padding:38px 42px;background:#fff;border:1px solid #d8dee6;box-shadow:0 8px 28px #10243a18}.brand{display:flex;align-items:center;gap:15px;padding-bottom:18px;border-bottom:2px solid #173c68}.mark{width:54px;height:54px;border:3px solid #214d8c;border-radius:13px;display:grid;place-items:center;flex:none}.mark svg{width:38px;height:38px}.brand strong{display:block;font-size:19px;letter-spacing:.02em}.brand small{display:block;margin-top:3px;letter-spacing:.12em;font-size:11px}.heading{margin:24px 0 16px;font-size:18px;letter-spacing:.06em}.status{padding:12px 14px;border:1px solid #c7d3e2;background:#f4f7fa;font-weight:800;letter-spacing:.08em;text-align:center;color:#173c68}.note{margin:13px 0 22px;color:#46576a;font-size:12px}.amount{padding:18px 0;border-top:1px solid #dce2e9;border-bottom:1px solid #dce2e9;text-align:center}.amount small{display:block;color:#637184;font-size:10px;letter-spacing:.12em}.amount strong{display:block;margin-top:5px;font-size:30px}.section{margin-top:22px}.section h2{margin:0 0 9px;padding:8px 10px;background:#173c68;color:#fff;font-size:12px;letter-spacing:.06em}.row{display:flex;justify-content:space-between;gap:20px;padding:8px 2px;border-bottom:1px solid #edf0f3}.row span:first-child{color:#657184}.row strong{text-align:right;overflow-wrap:anywhere}.foot{margin-top:25px;padding-top:14px;border-top:1px solid #ccd5df;color:#586779;font-size:11px}.foot strong{display:block;margin-bottom:5px;color:#173c68}.actions{max-width:680px;margin:16px auto;text-align:right}.actions button{padding:11px 18px;border:0;background:#173c68;color:#fff;font-weight:700;border-radius:4px;cursor:pointer}@media print{body{padding:0;background:#fff}.paper{max-width:none;border:0;box-shadow:none;padding:14mm}.actions{display:none}}@media(max-width:600px){body{padding:0}.paper{padding:24px 20px;border:0;box-shadow:none}.row{gap:12px}}' +
+      '</style></head><body><main class="paper"><header class="brand"><span class="mark"><svg viewBox="0 0 44 44" aria-hidden="true"><path d="M6 20.5 22 7l16 13.5M11 19v17h22V19" fill="none" stroke="#214d8c" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><strong>ATCHISON VILLAGE</strong><small>CREDIT UNION · AVCU</small></div></header>' +
+      '<h1 class="heading">DOMESTIC WIRE TRANSFER · REQUEST RECEIPT</h1><div class="status">' + esc(status.toUpperCase()) + '</div><p class="note">' + esc(processingNote) + '</p>' +
+      '<div class="amount"><small>REQUESTED WIRE AMOUNT</small><strong>' + esc(amount) + ' USD</strong></div>' +
+      '<section class="section"><h2>TRANSFER DETAILS</h2><div class="row"><span>Transfer type</span><strong>Domestic wire</strong></div><div class="row"><span>Submitted</span><strong>' + esc(submittedAt) + ' · Brooklyn, New York time</strong></div><div class="row"><span>AVCU request reference</span><strong>' + esc(reference) + '</strong></div></section>' +
+      '<section class="section"><h2>RECIPIENT DETAILS</h2><div class="row"><span>Recipient name entered</span><strong>' + esc(recipient) + '</strong></div><div class="row"><span>Destination details entered</span><strong>' + esc(destination) + '</strong></div></section>' +
+      '<section class="section"><h2>PAYMENT SUMMARY</h2><div class="row"><span>Requested amount</span><strong>' + esc(amount) + '</strong></div><div class="row"><span>Wire fee</span><strong>Not available in this request record</strong></div><div class="row"><span>Total debit</span><strong>Not confirmed</strong></div></section>' +
+      '<footer class="foot"><strong>AVCU MEMBER REQUEST RECORD</strong>This document reflects the request information and status recorded in the member workspace. It is not a bank-issued wire confirmation, provider trace, proof of debit, or proof of receiving-bank credit. Recipient and destination details are member-entered and have not been independently verified here.</footer></main><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div></body></html>');
+    popup.document.close();
+    popup.focus();
+  }
+
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-receipt-request]');
+    if (button) openWireReceipt(button.dataset.receiptRequest);
+  });
 
   async function loadTransactionHistory() {
     const auth = window.AVCUAuthState || {};
