@@ -849,18 +849,18 @@ router.post('/ai/chat/stream', memberAuth, async (req, res, next) => {
   });
   res.flushHeaders?.();
   try {
-    res.write(`event: start\\ndata: ${JSON.stringify({ provider: activeProvider(), mode: 'text_only' })}\\n\\n`);
+    res.write(`event: start\ndata: ${JSON.stringify({ provider: activeProvider(), mode: 'text_only' })}\n\n`);
     for await (const chunk of streamChatReply({ message, provider: activeProvider() })) {
       if (res.destroyed) break;
-      res.write(`event: delta\\ndata: ${JSON.stringify({ text: chunk.delta, provider: chunk.provider })}\\n\\n`);
+      res.write(`event: delta\ndata: ${JSON.stringify({ text: chunk.delta, provider: chunk.provider })}\n\n`);
     }
     if (!res.destroyed) {
-      res.write('event: done\\ndata: {}\\n\\n');
+      res.write('event: done\ndata: {}\n\n');
       res.end();
     }
   } catch (error) {
     if (!res.destroyed) {
-      res.write(`event: error\\ndata: ${JSON.stringify({ error: 'Streaming is temporarily unavailable. Your message was not executed.' })}\\n\\n`);
+      res.write(`event: error\ndata: ${JSON.stringify({ error: 'Streaming is temporarily unavailable. Your message was not executed.' })}\n\n`);
       res.end();
     }
   }
