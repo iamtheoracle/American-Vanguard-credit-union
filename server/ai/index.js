@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { query, withTx, audit } from '../db.js';
 import { POLICY } from '../policy.js';
 import { validAmountCents } from '../util.js';
-import { generateText, generateWithTools } from './gateway.js';
+import { generateText, generateWithTools, streamText } from './gateway.js';
 import { understandMessage } from './understanding.js';
 import { executeAiAction } from './execution.js';
 
@@ -329,3 +329,28 @@ export async function recordAiTask({ requesterType, requesterId, provider, purpo
 }
 
 
+
+
+/**
+ * Streaming is intentionally text-only: no tool execution is permitted on this
+ * endpoint. State-changing requests must use the validated, audited /ai/chat flow.
+ */
+export async function* streamChatReply({ message, history, provider = activeProvider() }) {
+  if (provider === 'failing') throw new Error('AI provider is unavailable');
+  if (provider === 'sandbox') {
+    const result = sandboxComplete({ member: { id: 'stream' }, message });
+    yield { provider: 'sandbox', delta: result.reply };
+    return;
+  }
+  yield* streamText({
+    provider,
+    messages: [
+      { role: 'system', content: 'You are the AVCU member assistant. Be clear and concise. This is a text-only streaming response: do not claim to execute banking actions, do not invent account data, and direct members to the authenticated AVCU workflow for account actions. Never request passwords, PINs, CVVs, or one-time codes.' },
+      ...(history || []).slice(-8),
+      { role: 'user', content: String(message).slice(0, 4000) }
+    ],
+    timeoutMs: POLICY.AI_TIMEOUT_MS,
+    maxTokens: 1200,
+    temperature: 0.2
+  });
+}
