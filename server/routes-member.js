@@ -733,7 +733,7 @@ router.post('/ai/approvals/:approvalId/confirm', memberAuth, async (req, res, ne
     }
     const confirmed = await withTx(async client => {
       const { rows } = await client.query(
-        `SELECT a.id, a.member_id, a.submitted_by, a.submitted_by_type, a.item_type, a.payload,
+        `SELECT a.id, a.member_id, a.submitted_by, a.submitted_by_type, a.item_type, a.payload, a.status,
                 t.id AS txn_id, t.type AS txn_type, t.amount_cents AS txn_amount,
                 t.memo AS txn_memo, t.payee AS txn_payee, t.reference AS txn_reference,
                 t.from_account_id AS txn_from_account_id, t.to_account_id AS txn_to_account_id
@@ -746,16 +746,24 @@ router.post('/ai/approvals/:approvalId/confirm', memberAuth, async (req, res, ne
         const error = new Error('This AI transfer confirmation is not available for your account.');
         error.status = 404; throw error;
       }
+      if (!['pending', 'escalated'].includes(approval.status)) {
+        const error = new Error('This transfer proposal is no longer awaiting approval.');
+        error.status = 409; throw error;
+      }
       const binding = createHash('sha256').update(JSON.stringify([
         approval.txn_id, approval.txn_type, Number(approval.txn_amount),
         approval.txn_memo || '', approval.txn_payee || '', approval.txn_reference || '',
         approval.txn_from_account_id || '', approval.txn_to_account_id || ''
       ])).digest('hex');
-      await client.query(
+      const updated = await client.query(
         `UPDATE approvals SET member_confirmed_at = now(), member_confirmation_hash = $2,
            member_confirmation_method = 'password_reauthentication', updated_at = now()
          WHERE id = $1 AND status IN ('pending','escalated')`,
         [approval.id, binding]);
+      if (!updated.rowCount) {
+        const error = new Error('This transfer proposal is no longer awaiting approval.');
+        error.status = 409; throw error;
+      }
       await audit(client, { actorType: 'member', actorId: req.member.id, action: 'ai.transfer_step_up.confirmed',
         entityType: 'approval', entityId: approval.id,
         metadata: { method: 'password_reauthentication', payloadBound: true } });
