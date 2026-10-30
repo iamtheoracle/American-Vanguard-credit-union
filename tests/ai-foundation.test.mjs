@@ -182,9 +182,9 @@ test('gateway streams provider-native text deltas over SSE', async () => {
       const request = JSON.parse(options.body);
       assert.equal(request.stream, true);
       return new Response([
-        'data: {"choices":[{"delta":{"content":"Hello "}}]}\\n\\n',
-        'data: {"choices":[{"delta":{"content":"member."}}]}\\n\\n',
-        'data: [DONE]\\n\\n'
+        'data: {"choices":[{"delta":{"content":"Hello "}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"member."}}]}\n\n',
+        'data: [DONE]\n\n'
       ].join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
     };
     const chunks = [];
@@ -210,7 +210,7 @@ test('streaming fallback occurs only before the first token', async () => {
     globalThis.fetch = async url => {
       calls += 1;
       if (String(url).includes('api.openai.com')) return new Response('unavailable', { status: 503 });
-      return new Response('data: {"choices":[{"delta":{"content":"fallback"}}]}\\n\\ndata: [DONE]\\n\\n', {
+      return new Response('data: {"choices":[{"delta":{"content":"fallback"}}]}\n\ndata: [DONE]\n\n', {
         status: 200, headers: { 'Content-Type': 'text/event-stream' }
       });
     };
