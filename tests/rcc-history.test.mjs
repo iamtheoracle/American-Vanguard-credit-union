@@ -2,10 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, script, styles] = await Promise.all([
+const [html, script, styles, operatorRoutes, operatorScript, operatorHtml] = await Promise.all([
   readFile(new URL('../rcc-history.html', import.meta.url), 'utf8'),
   readFile(new URL('../rcc-history.js', import.meta.url), 'utf8'),
-  readFile(new URL('../rcc-history.css', import.meta.url), 'utf8')
+  readFile(new URL('../rcc-history.css', import.meta.url), 'utf8'),
+  readFile(new URL('../server/routes-operator.js', import.meta.url), 'utf8'),
+  readFile(new URL('../operator-portal.js', import.meta.url), 'utf8'),
+  readFile(new URL('../operator-portal.html', import.meta.url), 'utf8')
 ]);
 
 test('RCC reporting identity and period are present', () => {
@@ -42,4 +45,30 @@ test('exports are templates and do not fabricate ledger rows', () => {
 test('workspace has responsive and print styling', () => {
   assert.match(styles, /@media\(max-width:560px\)/);
   assert.match(styles, /@media print/);
+});
+
+test('operator history defaults to the requested complete reporting period', () => {
+  assert.match(operatorRoutes, /req\.query\.from \|\| '2018-03-25'/);
+  assert.match(operatorRoutes, /req\.query\.to \|\| '2026-10-31'/);
+  assert.match(operatorHtml, /value="2018-03-25"/);
+  assert.match(operatorHtml, /value="2026-10-31"/);
+});
+
+test('monthly aggregation uses account membership EXISTS and avoids join multiplication', () => {
+  const monthly = operatorRoutes.slice(operatorRoutes.indexOf("date_trunc('month'"), operatorRoutes.indexOf('lastRecordedActivity'));
+  assert.match(monthly, /WHERE EXISTS/);
+  assert.doesNotMatch(monthly, /JOIN accounts a ON a\.id = t\.from_account_id OR a\.id = t\.to_account_id/);
+});
+
+test('history API and operator UI preserve exact cent values', () => {
+  assert.match(operatorRoutes, /const exactMoney = rows/);
+  assert.doesNotMatch(operatorRoutes, /Number\(value\).*Cents/);
+  assert.match(operatorScript, /BigInt\(digits\)/);
+  assert.match(operatorScript, /toLocaleString\('en-US'\)/);
+});
+
+test('operator statement labels distinguish initiation from posting', () => {
+  assert.match(operatorScript, /Initiation time is not proof of settlement or posting/);
+  assert.match(operatorScript, /Weekly Account Summary/);
+  assert.match(operatorScript, /Monthly Account Statement Summary/);
 });
