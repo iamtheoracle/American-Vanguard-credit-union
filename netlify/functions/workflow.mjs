@@ -90,8 +90,37 @@ export async function handleWorkflowRequest(request, dependencies = {}) {
     try {
       const rows = queue
         ? await db.sql`SELECT r.id,r.type,r.source_account,r.destination_account,r.recipient,r.destination_details,r.currency,r.amount_cents,r.purpose,r.status,r.assigned_team,r.assigned_role,r.operator_note,r.provider_state,r.recipient_verified,r.created_at,r.updated_at,COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor',CASE WHEN a.actor_id=r.created_by THEN 'Member' ELSE 'Authorized operator' END,'action',a.action,'note',a.details->>'note') ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.status IN ('pending-approval','needs-information') ORDER BY r.created_at ASC LIMIT 200`
-        : await db.sql`SELECT r.id,r.type,r.source_account,r.destination_account,r.recipient,r.destination_details,r.currency,r.amount_cents,r.purpose,r.status,r.assigned_team,r.assigned_role,r.operator_note,r.provider_state,r.recipient_verified,r.created_at,r.updated_at,COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor',CASE WHEN a.actor_id=r.created_by THEN 'Member' ELSE 'Authorized operator' END,'action',a.action,'note',a.details->>'note') ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.created_by = ${user.id} ORDER BY r.created_at DESC LIMIT 200`;
-      return respond({ requests:rows.map(publicRequest) });
+        : await db.sql`SELECT r.id,r.type,r.source_account,r.destination_account,r.recipient,r.destination_details,r.currency,r.amount_cents,r.purpose,r.status,r.assigned_team,r.assigned_role,r.operator_note,r.provider_state,r.recipient_verified,r.created_at,r.updated_at,COALESCE((SELECT json_agg(json_build_object('created_at',a.created_at,'actor',CASE WHEN a.actor_id=r.created_by THEN 'Member' ELSE 'Authorized operator' END,'action',a.action,'note',a.details->>'note') ORDER BY a.created_at) FROM avcu_workflow_audit a WHERE a.request_id=r.id),'[]'::json) AS audit FROM avcu_workflow_requests r WHERE r.created_by = ${user.id} AND r.created_at >= now() - interval '365 days' ORDER BY r.created_at DESC LIMIT 1000`;
+      if (queue) return respond({ requests:rows.map(publicRequest) });
+
+      // Only posted ledger entries count as account activity. Requests awaiting a
+      // payment provider remain visible separately and never inflate credits/debits.
+      const ledgerRows = await db.sql`SELECT l.id,l.request_id,l.account_type,l.direction,l.amount_cents,l.created_at,
+        r.type AS request_type,r.purpose,r.recipient,r.currency
+        FROM avcu_account_ledger l
+        JOIN avcu_workflow_requests r ON r.id=l.request_id
+        WHERE l.member_id=${user.id} AND l.created_at >= now() - interval '365 days'
+        ORDER BY l.created_at DESC LIMIT 1000`;
+      const monthlyRows = await db.sql`SELECT to_char(date_trunc('month',l.created_at),'YYYY-MM') AS month_key,
+        SUM(CASE WHEN l.direction='credit' THEN l.amount_cents ELSE 0 END)::bigint AS credits_cents,
+        SUM(CASE WHEN l.direction='debit' THEN l.amount_cents ELSE 0 END)::bigint AS debits_cents,
+        COUNT(*)::int AS entry_count
+        FROM avcu_account_ledger l
+        WHERE l.member_id=${user.id} AND l.created_at >= now() - interval '365 days'
+        GROUP BY date_trunc('month',l.created_at) ORDER BY month_key DESC`;
+      return respond({
+        requests:rows.map(publicRequest),
+        ledger:ledgerRows.map(row=>({
+          id:row.id,request_id:row.request_id,account_type:row.account_type,direction:row.direction,
+          amount_cents:Number(row.amount_cents),created_at:row.created_at,request_type:row.request_type,
+          purpose:row.purpose,recipient:row.recipient,currency:row.currency
+        })),
+        monthly:monthlyRows.map(row=>({
+          month_key:row.month_key,credits_cents:Number(row.credits_cents||0),
+          debits_cents:Number(row.debits_cents||0),entry_count:Number(row.entry_count||0)
+        })),
+        period_days:365
+      });
     } catch { return respond({ error:'The shared workflow queue is unavailable.' },503); }
   }
 
