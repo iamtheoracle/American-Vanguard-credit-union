@@ -23,6 +23,33 @@
       catch(error){notice('operator-message',error.message,true);}
     }));
   }
+  const money = cents => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(cents||0)/100);
+  async function loadMemberHistory(event){
+    event?.preventDefault();
+    const memberId=$('history-member-id').value.trim();
+    if(!memberId)return;
+    const params=new URLSearchParams({from:$('history-from').value,to:$('history-to').value});
+    $('member-history').innerHTML='<p class="muted">Loading recorded account history…</p>';
+    try{
+      const data=await api('/operator/members/'+encodeURIComponent(memberId)+'/account-history?'+params.toString());
+      const m=data.member;
+      const date=value=>value?esc(new Date(value).toLocaleString()):'Not recorded';
+      const table=(headers,rows)=>rows.length?'<div class="table-wrap"><table><thead><tr>'+headers.map(esc).map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>':'<p class="muted">No matching recorded entries.</p>';
+      const accounts=data.accounts.map(a=>'<tr><td><strong>'+esc(a.name)+'</strong><small>'+esc(a.kind)+' · •••• '+esc(a.suffix)+'</small></td><td>'+esc(a.status)+'</td><td>'+date(a.openedAt)+'</td><td>'+money(a.currentBalanceCents)+'</td></tr>');
+      const tx=data.transactions.map(t=>'<tr><td>'+date(t.initiatedAt)+'</td><td><strong>'+esc(t.type)+'</strong><small>'+esc(t.reference)+'</small></td><td>'+esc(t.fromAccount||'—')+' → '+esc(t.toAccount||t.payee||'—')+'</td><td>'+esc(String(t.status).replaceAll('_',' '))+'</td><td>'+money(t.amountCents)+'</td></tr>');
+      const ledger=data.ledgerEntries.map(e=>'<tr><td>'+date(e.recordedAt)+'</td><td>'+esc(e.accountName)+'</td><td>'+esc(e.direction)+'</td><td>'+money(e.amountCents)+'</td><td>'+money(e.balanceAfterCents)+'</td><td>'+esc(e.reference||e.memo||'—')+'</td></tr>');
+      const periodRows=rows=>rows.map(p=>'<tr><td>'+date(p.period)+'</td><td>'+esc(p.transactionCount)+'</td><td>'+money(p.grossAmountCents)+'</td></tr>');
+      const last=data.lastRecordedActivity||{};
+      $('member-history').innerHTML='<h3>'+esc(m.fullName)+'</h3><p class="muted">'+esc(m.memberNumber)+' · '+esc(m.email)+' · '+esc(m.membershipStatus)+' · Member since '+date(m.memberSince)+'</p>'+
+        '<h3>Accounts and current recorded balances</h3>'+table(['Account','Status','Opened','Current recorded balance'],accounts)+
+        '<h3>Last recorded activity</h3><p>Last transaction: '+date(last.lastTransactionAt)+' · Last ledger entry: '+date(last.lastLedgerActivityAt)+' · Last withdrawal initiation (if recorded): '+date(last.lastWithdrawalInitiatedAt)+'</p>'+
+        '<h3>Transaction history ('+esc(data.range.from)+' to '+esc(data.range.to)+')</h3>'+table(['Initiated','Type / reference','Route','Status','Amount'],tx)+
+        '<h3>Ledger entries and balance-after records</h3>'+table(['Recorded','Account','Direction','Amount','Balance after','Reference / memo'],ledger)+
+        '<h3>Weekly totals</h3>'+table(['Week','Transaction count','Gross recorded amount'],periodRows(data.weekly))+
+        '<h3>Monthly totals</h3>'+table(['Month','Transaction count','Gross recorded amount'],periodRows(data.monthly))+
+        '<p class="muted small">'+data.limitations.map(esc).join(' ')+'</p>';
+    }catch(error){$('member-history').innerHTML='<p class="error">'+esc(error.message)+'</p>';}
+  }
   async function loadTiers(){
     const params=new URLSearchParams();
     if($('tier-search').value.trim())params.set('search',$('tier-search').value.trim());
@@ -67,6 +94,6 @@
   });
   $('operator-logout').addEventListener('click',async()=>{try{await post('/operator/logout',{});}catch{}operator=null;setAuthed(false);});
   $('refresh-operator').addEventListener('click',async()=>{try{await loadAll();notice('operator-message','Console refreshed.');}catch(error){notice('operator-message',error.message,true);}});
-  $('tier-filter').addEventListener('submit',async event=>{event.preventDefault();try{await loadTiers();}catch(error){notice('operator-message',error.message,true);}});
+  $('history-form').addEventListener('submit',loadMemberHistory);\n  $('tier-filter').addEventListener('submit',async event=>{event.preventDefault();try{await loadTiers();}catch(error){notice('operator-message',error.message,true);}});
   (async()=>{try{const data=await api('/auth/operator/me');operator=data.operator;setAuthed(true);$('operator-identity').textContent=`${operator.name} · ${operator.email} · Role: ${operator.role}`;await loadAll();}catch{setAuthed(false);}})();
 })();
