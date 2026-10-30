@@ -203,3 +203,24 @@ test('AI transfer step-up requires password re-authentication and binds exact ap
   assert.match(stored.rows[0].member_confirmation_hash, /^[a-f0-9]{64}$/);
   assert.equal(stored.rows[0].member_confirmation_method, 'password_reauthentication');
 });
+
+
+test('streaming chat is authenticated, text-only and cannot create a transfer proposal', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { cookie } = await loginMember(env.base);
+  const response = await fetch(`${env.base}/api/ai/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify({ message: 'Transfer $5 from Share Draft to Primary Share' })
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') || '', /text\/event-stream/);
+  const body = await response.text();
+  assert.match(body, /event: delta/);
+  assert.match(body, /does not execute actions|does not execute/);
+  assert.match(body, /event: done/);
+  const { rows } = await query(
+    `SELECT count(*)::int AS count FROM transactions WHERE memo = 'Requested via AI assistant'`);
+  assert.equal(rows[0].count, 0);
+});
