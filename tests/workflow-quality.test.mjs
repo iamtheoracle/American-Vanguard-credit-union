@@ -126,3 +126,17 @@ test('member transaction history shows calculated annual totals and copyable sta
   assert.ok(css.includes('.history-table'));
   assert.ok(workflow.includes('avcu:workflow-history-updated'));
 });
+
+
+test('member wire request history offers a printable receipt without inventing settlement data', () => {
+  assert.ok(app.includes('data-receipt-request'));
+  assert.ok(app.includes('function openWireReceipt(requestId)'));
+  assert.ok(app.includes('AVCU request reference'));
+  assert.ok(app.includes('Print / Save as PDF'));
+  assert.ok(app.includes('America/New_York'));
+  assert.ok(app.includes('Wire fee'));
+  assert.ok(app.includes('Not confirmed'));
+  assert.ok(app.includes('not a bank-issued wire confirmation'));
+  assert.ok(app.includes('recipient name entered'));
+  assert.ok(css.includes('.receipt-open-button'));
+});
