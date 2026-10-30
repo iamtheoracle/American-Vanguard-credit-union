@@ -63,7 +63,7 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
       return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
     };
     const from = req.query.from || '2018-03-25';
-    const to = req.query.to || '2026-04-20';
+    const to = req.query.to || '2026-10-31';
     if (!validDate(from) || !validDate(to) || from > to) {
       return res.status(400).json({ error: 'Use valid from/to dates in YYYY-MM-DD format; from must not be after to.' });
     }
@@ -116,8 +116,13 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
       query(`SELECT date_trunc('month', t.created_at)::date AS period,
                     count(*)::int AS "transactionCount",
                     sum(t.amount_cents)::bigint AS "grossAmountCents"
-             FROM transactions t JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
-             WHERE a.member_id = $1 AND t.created_at >= $2::date
+             FROM transactions t
+             WHERE EXISTS (
+               SELECT 1 FROM accounts owned
+               WHERE owned.member_id = $1
+                 AND owned.id IN (t.from_account_id, t.to_account_id)
+             )
+               AND t.created_at >= $2::date
                AND t.created_at < ($3::date + INTERVAL '1 day')
              GROUP BY 1 ORDER BY 1`, [member.id, from, to]),
       query(`SELECT
@@ -131,8 +136,10 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
                  WHERE a.member_id = $1
                  ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS "lastOutgoingInitiatedAt"`, [member.id])
     ]);
-    const asNumber = rows => rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) =>
-      [key, typeof value === 'string' && /Cents$/.test(key) ? Number(value) : value])));
+    // Keep all monetary values as exact decimal-cent strings. JavaScript Number cannot
+    // safely represent large ledger amounts without losing cents.
+    const exactMoney = rows => rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) =>
+      [key, /Cents$/.test(key) && value != null ? String(value) : value])));
     await audit(null, {
       actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
       action: 'member.account_history.viewed', entityType: 'member', entityId: member.id,
@@ -143,11 +150,11 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
       source: 'recorded_avcu_data_only',
       range: { from, to },
       member,
-      accounts: asNumber(accountResult.rows),
-      transactions: asNumber(transactionResult.rows),
-      ledgerEntries: asNumber(ledgerResult.rows),
-      weekly: asNumber(weeklyResult.rows),
-      monthly: asNumber(monthlyResult.rows),
+      accounts: exactMoney(accountResult.rows),
+      transactions: exactMoney(transactionResult.rows),
+      ledgerEntries: exactMoney(ledgerResult.rows),
+      weekly: exactMoney(weeklyResult.rows),
+      monthly: exactMoney(monthlyResult.rows),
       lastRecordedActivity: lastResult.rows[0] || null,
       limitations: [
         'Only records present in the AVCU database are included.',
