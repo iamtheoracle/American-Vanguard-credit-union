@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startTestServer, api, loginMember } from './helpers.mjs';
+import { startTestServer, api, loginMember, loginOperator, MEMBER_PASSWORD } from './helpers.mjs';
 import { query } from '../../server/db.js';
 import { executeAiAction } from '../../server/ai/execution.js';
 import { rememberMemberFact, recallMemberFacts } from '../../server/ai/memory.js';
@@ -165,4 +165,39 @@ test('negated transfer language never reaches a state-changing executor', async 
   assert.equal(response.data.toolCalls.length, 0);
   const { rows } = await query('SELECT count(*)::int AS count FROM ai_execution_idempotency');
   assert.equal(rows[0].count, 0);
+});
+
+test('AI transfer step-up requires password re-authentication and binds exact approval payload', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { cookie } = await loginMember(env.base);
+  const response = await api(env.base, '/api/ai/chat', {
+    method: 'POST', cookie,
+    body: { message: 'Transfer $5 from Share Draft to Primary Share' }
+  });
+  assert.equal(response.status, 200);
+  const { rows } = await query(
+    `SELECT id, member_confirmed_at, member_confirmation_hash, payload
+     FROM approvals WHERE item_type = 'transaction' AND payload->>'source' = 'ai_assistant'`);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].member_confirmed_at, null);
+  const approvalId = rows[0].id;
+
+  const bad = await api(env.base, `/api/ai/approvals/${approvalId}/confirm`, {
+    method: 'POST', cookie, body: { password: 'incorrect-password' }
+  });
+  assert.equal(bad.status, 401);
+
+  const good = await api(env.base, `/api/ai/approvals/${approvalId}/confirm`, {
+    method: 'POST', cookie, body: { password: MEMBER_PASSWORD }
+  });
+  assert.equal(good.status, 200);
+  assert.equal(good.data.approvalId, approvalId);
+  assert.ok(good.data.confirmedAt);
+  const stored = await query(
+    'SELECT member_confirmed_at, member_confirmation_hash, member_confirmation_method FROM approvals WHERE id = $1',
+    [approvalId]);
+  assert.ok(stored.rows[0].member_confirmed_at);
+  assert.match(stored.rows[0].member_confirmation_hash, /^[a-f0-9]{64}$/);
+  assert.equal(stored.rows[0].member_confirmation_method, 'password_reauthentication');
 });
