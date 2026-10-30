@@ -62,8 +62,8 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
       const date = new Date(value + 'T00:00:00Z');
       return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
     };
-    const from = req.query.from || '2018-01-01';
-    const to = req.query.to || '2026-10-30';
+    const from = req.query.from || '2018-03-25';
+    const to = req.query.to || '2026-04-20';
     if (!validDate(from) || !validDate(to) || from > to) {
       return res.status(400).json({ error: 'Use valid from/to dates in YYYY-MM-DD format; from must not be after to.' });
     }
@@ -82,12 +82,15 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
                     t.memo, t.payee, t.created_at AS "initiatedAt", t.updated_at AS "lastUpdatedAt",
                     fa.name AS "fromAccount", ta.name AS "toAccount"
              FROM transactions t
-             JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
              LEFT JOIN accounts fa ON fa.id = t.from_account_id
              LEFT JOIN accounts ta ON ta.id = t.to_account_id
-             WHERE a.member_id = $1 AND t.created_at >= $2::date
+             WHERE EXISTS (
+               SELECT 1 FROM accounts owned
+               WHERE owned.member_id = $1
+                 AND owned.id IN (t.from_account_id, t.to_account_id)
+             )
+               AND t.created_at >= $2::date
                AND t.created_at < ($3::date + INTERVAL '1 day')
-             GROUP BY t.id, fa.name, ta.name
              ORDER BY t.created_at DESC, t.id DESC LIMIT 5000`, [member.id, from, to]),
       query(`SELECT le.id, le.account_id AS "accountId", a.name AS "accountName",
                     le.transaction_id AS "transactionId", t.reference, le.direction,
@@ -101,8 +104,13 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
       query(`SELECT date_trunc('week', t.created_at)::date AS period,
                     count(*)::int AS "transactionCount",
                     sum(t.amount_cents)::bigint AS "grossAmountCents"
-             FROM transactions t JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
-             WHERE a.member_id = $1 AND t.created_at >= $2::date
+             FROM transactions t
+             WHERE EXISTS (
+               SELECT 1 FROM accounts owned
+               WHERE owned.member_id = $1
+                 AND owned.id IN (t.from_account_id, t.to_account_id)
+             )
+               AND t.created_at >= $2::date
                AND t.created_at < ($3::date + INTERVAL '1 day')
              GROUP BY 1 ORDER BY 1`, [member.id, from, to]),
       query(`SELECT date_trunc('month', t.created_at)::date AS period,
