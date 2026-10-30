@@ -9,7 +9,7 @@ import { POLICY } from './policy.js';
 
 export async function loadAccountsForUpdate(client, ids) {
   const { rows } = await client.query(
-    'SELECT * FROM accounts WHERE id = ANY($1::uuid[]) FOR UPDATE', [ids]);
+    'SELECT * FROM accounts WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE', [ids]);
   const byId = new Map(rows.map(r => [r.id, r]));
   for (const id of ids) if (!byId.has(id)) throw Object.assign(new Error('Account not found'), { status: 404 });
   for (const row of rows) {
@@ -38,6 +38,9 @@ async function postEntry(client, accountId, direction, amountCents, balanceAfter
  * transactionId must exist with status 'pending_approval' or 'pending_review'.
  */
 export async function postTwoSided(client, { transactionId, fromAccountId, toAccountId, amountCents, memo }) {
+  if (fromAccountId && toAccountId && fromAccountId === toAccountId) {
+    throw new LedgerError('Source and destination accounts must be different', 400, 'invalid_destination');
+  }
   const normalizedAmountCents = Number(amountCents);
   if (!validAmountCents(normalizedAmountCents, { maxCents: POLICY.SINGLE_TRANSFER_MAX_CENTS })) {
     throw new LedgerError('Amount outside permitted range');
