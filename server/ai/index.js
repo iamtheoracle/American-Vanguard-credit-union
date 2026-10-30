@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { query, withTx, audit } from '../db.js';
 import { POLICY } from '../policy.js';
 import { validAmountCents } from '../util.js';
+import { generateText } from './gateway.js';
+import { understandMessage } from './understanding.js';
 
 /**
  * Provider-independent AI layer.
@@ -21,7 +23,12 @@ import { validAmountCents } from '../util.js';
 export function activeProvider() {
   const forced = process.env.AVCU_AI_PROVIDER;
   if (forced) return forced;
-  if (process.env.AI_API_KEY && process.env.AI_BASE_URL) return 'openai';
+  if (process.env.OPENROUTER_API_KEY) return 'openrouter';
+  if (process.env.GROQ_API_KEY) return 'groq';
+  if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.GEMINI_API_KEY) return 'gemini';
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (process.env.AI_API_KEY && process.env.AI_BASE_URL) return 'compat';
   return 'sandbox';
 }
 
@@ -156,37 +163,28 @@ function amountCentsSafe(message) {
 }
 
 // ---- OpenAI-compatible adapter (only used when credentials are configured) ---
-async function openaiComplete({ member, message, history }) {
-  const baseUrl = process.env.AI_BASE_URL.replace(/\/$/, '');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), POLICY.AI_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AI_API_KEY}` },
-      body: JSON.stringify({
-        model: process.env.AI_MODEL || 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are the AVCU member assistant. Use only provided tools. Never move money directly; use create_transfer_proposal.' },
-          ...(history || []).slice(-8),
-          { role: 'user', content: String(message).slice(0, 4000) }
-        ],
-        temperature: 0.2
-      })
-    });
-    if (!response.ok) throw new Error(`Provider HTTP ${response.status}`);
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || !content.trim()) throw new Error('Malformed provider response');
-    return { reply: content.trim(), intent: 'general', toolCalls: [] };
-  } finally {
-    clearTimeout(timer);
-  }
+async function openaiComplete({ member, message, history, provider }) {
+  const result = await generateText({
+    provider,
+    messages: [
+      { role: 'system', content: 'You are the AVCU member assistant. Be warm, clear, and concise. You cannot execute banking actions in this response. Never claim an action was completed. Never request passwords, PINs, CVVs, or one-time codes. For transactions, explain the authenticated AVCU workflow and required confirmation.' },
+      ...(history || []).slice(-8),
+      { role: 'user', content: String(message).slice(0, 4000) }
+    ],
+    timeoutMs: POLICY.AI_TIMEOUT_MS,
+    maxTokens: 1200,
+    temperature: 0.2
+  });
+  return { reply: result.text, intent: 'general', toolCalls: [], modelProvider: result.provider, model: result.model };
 }
 
 export async function runChat({ member, message, history, hooks }) {
   const provider = activeProvider();
+  const understanding = understandMessage(message);
+  if (understanding.clarificationRequired && understanding.risk === 'high') {
+    return { provider, status: 'succeeded', reply: understanding.clarificationQuestion,
+      intent: understanding.intent, toolCalls: [], understanding, clarificationRequired: true };
+  }
   const hooksCtx = {
     member,
     submitTransfer: hooks.submitTransfer,
@@ -194,7 +192,7 @@ export async function runChat({ member, message, history, hooks }) {
   };
   try {
     let completion;
-    if (provider === 'openai') completion = await openaiComplete({ member, message, history });
+    if (provider !== 'sandbox' && provider !== 'failing') completion = await openaiComplete({ member, message, history, provider });
     else if (provider === 'failing') throw new Error('Simulated provider outage (test provider)');
     else completion = sandboxComplete({ member, message });
 
@@ -220,7 +218,7 @@ export async function runChat({ member, message, history, hooks }) {
         fallbackNote = 'A step of your request could not be completed automatically.';
       }
     }
-    return { provider, status: degraded ? 'partial' : 'succeeded', reply: completion.reply, intent: completion.intent, toolCalls: executed };
+    return { provider: completion.modelProvider || provider, model: completion.model || null, status: degraded ? 'partial' : 'succeeded', reply: completion.reply, intent: completion.intent, toolCalls: executed, understanding };
   } catch (error) {
     return { provider, status: 'failed', reply: null, error: error.message,
       fallbackNote: 'The assistant is temporarily unavailable. Your request was not executed; nothing changed. Retry or reach a human operator.' };
