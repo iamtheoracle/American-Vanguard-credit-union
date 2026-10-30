@@ -56,3 +56,11 @@ The backend foundation is now in the branch, but the shared queue is not product
 - Do not create receiver credits or mark a transfer delivered/completed from request submission, operator approval, or a provider's preliminary acceptance alone. Post only from authenticated, deduplicated provider/core settlement events and reconcile returns/reversals.
 - Recipient account/routing details must be collected through provider-hosted secure tokenization; never store raw bank credentials in browser state, workflow text fields, logs, or audit notes.
 - See [External bank transfer requirements](docs/external-bank-transfer-requirements.md) for the provider contract, status mapping, human-readable description rules, and release blockers.
+
+
+## Printable wire request receipts
+
+- Signed-in members can open a printable receipt for each wire request from Transaction History.
+- The receipt is generated from the authenticated member's returned request record, displays its current workflow status, and formats the submitted timestamp in Brooklyn/New York time.
+- The reference is explicitly an AVCU request reference, not a bank wire trace number. Recipient and destination fields are labelled as member-entered. Fees and total debit are not invented when they are absent from the request record.
+- Print / Save as PDF uses the browser print dialog. The receipt clearly states that it is not a bank-issued wire confirmation or proof of receiving-bank credit.
