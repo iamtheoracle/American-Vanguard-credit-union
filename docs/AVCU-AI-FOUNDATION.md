@@ -16,6 +16,7 @@ Required before calling the execution foundation complete:
 - The transfer executor resolves and locks member-owned accounts inside that same transaction. AI transfer proposals remain pending approval and create no ledger entries.
 - The broker distinguishes a newly inserted idempotency row from a concurrent replay; a first-time action is not mistaken for an already-processing action.
 - The AI layer cannot choose a member ID, permission, approval, or trusted execution context. The authenticated request supplies member identity.
+- AI transfer approvals are tagged at creation. Before an operator can approve one, the member must re-enter their password through `POST /api/ai/approvals/:approvalId/confirm`; the server binds that re-authentication to a SHA-256 digest of the exact transaction ID, type, amount, memo, payee, reference, and source/destination accounts. The operator approval path rejects missing or mismatched confirmation. This is separate from, and does not replace, the normal operator approval.
 
 The broker deliberately accepts server-provided executors only. Do not wrap external side effects in a database transaction and assume atomicity.
 
@@ -34,7 +35,7 @@ Environment variables:
 - Provider-specific model variables: `OPENROUTER_MODEL`, `GROQ_MODEL`, `OPENAI_MODEL`, `ANTHROPIC_MODEL`, `GEMINI_MODEL`.
 - Legacy compatible endpoint: `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`.
 
-The current gateway provides text completion only. It does not yet implement provider-native function calling or streaming. The model is explicitly told not to claim that it performed a banking action.
+The current gateway provides text completion only. Provider-native function calling and streaming remain the next gateway milestone; do not parse free-form model text as executable tool calls. The model is explicitly told not to claim that it performed a banking action.
 
 ## 3. Genuine member memory engine
 
@@ -81,4 +82,4 @@ The full platform suite becomes authoritative only when CI and staging collect r
 - Read-only account information must be scoped to the authenticated member.
 - AI-originated money movement is always a proposal/approval workflow, never a direct ledger posting.
 - ECHO, chat, and future agents use the same gateway, understanding, memory, execution, and benchmark contracts.
-- No live provider credentials are provisioned by this change; tests use mocked providers.
+- No live provider credentials are provisioned by this change; tests use mocked providers. Step-up re-authentication has PostgreSQL integration coverage; real staging deployment, live provider tool-calling/streaming, and end-to-end operational validation remain outstanding.
