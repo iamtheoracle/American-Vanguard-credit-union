@@ -138,3 +138,31 @@ test('human handoff creates one brokered support case with an auditable executio
   assert.equal(executions[0].status, 'succeeded');
   assert.equal(executions[0].result.caseId, cases[0].id);
 });
+
+test('unauthorized AI actions are rejected before any executor can run', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { cookie } = await loginMember(env.base);
+  const me = await api(env.base, '/api/auth/me', { cookie });
+  let sideEffects = 0;
+  await assert.rejects(executeAiAction({
+    member: me.data.member, action: 'ledger.post.direct', idempotencyKey: 'unauthorized-action-key-01',
+    request: { amountCents: 1 }, execute: async () => { sideEffects += 1; }
+  }), error => error.code === 'ai_action_not_allowed');
+  assert.equal(sideEffects, 0);
+  const { rows } = await query('SELECT count(*)::int AS count FROM ai_execution_idempotency');
+  assert.equal(rows[0].count, 0);
+});
+
+test('negated transfer language never reaches a state-changing executor', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { cookie } = await loginMember(env.base);
+  const response = await api(env.base, '/api/ai/chat', {
+    method: 'POST', cookie, body: { message: 'Do not transfer $5 from Share Draft to Primary Share' }
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.data.toolCalls.length, 0);
+  const { rows } = await query('SELECT count(*)::int AS count FROM ai_execution_idempotency');
+  assert.equal(rows[0].count, 0);
+});
