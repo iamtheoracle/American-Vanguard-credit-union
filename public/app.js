@@ -22,6 +22,10 @@
   let currentView = 'home';
   let pendingAction = null;
   let toastTimer = null;
+  let historySnapshot = null;
+  let historyError = '';
+  let historyLoading = false;
+  let historyLoadVersion = 0;
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -103,7 +107,7 @@
   }
 
   function setView(view) {
-    if (!['home', 'move', 'deposit', 'card', 'operations', 'more'].includes(view)) return;
+    if (!['home', 'transactions', 'move', 'deposit', 'card', 'operations', 'more'].includes(view)) return;
     currentView = view;
     $$('.page-view').forEach(el => el.classList.toggle('hidden', el.dataset.view !== view));
     $$('[data-nav]').forEach(button => {
@@ -113,6 +117,7 @@
     });
     const copy = {
       home: ['MEMBER OVERVIEW', 'Welcome to AVCU'],
+      transactions: ['MEMBER ACCOUNT ACTIVITY', 'Transaction history'],
       move: ['MOVE MONEY', 'Payment requests'],
       deposit: ['DEPOSIT', 'Deposit a check'],
       card: ['CARD CONTROLS', 'Your debit card'],
@@ -122,6 +127,7 @@
     $('#top-eyebrow').textContent = copy[0];
     $('#page-title').textContent = copy[1];
     if (view === 'move') renderMoveBalances();
+    if (view === 'transactions') { renderTransactionHistory(); loadTransactionHistory(); }
     if (view === 'operations' && typeof window.renderWorkflowWorkspace === 'function') window.renderWorkflowWorkspace();
     if (view === 'more') renderAllTransactions();
     $('#main-content').focus({ preventScroll: true });
@@ -165,6 +171,155 @@
     $('#all-transactions').innerHTML = rows.length ? rows.map(transactionMarkup).join('') : '<p class="empty-state">No account activity yet.</p>';
     $('#ledger-count').textContent = String(state.transactions.length);
     $('#ledger-card-status').textContent = state.frozen ? 'Frozen locally' : 'Not connected';
+  }
+
+  const accountLabels = {
+    draft: 'Share Draft (Checking)', primary: 'Primary Share (Savings)', market: 'Money Market',
+    holiday: 'Holiday Club', business: 'Business Operating Account', ira: 'Traditional IRA',
+    certificate: 'Share Certificate', retirement401k: '401(k) Retirement'
+  };
+  const requestLabels = {
+    'internal-transfer': 'Internal account transfer', 'bill-payment': 'Bill payment',
+    'wire-transfer': 'Wire transfer', zelle: 'Zelle payment', fx: 'Foreign exchange',
+    withdrawal: 'Withdrawal', ira: 'IRA request', '401k': '401(k) request',
+    'check-deposit': 'Check deposit', 'card-authorization': 'Card authorization'
+  };
+  const statusLabels = {
+    'pending-approval': 'Pending approval', 'needs-information': 'Needs information',
+    rejected: 'Rejected', approved: 'Approved', 'approved-awaiting-provider': 'Approved · Awaiting provider',
+    processing: 'Processing · Provider accepted', settled: 'Settled · Provider confirmed'
+  };
+  const formatHistoryDate = value => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Date unavailable' : new Intl.DateTimeFormat('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+    }).format(date);
+  };
+  const safeCents = value => Number.isSafeInteger(Number(value)) ? Number(value) : 0;
+
+  function renderTransactionHistory() {
+    const status = $('#history-status');
+    const copy = $('#copy-history');
+    if (!status) return;
+    const auth = window.AVCUAuthState || {};
+    if (!auth.ready) {
+      status.textContent = 'Checking your secure member session…';
+      copy.disabled = true;
+      return;
+    }
+    if (!auth.user) {
+      status.textContent = 'Sign in with your member account to view private transaction history.';
+      ['history-credits','history-debits','history-pending-wires','history-pending-bills'].forEach(id => { if ($('#'+id)) $('#'+id).textContent = '—'; });
+      $('#history-monthly').innerHTML = '<p class="empty-state">Member sign-in is required to view account activity.</p>';
+      $('#history-entries').innerHTML = '<p class="empty-state">No shared account entries are displayed while signed out.</p>';
+      $('#history-requests').innerHTML = '<p class="empty-state">Sign in to view your wire and payment requests.</p>';
+      $('#history-entry-count').textContent = '0 entries';
+      copy.disabled = true;
+      return;
+    }
+    if (historyLoading) {
+      status.textContent = 'Loading your private account history…';
+      copy.disabled = true;
+      return;
+    }
+    if (historyError) {
+      status.textContent = 'Transaction history is unavailable: ' + historyError;
+      $('#history-monthly').innerHTML = '<p class="empty-state">The shared history service could not be reached. Local sample data was not substituted.</p>';
+      $('#history-entries').innerHTML = '<p class="empty-state">Posted transactions could not be loaded.</p>';
+      $('#history-requests').innerHTML = '<p class="empty-state">Wire and payment requests could not be loaded.</p>';
+      copy.disabled = true;
+      return;
+    }
+
+    const snapshot = historySnapshot || { ledger: [], monthly: [], requests: [] };
+    const ledger = Array.isArray(snapshot.ledger) ? snapshot.ledger : [];
+    const monthly = Array.isArray(snapshot.monthly) ? snapshot.monthly : [];
+    const requests = Array.isArray(snapshot.requests) ? snapshot.requests : [];
+    const credits = ledger.filter(row => row.direction === 'credit').reduce((sum,row) => sum + safeCents(row.amount_cents), 0);
+    const debits = ledger.filter(row => row.direction === 'debit').reduce((sum,row) => sum + safeCents(row.amount_cents), 0);
+    const isPending = row => !['settled','rejected','approved'].includes(row.status);
+    const pendingWires = requests.filter(row => row.type === 'wire-transfer' && isPending(row)).reduce((sum,row) => sum + safeCents(row.amount_cents), 0);
+    const pendingBills = requests.filter(row => row.type === 'bill-payment' && isPending(row)).reduce((sum,row) => sum + safeCents(row.amount_cents), 0);
+    $('#history-credits').textContent = money(credits);
+    $('#history-debits').textContent = money(debits);
+    $('#history-pending-wires').textContent = money(pendingWires);
+    $('#history-pending-bills').textContent = money(pendingBills);
+    status.textContent = 'Showing your member-only records from the last 365 days. Pending external requests are not included in posted totals.';
+    copy.disabled = false;
+
+    const monthMap = new Map(monthly.map(row => [row.month_key, row]));
+    const now = new Date();
+    const monthRows = Array.from({ length: 12 }, (_, index) => new Date(now.getFullYear(), now.getMonth() - 11 + index, 1));
+    $('#history-monthly').innerHTML = '<table class="history-table"><thead><tr><th>Month</th><th>Money in</th><th>Money out</th><th>Net movement</th></tr></thead><tbody>' +
+      monthRows.map(date => {
+        const key = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0');
+        const row = monthMap.get(key) || {};
+        const incoming = safeCents(row.credits_cents), outgoing = safeCents(row.debits_cents), net = incoming - outgoing;
+        return '<tr><td>' + escapeHtml(date.toLocaleDateString('en-US',{month:'short',year:'numeric'})) + '</td><td class="history-positive">' + money(incoming) + '</td><td>' + money(outgoing) + '</td><td class="' + (net >= 0 ? 'history-positive' : 'history-negative') + '">' + (net > 0 ? '+' : net < 0 ? '−' : '') + money(Math.abs(net)) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+
+    const sortedLedger = [...ledger].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    $('#history-entry-count').textContent = sortedLedger.length + ' posted entries';
+    $('#history-entries').innerHTML = sortedLedger.length ? sortedLedger.map(row => {
+      const positive = row.direction === 'credit';
+      const label = row.request_type === 'internal-transfer' ? 'Account transfer' : (requestLabels[row.request_type] || 'Account activity');
+      const title = row.purpose || label;
+      const amount = safeCents(row.amount_cents);
+      return '<article class="history-entry"><div class="history-entry-main"><strong>' + escapeHtml(title) + '</strong><small>' + escapeHtml(formatHistoryDate(row.created_at)) + ' · ' + escapeHtml(accountLabels[row.account_type] || row.account_type) + '</small><small>Reference ' + escapeHtml(String(row.request_id || '').slice(0,8).toUpperCase()) + ' · Posted</small></div><strong class="' + (positive ? 'history-positive' : 'history-negative') + '">' + (positive ? '+' : '−') + money(amount) + '</strong></article>';
+    }).join('') : '<p class="empty-state">No posted account entries were found in the last 365 days. Requests awaiting review or provider settlement appear below.</p>';
+
+    const sortedRequests = [...requests].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    $('#history-requests').innerHTML = sortedRequests.length ? sortedRequests.map(row => {
+      const title = requestLabels[row.type] || row.type;
+      const recipient = row.recipient ? ' · ' + row.recipient : '';
+      return '<article class="history-entry"><div class="history-entry-main"><strong>' + escapeHtml(title + recipient) + '</strong><small>' + escapeHtml(formatHistoryDate(row.created_at)) + ' · ' + escapeHtml(row.purpose || '') + '</small><small>Reference ' + escapeHtml(String(row.id || '').slice(0,8).toUpperCase()) + '</small></div><span class="history-status-pill">' + escapeHtml(statusLabels[row.status] || row.status) + '</span><strong>' + money(safeCents(row.amount_cents)) + '</strong></article>';
+    }).join('') : '<p class="empty-state">No wire or payment requests were found in the last 365 days.</p>';
+  }
+
+  async function loadTransactionHistory() {
+    const auth = window.AVCUAuthState || {};
+    if (!auth.ready) return;
+    if (!auth.user) { historySnapshot = null; historyError = ''; historyLoading = false; renderTransactionHistory(); return; }
+    const version = ++historyLoadVersion;
+    historyLoading = true; historyError = ''; renderTransactionHistory();
+    try {
+      const response = await fetch('/api/workflow?scope=history', {
+        credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' }
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Shared member history service is unavailable.');
+      if (version !== historyLoadVersion) return;
+      historySnapshot = {
+        ledger: Array.isArray(data.ledger) ? data.ledger : [],
+        monthly: Array.isArray(data.monthly) ? data.monthly : [],
+        requests: Array.isArray(data.requests) ? data.requests : []
+      };
+      historyError = '';
+    } catch (error) {
+      if (version !== historyLoadVersion) return;
+      historySnapshot = null;
+      historyError = error?.message || 'Shared member history service is unavailable.';
+    } finally {
+      if (version === historyLoadVersion) { historyLoading = false; renderTransactionHistory(); }
+    }
+  }
+
+  async function copyTransactionStatement() {
+    if (!historySnapshot || historyError || !window.AVCUAuthState?.user) return;
+    const ledger = historySnapshot.ledger || [], requests = historySnapshot.requests || [];
+    const lines = ['ATCHISON VILLAGE CREDIT UNION', 'MEMBER TRANSACTION HISTORY', 'Period: Last 365 days', ''];
+    const credits = ledger.filter(row=>row.direction==='credit').reduce((sum,row)=>sum+safeCents(row.amount_cents),0);
+    const debits = ledger.filter(row=>row.direction==='debit').reduce((sum,row)=>sum+safeCents(row.amount_cents),0);
+    lines.push('Posted money in: '+money(credits),'Posted money out: '+money(debits),'Net movement: '+money(credits-debits),'','POSTED TRANSACTIONS');
+    for (const row of [...ledger].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at))) {
+      lines.push(formatHistoryDate(row.created_at)+' | '+(row.direction==='credit'?'Credit':'Debit')+' | '+(accountLabels[row.account_type]||row.account_type)+' | '+money(safeCents(row.amount_cents))+' | Ref '+String(row.request_id||'').slice(0,8).toUpperCase());
+    }
+    lines.push('','WIRE & PAYMENT REQUESTS');
+    for (const row of [...requests].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at))) {
+      lines.push(formatHistoryDate(row.created_at)+' | '+(requestLabels[row.type]||row.type)+' | '+money(safeCents(row.amount_cents))+' | '+(statusLabels[row.status]||row.status)+' | Ref '+String(row.id||'').slice(0,8).toUpperCase());
+    }
+    try { await navigator.clipboard.writeText(lines.join('\n')); showToast('Member transaction statement copied.'); }
+    catch { showToast('Copy is unavailable in this browser. Open the history and copy the visible records.', 'error'); }
   }
 
   function renderCard() {
@@ -373,6 +528,7 @@
     $('#simulate-purchase').addEventListener('click', simulatePurchase);
     $('#reset-local-workspace').addEventListener('click', resetLocalWorkspace);
     $('#help-button').addEventListener('click', showHelp);
+    $('#copy-history')?.addEventListener('click', copyTransactionStatement);
     $('#confirm-dialog').addEventListener('close', () => { pendingAction = null; });
     $('#confirm-dialog').addEventListener('submit', event => {
       if (event.submitter && event.submitter.value === 'confirm') {
@@ -395,6 +551,9 @@
   function init() {
     bindEvents();
     renderAll();
+    window.addEventListener('avcu:auth-state-updated', loadTransactionHistory);
+    window.addEventListener('avcu:workflow-history-updated', loadTransactionHistory);
+    if (window.AVCUAuthState?.ready) loadTransactionHistory();
     renderAccountGuidance();
     const date = $('#today-label');
     if (date) date.textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
