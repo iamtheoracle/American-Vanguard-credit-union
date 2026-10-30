@@ -14,6 +14,7 @@ import { submitMemberTransfer as svcTransfer } from './services-member.js';
 import { notifyMember, queueMemberNotification, queueOperationsEmail } from './notifications.js';
 import { recalculateMemberTier } from './membership-tiers.js';
 import { verifyPrivyAccessToken, fetchPrivyUser, privyConfigured } from './integrations/privy.js';
+import { getEchoMemberStatus, revokeEchoVoiceConsent } from './echo.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -711,6 +712,21 @@ router.post('/support/cases/:id/messages', memberAuth, async (req, res, next) =>
       `INSERT INTO case_messages (case_id, author_type, author_id, body) VALUES ($1,'member',$2,$3) RETURNING *`,
       [req.params.id, req.member.id, body]);
     res.status(201).json({ message: inserted[0] });
+  } catch (error) { next(error); }
+});
+
+// ---- ECHO voice notification preferences/status -------------------------------
+router.get('/echo/status', memberAuth, async (req, res, next) => {
+  try {
+    const status = await getEchoMemberStatus(req.member.id);
+    res.json({ ...status, dispatchEnabled: false });
+  } catch (error) { next(error); }
+});
+
+router.post('/echo/consent/revoke', memberAuth, async (req, res, next) => {
+  try {
+    const result = await revokeEchoVoiceConsent(req.member.id);
+    res.json({ ...result, unsentCallsCancelled: true });
   } catch (error) { next(error); }
 });
 
