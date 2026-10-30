@@ -227,3 +227,59 @@ test('streaming fallback occurs only before the first token', async () => {
     if (oldGroq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = oldGroq;
   }
 });
+
+
+test('Anthropic native tool-use blocks normalize into validated tool-call records', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldKey = process.env.ANTHROPIC_API_KEY;
+  try {
+    process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
+    globalThis.fetch = async (_url, options) => {
+      const request = JSON.parse(options.body);
+      assert.equal(request.tools[0].name, 'create_support_case');
+      return new Response(JSON.stringify({ content: [
+        { type: 'text', text: 'I can connect you.' },
+        { type: 'tool_use', id: 'toolu_123', name: 'create_support_case', input: { subject: 'Member assistance' } }
+      ] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const result = await generateWithTools({
+      provider: 'anthropic', fallbacks: [],
+      messages: [{ role: 'user', content: 'Connect me to support' }],
+      tools: [{ name: 'create_support_case', description: 'Create a case', parameters: { type: 'object', properties: {}, required: [] } }]
+    });
+    assert.equal(result.toolCalls[0].id, 'toolu_123');
+    assert.deepEqual(result.toolCalls[0].input, { subject: 'Member assistance' });
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = oldKey;
+  }
+});
+
+test('Gemini function declarations use Gemini schema types and normalize functionCall parts', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldKey = process.env.GEMINI_API_KEY;
+  try {
+    process.env.GEMINI_API_KEY = 'test-gemini-key';
+    globalThis.fetch = async (_url, options) => {
+      const request = JSON.parse(options.body);
+      assert.equal(request.tools[0].functionDeclarations[0].parameters.type, 'OBJECT');
+      assert.equal(request.tools[0].functionDeclarations[0].parameters.properties.subject.type, 'STRING');
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [
+        { functionCall: { name: 'create_support_case', args: { subject: 'Member assistance' } } }
+      ] } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const result = await generateWithTools({
+      provider: 'gemini', fallbacks: [],
+      messages: [{ role: 'user', content: 'Connect me to support' }],
+      tools: [{ name: 'create_support_case', description: 'Create a case', parameters: {
+        type: 'object', properties: { subject: { type: 'string', minLength: 3 } },
+        required: ['subject'], additionalProperties: false
+      } }]
+    });
+    assert.equal(result.toolCalls[0].name, 'create_support_case');
+    assert.deepEqual(result.toolCalls[0].input, { subject: 'Member assistance' });
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = oldKey;
+  }
+});
