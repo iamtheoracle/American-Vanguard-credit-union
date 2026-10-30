@@ -9,7 +9,7 @@ This document defines the shared AI foundation for member chat, ECHO voice, oper
 Implemented in this increment:
 - `server/ai/execution.js` defines an allowlisted execution broker with member binding, action risk tiers, stable request hashing, transactional idempotency, and audit records.
 - `server/services-member.js` now forces every AI-originated transfer through the approval path, including amounts below the normal human-initiated approval threshold. AI can propose; it cannot silently post a transfer.
-- Existing task-derived transfer idempotency remains in place for retries.
+- Existing task-derived transfer idempotency remains in place for retries; AI-created support cases also use a stable task key so retries do not open duplicate cases or duplicate the initial message.
 
 Required before calling the execution foundation complete:
 - Route every state-changing AI tool through the broker with a DB-only executor that uses the supplied transaction client.
