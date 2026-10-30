@@ -1,19 +1,22 @@
 -- ECHO AVCU: durable, consent-gated voice notification foundation.
--- No calls are placed by this migration. A verified phone number and explicit
--- voice-notification consent are required before a worker may dispatch a call.
+-- Phone data is ciphertext only; encryption/decryption must use an approved KMS
+-- adapter before a verified number can be stored or dispatched.
 CREATE TABLE IF NOT EXISTS member_voice_preferences (
   member_id UUID PRIMARY KEY REFERENCES members(id) ON DELETE CASCADE,
-  phone_e164 TEXT,
+  phone_ciphertext TEXT,
+  phone_fingerprint TEXT,
+  phone_last4 TEXT,
   phone_verified_at TIMESTAMPTZ,
   voice_consent BOOLEAN NOT NULL DEFAULT FALSE,
   voice_consent_at TIMESTAMPTZ,
   voice_consent_source TEXT,
   voice_consent_revoked_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT member_voice_phone_e164 CHECK (phone_e164 IS NULL OR phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'),
+  CONSTRAINT member_voice_last4 CHECK (phone_last4 IS NULL OR phone_last4 ~ '^[0-9]{4}$'),
   CONSTRAINT member_voice_consent_has_verified_phone CHECK (
-    NOT voice_consent OR (phone_e164 IS NOT NULL AND phone_verified_at IS NOT NULL
-      AND voice_consent_at IS NOT NULL AND voice_consent_revoked_at IS NULL)
+    NOT voice_consent OR (phone_ciphertext IS NOT NULL AND phone_fingerprint IS NOT NULL
+      AND phone_verified_at IS NOT NULL AND voice_consent_at IS NOT NULL
+      AND voice_consent_revoked_at IS NULL)
   )
 );
 CREATE TABLE IF NOT EXISTS echo_call_outbox (
@@ -47,7 +50,8 @@ BEGIN
         SELECT 1 FROM member_voice_preferences p
         WHERE p.member_id = a.member_id AND p.voice_consent = TRUE
           AND p.voice_consent_revoked_at IS NULL
-          AND p.phone_verified_at IS NOT NULL AND p.phone_e164 IS NOT NULL
+          AND p.phone_verified_at IS NOT NULL AND p.phone_ciphertext IS NOT NULL
+          AND p.phone_fingerprint IS NOT NULL
       ) THEN 'pending' ELSE 'suppressed' END
     FROM accounts a
     WHERE a.id IN (NEW.from_account_id, NEW.to_account_id)
