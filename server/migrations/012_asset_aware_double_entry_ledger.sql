@@ -56,6 +56,12 @@ CREATE TABLE IF NOT EXISTS financial_accounts (
   UNIQUE (owner_type, member_id, business_id, account_code, asset_code),
   UNIQUE (id, asset_code)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_accounts_member_code_asset
+  ON financial_accounts(member_id, account_code, asset_code) WHERE owner_type = 'member';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_accounts_business_code_asset
+  ON financial_accounts(business_id, account_code, asset_code) WHERE owner_type = 'business';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_accounts_system_code_asset
+  ON financial_accounts(account_code, asset_code) WHERE owner_type = 'system';
 CREATE INDEX IF NOT EXISTS idx_financial_accounts_member_asset
   ON financial_accounts(member_id, asset_code, status) WHERE member_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_financial_accounts_business_asset
@@ -80,7 +86,7 @@ CREATE TABLE IF NOT EXISTS journal_transactions (
   created_by UUID,
   posted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK ((status = 'posted') = (posted_at IS NOT NULL)),
+  CHECK ((status IN ('posted','reversed')) = (posted_at IS NOT NULL)),
   UNIQUE (source_system, source_event_id)
 );
 
