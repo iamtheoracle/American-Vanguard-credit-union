@@ -2,6 +2,8 @@
   'use strict';
   const $ = id => document.getElementById(id);
   let operator = null;
+  let historyTransactionOffset = 0;
+  let historyLedgerOffset = 0;
   const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const notice = (id,text,error=false) => { $(id).textContent=text||''; $(id).classList.toggle('error',error); };
   async function api(path, options={}) {
@@ -34,7 +36,8 @@
     event?.preventDefault();
     const memberId=$('history-member-id').value.trim();
     if(!memberId)return;
-    const params=new URLSearchParams({from:$('history-from').value,to:$('history-to').value});
+    if(event?.type==='submit'){historyTransactionOffset=0;historyLedgerOffset=0;}
+    const params=new URLSearchParams({from:$('history-from').value,to:$('history-to').value,pageSize:'100',transactionOffset:String(historyTransactionOffset),ledgerOffset:String(historyLedgerOffset)});
     $('member-history').innerHTML='<p class="muted">Loading recorded account history…</p>';
     try{
       const data=await api('/operator/members/'+encodeURIComponent(memberId)+'/account-history?'+params.toString());
@@ -45,16 +48,19 @@
       const accounts=data.accounts.map(a=>'<tr><td><strong>'+esc(a.name)+'</strong><small>'+esc(a.kind)+' · •••• '+esc(a.suffix)+'</small></td><td>'+esc(a.status)+'</td><td>'+date(a.openedAt)+'</td><td>'+money(a.currentBalanceCents)+'</td></tr>');
       const tx=data.transactions.map(t=>'<tr><td>'+date(t.initiatedAt)+'</td><td><strong>'+esc(t.type)+'</strong><small>'+esc(t.reference)+'</small></td><td>'+esc(t.fromAccount||'—')+' → '+esc(t.toAccount||t.payee||'—')+'</td><td>'+esc(String(t.status).replaceAll('_',' '))+'</td><td>'+money(t.amountCents)+'</td></tr>');
       const ledger=data.ledgerEntries.map(e=>'<tr><td>'+date(e.recordedAt)+'</td><td>'+esc(e.accountName)+'</td><td>'+esc(e.direction)+'</td><td>'+money(e.amountCents)+'</td><td>'+money(e.balanceAfterCents)+'</td><td>'+esc(e.reference||e.memo||'—')+'</td></tr>');
-      const periodRows=rows=>rows.map(p=>'<tr><td>'+date(p.period)+'</td><td>'+esc(p.transactionCount)+'</td><td>'+money(p.grossAmountCents)+'</td></tr>');
+      const periodRows=rows=>rows.map(p=>'<tr><td>'+date(p.period)+'</td><td>'+esc(p.ledgerEntryCount)+'</td><td>'+money(p.creditsCents)+'</td><td>'+money(p.debitsCents)+'</td><td>'+money(p.netLedgerActivityCents)+'</td></tr>');
+      const pager=(kind,page)=>'<div class="history-pager"><span class="muted small">Showing '+(page.offset+1)+'–'+(page.offset+(kind==='transaction'?data.transactions.length:data.ledgerEntries.length))+'</span><button type="button" class="secondary" data-history-page="'+kind+'" data-page-offset="'+Math.max(0,page.offset-page.limit)+'" '+(page.offset===0?'disabled':'')+'>Previous</button><button type="button" class="secondary" data-history-page="'+kind+'" data-page-offset="'+page.nextOffset+'" '+(!page.hasMore?'disabled':'')+'>Next</button></div>';
       const last=data.lastRecordedActivity||{};
       $('member-history').innerHTML='<h3>'+esc(m.fullName)+'</h3><p class="muted">'+esc(m.memberNumber)+' · '+esc(m.email)+' · '+esc(m.membershipStatus)+' · Member since '+date(m.memberSince)+'</p>'+
         '<h3>Accounts and current recorded balances</h3>'+table(['Account','Status','Opened','Current recorded balance'],accounts)+
         '<h3>Last recorded activity</h3><p>Last transaction: '+date(last.lastTransactionAt)+' · Last ledger entry: '+date(last.lastLedgerActivityAt)+' · Last outgoing transaction initiation: '+date(last.lastOutgoingInitiatedAt)+'</p>'+
-        '<h3>Daily Account Activity &mdash; '+esc(data.range.from)+' through '+esc(data.range.to)+'</h3><p class="muted small">Transaction timestamps are displayed in '+esc(zone)+'. Initiation time is not proof of settlement or posting.</p>'+table(['Initiated date / time','Transaction type / reference','Account route','Status','Amount'],tx)+
-        '<h3>Ledger entries and balance-after records</h3>'+table(['Recorded','Account','Direction','Amount','Balance after','Reference / memo'],ledger)+
-        '<h3>Weekly Account Summary</h3><p class="muted small">Gross initiated transaction volume; not net posted ledger activity.</p>'+table(['Week commencing','Transaction count','Gross transaction amount'],periodRows(data.weekly))+
-        '<h3>Monthly Account Statement Summary</h3><p class="muted small">Gross initiated transaction volume; not net posted ledger activity.</p>'+table(['Statement month','Transaction count','Gross transaction amount'],periodRows(data.monthly))+
+        '<h3>Daily Account Activity &mdash; '+esc(data.range.from)+' through '+esc(data.range.to)+'</h3><p class="muted small">Transaction timestamps are initiation timestamps in '+esc(zone)+'. Initiation is not proof of posting or settlement. Transaction rows are paginated.</p>'+table(['Initiated date / time','Transaction type / reference','Account route','Status','Amount'],tx)+pager('transaction',data.transactionPage)+
+        '<h3>Daily ledger summary</h3><p class="muted small">Grouped by ledger-entry recorded date. Credits and debits are sourced from posted ledger entries; dates with no ledger entries are not inferred as zero-activity days.</p>'+table(['Ledger date','Entries','Credits','Debits','Net ledger activity'],periodRows(data.daily))+
+        '<h3>Ledger entries and balance-after records</h3><p class="muted small">Ledger rows are paginated. Recorded time is not a separately verified settlement timestamp.</p>'+table(['Recorded','Account','Direction','Amount','Balance after','Reference / memo'],ledger)+pager('ledger',data.ledgerPage)+
+        '<h3>Weekly Account Summary</h3><p class="muted small">Ledger-based credits, debits and net activity; no opening or closing balance is inferred.</p>'+table(['Week commencing','Ledger entries','Credits','Debits','Net activity'],periodRows(data.weekly))+
+        '<h3>Monthly Account Statement Summary</h3><p class="muted small">Ledger-based credits, debits and net activity; no opening or closing balance is inferred.</p>'+table(['Statement month','Ledger entries','Credits','Debits','Net activity'],periodRows(data.monthly))+
         '<p class="muted small">'+data.limitations.map(esc).join(' ')+'</p>';
+      $('member-history').querySelectorAll('[data-history-page]').forEach(button=>button.addEventListener('click',()=>{const offset=Number(button.dataset.pageOffset);if(button.dataset.historyPage==='transaction')historyTransactionOffset=offset;else historyLedgerOffset=offset;loadMemberHistory();}));
     }catch(error){$('member-history').innerHTML='<p class="error">'+esc(error.message)+'</p>';}
   }
   async function loadTiers(){
