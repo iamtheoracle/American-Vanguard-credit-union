@@ -136,3 +136,28 @@ test('journal service rejects cross-asset balancing and floating point amounts',
     ]
   })), /invalid exact amount/);
 });
+
+test('database constraint rejects an unbalanced journal even when bypassing the service', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { rows: accounts } = await query(
+    `INSERT INTO financial_accounts
+      (owner_type, account_code, display_name, account_type, asset_code, asset_kind, asset_precision, custody_domain, status)
+     VALUES
+      ('system','db-guard-a','Guard A','clearing','USD','fiat',2,'internal','open'),
+      ('system','db-guard-b','Guard B','clearing','USD','fiat',2,'internal','open')
+     RETURNING id`);
+  const { rows: tx } = await query(
+    `INSERT INTO journal_transactions (reference, transaction_type, status)
+     VALUES ('JRN-DB-GUARD','manual_test','draft') RETURNING id`);
+  await query(
+    `INSERT INTO journal_entries
+      (journal_transaction_id, financial_account_id, asset_code, direction, amount_minor)
+     VALUES ($1,$2,'USD','debit',100),($1,$3,'USD','credit',99)`,
+    [tx[0].id, accounts[0].id, accounts[1].id]);
+  await assert.rejects(
+    () => query("UPDATE journal_transactions SET status='posted', posted_at=now() WHERE id=$1", [tx[0].id]),
+    /not balanced per asset/);
+  const { rows: current } = await query("SELECT status FROM journal_transactions WHERE id=$1", [tx[0].id]);
+  assert.equal(current[0].status, 'draft');
+});
