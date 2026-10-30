@@ -69,6 +69,18 @@ export async function forgetMemberFact({ memberId, memoryId }) {
   });
 }
 
+
+export async function listMemberFacts({ memberId, limit = 50 }) {
+  if (!memberId) throw Object.assign(new Error('Authenticated member required'), { code: 'memory_auth_required' });
+  const cap = Math.max(1, Math.min(Number(limit) || 50, 100));
+  const { rows } = await query(
+    `SELECT id, category, content, confirmed_at, expires_at
+     FROM ai_memory_records
+     WHERE member_id = $1 AND deleted_at IS NULL AND expires_at > now()
+     ORDER BY updated_at DESC LIMIT $2`, [memberId, cap]);
+  return rows;
+}
+
 export async function purgeExpiredMemory() {
   const { rowCount } = await query(
     `UPDATE ai_memory_records SET deleted_at = now(), content = '[expired]', updated_at = now()
