@@ -74,8 +74,8 @@ test('CALL-E create uses v2, stable idempotency, and a generic privacy-safe task
   assert.equal(first.resourceId, second.resourceId);
 });
 
-test('CALL-E read recovers an existing call without creating a new one', async () => {
-  process.env.ECHO_CALL_DISPATCH_ENABLED = 'true';
+test('CALL-E read recovers an existing call even when new dispatch is disabled', async () => {
+  process.env.ECHO_CALL_DISPATCH_ENABLED = 'false';
   process.env.CALLE_API_KEY = 'test-only-not-a-real-key';
   let calledUrl;
   globalThis.fetch = async (url, options) => {
