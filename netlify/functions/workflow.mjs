@@ -50,7 +50,7 @@ export function validateRequest(body) {
   if (type !== 'internal-transfer' && destination) return { error:'A destination account is only valid for internal transfers.' };
   if (['bill-payment','wire-transfer','zelle','fx','withdrawal','ira','401k','card-authorization'].includes(type) && (!recipient || recipient.length > 100)) return { error:'A recipient or institution name is required.' };
   if (['wire-transfer','withdrawal'].includes(type) && (!destinationDetails || destinationDetails.length > 160)) return { error:'Enter the receiving institution or a non-sensitive destination reference.' };
-  if (type === 'wire-transfer' && (/(?:\\b\\d{8,}\\b)/.test(destinationDetails) || /routing|aba number|account number|account #|wire instructions|swift code|iban/i.test(destinationDetails))) {
+  if (type === 'wire-transfer' && (/(?:\b\d{8,}\b)/.test(destinationDetails) || /routing|aba number|account number|account #|wire instructions|swift code|iban/i.test(destinationDetails))) {
     return { error:'Do not enter account numbers, routing numbers, or bank credentials here. Only enter the receiving institution name. Secure bank-detail collection requires the authorized provider.' };
   }
   if (!/^[A-Z]{3}$/.test(currency)) return { error:'Use a valid three-letter currency code.' };
