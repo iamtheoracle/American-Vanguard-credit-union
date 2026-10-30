@@ -175,14 +175,27 @@ function normalizeToolArguments(raw) {
   return parsed;
 }
 
+function geminiFunctionSchema(schema) {
+  const out = {};
+  if (schema.type) out.type = String(schema.type).toUpperCase();
+  if (schema.description) out.description = schema.description;
+  if (Array.isArray(schema.required)) out.required = schema.required;
+  if (schema.properties && typeof schema.properties === 'object') {
+    out.properties = Object.fromEntries(Object.entries(schema.properties).map(([key, value]) =>
+      [key, geminiFunctionSchema(value)]));
+  }
+  if (schema.items) out.items = geminiFunctionSchema(schema.items);
+  if (Array.isArray(schema.enum)) out.enum = schema.enum;
+  return out;
+}
+
 function openAiToolRequest(tools) {
   return tools.map(tool => ({
     type: 'function',
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.parameters,
-      strict: true
+      parameters: tool.parameters
     }
   }));
 }
@@ -227,7 +240,7 @@ async function callProviderWithTools(name, messages, tools, options) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] }, contents,
           tools: [{ functionDeclarations: tools.map(tool => ({
-            name: tool.name, description: tool.description, parameters: tool.parameters
+            name: tool.name, description: tool.description, parameters: geminiFunctionSchema(tool.parameters)
           })) }],
           toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
           generationConfig: { temperature: options.temperature ?? 0.2, maxOutputTokens: options.maxTokens ?? 1200 }
