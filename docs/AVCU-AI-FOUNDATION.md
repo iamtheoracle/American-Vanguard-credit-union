@@ -12,10 +12,10 @@ Implemented in this increment:
 - Existing task-derived transfer idempotency remains in place for retries; AI-created support cases also use a stable task key so retries do not open duplicate cases or duplicate the initial message.
 
 Required before calling the execution foundation complete:
-- Route every state-changing AI tool through the broker with a DB-only executor that uses the supplied transaction client.
-- Add step-up confirmation outside the model for any action that is eligible for member execution.
-- Add concurrency, replay, rollback, and cross-member authorization integration tests.
-- Never let a model provide a member ID, permission, approval, or trusted execution context.
+- All current state-changing AI tools (`transfer.proposal.create` and `support.case.create`) now route through the broker. The broker owns the transaction, idempotency reservation, action executor, and audit record; the supplied PostgreSQL client is passed into the domain service so the side effect and broker record commit or roll back together.
+- The transfer executor resolves and locks member-owned accounts inside that same transaction. AI transfer proposals remain pending approval and create no ledger entries.
+- The broker distinguishes a newly inserted idempotency row from a concurrent replay; a first-time action is not mistaken for an already-processing action.
+- The AI layer cannot choose a member ID, permission, approval, or trusted execution context. The authenticated request supplies member identity.
 
 The broker deliberately accepts server-provided executors only. Do not wrap external side effects in a database transaction and assume atomicity.
 
@@ -65,6 +65,8 @@ Implemented in `server/ai/benchmark.js` and `tests/ai-foundation.test.mjs`:
 - Deterministic conversation cases for greeting, balance, ambiguous transfer, complete transfer, fraud, negation, and human handoff.
 - Metrics for intent, risk, and clarification accuracy.
 - Full-platform acceptance gates for unauthorized execution, cross-member memory leakage, duplicate side effects, prompt-injection escapes, sensitive disclosures, handoff failure, understanding score, provider fallback, and p95 latency.
+- PostgreSQL integration suite `tests/api/ai-execution.integration.test.mjs` now exercises real database transactions: brokered transfer proposal and no-ledger invariant, concurrent idempotent replay, rollback of both side effect and reservation, cross-member memory isolation, provider outage fail-closed behavior, human handoff case creation, unauthorized tool rejection, and negated-transfer non-execution.
+- The suite runs through `npm run test:api` alongside the existing API integration tests. CI's PostgreSQL integration job is the authoritative test execution path for these scenarios.
 - Missing platform metrics fail closed; synthetic metric values must never be reported as a production benchmark result.
 - Authorized operators can run the deterministic understanding suite at `GET /api/operator/ai/benchmark`; each run is stored and audited.
 
