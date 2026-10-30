@@ -39,9 +39,16 @@ CREATE TABLE IF NOT EXISTS echo_call_outbox (
 CREATE INDEX IF NOT EXISTS idx_echo_outbox_due ON echo_call_outbox(status, next_attempt_at, id);
 CREATE INDEX IF NOT EXISTS idx_echo_outbox_member ON echo_call_outbox(member_id, created_at DESC);
 CREATE OR REPLACE FUNCTION avcu_enqueue_echo_transaction_status()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $
+DECLARE
+  status_changed BOOLEAN;
 BEGIN
-  IF NEW.status IS DISTINCT FROM OLD.status THEN
+  IF TG_OP = 'INSERT' THEN
+    status_changed := TRUE;
+  ELSE
+    status_changed := NEW.status IS DISTINCT FROM OLD.status;
+  END IF;
+  IF status_changed THEN
     INSERT INTO echo_call_outbox (event_key, member_id, transaction_id, transaction_status, status)
     SELECT
       'transaction:' || NEW.id::text || ':member:' || a.member_id::text || ':status:' || NEW.status,
@@ -63,7 +70,7 @@ END;
 $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_echo_transaction_status ON transactions;
 CREATE TRIGGER trg_echo_transaction_status
-AFTER UPDATE OF status ON transactions
+AFTER INSERT OR UPDATE ON transactions
 FOR EACH ROW EXECUTE FUNCTION avcu_enqueue_echo_transaction_status();
 CREATE OR REPLACE FUNCTION avcu_cancel_echo_calls_on_consent_revocation()
 RETURNS TRIGGER AS $$
