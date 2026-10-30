@@ -301,6 +301,7 @@ export async function generateWithTools({ messages, tools, provider, fallbacks, 
     try {
       return await callProviderWithTools(name, messages, tools, { timeoutMs, maxTokens, temperature });
     } catch (error) {
+      if (error.code === 'provider_invalid_tool_arguments') throw error;
       if (!error.retryable) continue;
       await delay(25);
     }
