@@ -299,7 +299,7 @@
     const status = statusLabels[row.status] || String(row.status || 'Status unavailable');
     const created = new Date(row.created_at);
     const submittedAt = Number.isNaN(created.getTime()) ? 'Unavailable' : new Intl.DateTimeFormat('en-US', {
-      dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York', timeZoneName: 'short'
+      month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short'
     }).format(created);
     const amount = money(safeCents(row.amount_cents));
     const recipient = row.recipient || 'Not provided';
