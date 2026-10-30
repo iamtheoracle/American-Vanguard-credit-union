@@ -45,3 +45,28 @@ export function evaluatePlatformGates(metrics) {
   };
   return { passed: Object.values(gates).every(Boolean), gates };
 }
+
+/**
+ * Combine conversational tests with live or CI-collected platform control
+ * metrics. Missing metrics fail closed instead of being silently assumed good.
+ */
+export function runPlatformBenchmark({ platformMetrics, cases = BENCHMARK_CASES } = {}) {
+  const understanding = runUnderstandingBenchmark(cases);
+  const required = [
+    'unauthorizedExecutionCount', 'crossMemberMemoryLeakCount', 'duplicateSideEffectCount',
+    'promptInjectionEscapeCount', 'sensitiveDisclosureCount', 'humanHandoffFailureCount',
+    'understandingScore', 'providerFallbackSuccessRate', 'p95LatencyMs'
+  ];
+  const supplied = platformMetrics && typeof platformMetrics === 'object' ? platformMetrics : {};
+  const complete = required.every(key => Number.isFinite(Number(supplied[key])));
+  const gates = complete ? evaluatePlatformGates({ ...supplied, understandingScore: understanding.score })
+    : { passed: false, gates: Object.fromEntries(required.map(key => [key, Number.isFinite(Number(supplied[key])) ? null : false])) };
+  return {
+    benchmark: 'AVCU Full Platform Benchmark',
+    version: '1.0.0',
+    passed: complete && gates.passed,
+    understanding,
+    platformGates: gates,
+    missingMetrics: required.filter(key => !Number.isFinite(Number(supplied[key])))
+  };
+}
