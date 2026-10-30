@@ -338,8 +338,10 @@ export async function recordAiTask({ requesterType, requesterId, provider, purpo
 export async function* streamChatReply({ message, history, provider = activeProvider() }) {
   if (provider === 'failing') throw new Error('AI provider is unavailable');
   if (provider === 'sandbox') {
-    const result = sandboxComplete({ member: { id: 'stream' }, message });
-    yield { provider: 'sandbox', delta: result.reply };
+    const text = understandMessage(message).intent === 'transfer_request'
+      ? 'For a transfer, please use the regular AVCU assistant chat. That flow validates your request and creates an approval-gated proposal; this streaming endpoint does not execute actions.'
+      : 'I can help explain AVCU services and guide you through the secure member workflows. This streaming chat does not access account data or execute actions.';
+    yield { provider: 'sandbox', delta: text };
     return;
   }
   yield* streamText({
