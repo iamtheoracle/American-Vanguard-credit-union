@@ -61,3 +61,9 @@ Webhook processing must verify signatures against the raw request body, enforce 
 ## Current safety boundary
 
 Until those dependencies are complete, AVCU may collect and review an external-transfer request and show `Approved · Awaiting Provider`. It must not represent funds as sent, pending at the receiving bank, received, or settled; it must not create a recipient-side credit or change a member's real balance.
+
+
+## Sensitive destination-detail handling
+
+- The wire-request free-text destination field is limited to the receiving institution name or a non-sensitive reference. Do not enter account numbers, routing/ABA numbers, SWIFT/IBAN data, or bank credentials.
+- The authenticated workflow API rejects obvious account/routing-number patterns and credential labels in wire destination text. This is a defensive filter, not a substitute for provider-hosted tokenization; raw bank details must be collected only by the authorized provider and must not be stored in AVCU request text.
