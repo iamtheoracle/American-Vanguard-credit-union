@@ -1,0 +1,142 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const [html, app, workflow, providers, assistant, css, readme, pkg, netlify] = await Promise.all([
+  readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
+  readFile(new URL('../public/app.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/workflow.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/providers.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/review-assistant.js', import.meta.url), 'utf8'),
+  readFile(new URL('../public/styles.css', import.meta.url), 'utf8'),
+  readFile(new URL('../README.md', import.meta.url), 'utf8'),
+  readFile(new URL('../package.json', import.meta.url), 'utf8'),
+  readFile(new URL('../netlify.toml', import.meta.url), 'utf8')
+]);
+
+test('AVCU workspace has eight account categories and no fabricated opening balances', () => {
+  assert.ok(html.includes('Atchison Village Credit Union'));
+  for (const account of ['Share Draft', 'Primary Share', 'Money Market', 'Holiday Club', 'Business Operating Account', 'Traditional IRA', 'Share Certificate', '401(k) Retirement']) {
+    assert.ok(html.includes(account), 'missing account label: ' + account);
+  }
+  assert.ok(app.includes('balances: { draft: 0, primary: 0, market: 0, holiday: 0, business: 0, ira: 0, certificate: 0, retirement401k: 0 }'));
+  for (const fake of ['$3,240.65', '$6,840.00', '$24,230.65', '4826', 'JORDAN HALE']) assert.ok(!html.includes(fake), 'unexpected fabricated detail: ' + fake);
+  assert.ok(html.includes('STANDALONE OPERATIONS'));
+  assert.ok(html.includes('External financial services require authorized connections'));
+  assert.ok(!/\bdemo\b/i.test(html + app), 'visible UI and application code should not label the product as a demo');
+  for (const fabricatedSuffix of ["suffix: '2048'", "suffix: '3812'", "suffix: '6621'", "suffix: '9055'", "suffix: '7314'", "suffix: '4472'", "suffix: '1189'"]) assert.ok(!app.includes(fabricatedSuffix), 'fabricated account suffix remains: ' + fabricatedSuffix);
+});
+
+test('payment workspace supports request initiation and operator review', () => {
+  for (const id of ['view-operations','workflow-form','workflow-type','workflow-from','workflow-to','workflow-recipient','workflow-destination','workflow-currency','workflow-member-queue','workflow-operator-queue','workflow-pending-count']) {
+    assert.ok(html.includes('id="' + id + '"'), 'missing workflow control ' + id);
+  }
+  for (const type of ['internal-transfer','bill-payment','wire-transfer','zelle','fx','withdrawal','ira','401k','check-deposit','card-authorization']) assert.ok(workflow.includes(type), 'missing workflow type ' + type);
+  for (const value of ['pending-approval','approved-awaiting-provider','needs-information','Request information','decisionBy','audit.push']) assert.ok(workflow.includes(value), 'missing approval behavior ' + value);
+});
+
+test('legacy forms cannot post unapproved transfers or deposits', () => {
+  assert.ok(app.includes('Payment workflow is unavailable. No transaction was posted.'));
+  assert.ok(app.includes('No account was credited.'));
+  assert.ok(workflow.includes("addEventListener('submit',submit,true)"));
+  assert.ok(workflow.includes('stopImmediatePropagation'));
+  assert.ok(html.includes('Submit for approval'));
+});
+
+test('internal transfers check available funds and post only after operator approval', () => {
+  for (const value of ['fromBalance<r.amountCents','s.balances[r.from]=fromBalance-r.amountCents','s.balances[r.to]=toBalance+r.amountCents','Approved internal transfer',"b.dataset.review==='approve'&&r.type==='internal-transfer'"]) {
+    assert.ok(workflow.includes(value), 'missing internal-transfer control ' + value);
+  }
+  assert.ok(app.includes("window.addEventListener('avcu:member-state-updated'"));
+});
+
+test('FX and check-deposit submissions fail safely on invalid or stale input', () => {
+  assert.ok(workflow.includes("amount=Number(d.amount),currency=String(d.currency||'USD')"), 'FX currency must be defined before quote lookup');
+  assert.ok(workflow.includes("fxQuotes.get(currency+'|'+Math.round(amount*100))"), 'FX quote must match the request currency and amount');
+  assert.ok(workflow.includes("file.size>12*1024*1024"), 'check images must be size-limited at submission, not only preview');
+  assert.ok(workflow.includes("!String(file.type||'').startsWith('image/')"), 'check uploads must reject non-image files');
+  assert.ok(workflow.includes("!Number.isSafeInteger(fromBalance)||!Number.isSafeInteger(toBalance)"), 'internal transfers must reject missing or invalid balances');
+  assert.ok(workflow.includes("Approval blocked: account records could not be saved"), 'storage failure must block transfer approval');
+  assert.ok(workflow.includes('document.querySelector(\'[data-note=\"\'+r.id+\'\"]\')'), 'operator review note lookup must use a CSS selector, not the ID-only helper');
+  assert.ok(workflow.includes('processedTransferRequests'), 'retry protection must prevent duplicate ledger postings');
+  assert.ok(workflow.includes('already applied to the local ledger'), 'duplicate requests must be blocked for reconciliation');
+});
+
+test('external approvals remain un-settled until provider confirmation', () => {
+  for (const value of ["providerState:'not-connected'",'approved-awaiting-provider','no external funds have been sent or settled','unavailable-without-provider']) assert.ok(workflow.includes(value));
+  assert.ok(providers.includes('PROVIDER_NOT_CONFIGURED'));
+  assert.ok(providers.includes('register'));
+  assert.ok(assistant.includes('assessLocally'));
+  assert.ok(assistant.includes('advisoryOnly: true'));
+  assert.ok(workflow.includes('Automated review checks · advisory only'));
+  assert.ok(html.includes('External financial services require authorized connections'));
+});
+
+test('check deposits capture both sides and provide previews', () => {
+  for (const id of ['check-front','check-back','legacy-check-front','legacy-check-back','check-front-preview','check-back-preview']) assert.ok(html.includes('id="' + id + '"'));
+  assert.ok(html.includes('capture="environment"'));
+  assert.ok(workflow.includes('Capture or select both the front and back'));
+  assert.ok(workflow.includes('Review check images'));
+  assert.ok(workflow.includes('Images are not retained after refresh'));
+});
+
+test('card authorization requests route to review and do not debit the account directly', () => {
+  assert.ok(workflow.includes('card-authorization'));
+  assert.ok(workflow.includes("closest('#simulate-purchase')"));
+  assert.ok(app.includes('No merchant authorization or account debit occurred'));
+  assert.ok(!app.includes('state.balances.draft -= amountCents'));
+  assert.ok(app.includes("state.frozen ? 'Frozen locally' : 'Not connected'"), 'card status must not imply a connected issuer');
+  assert.ok(!html.includes('value="24.50"'), 'purchase amount must not be prefilled');
+  assert.ok(!html.includes('•••• 0000'), 'check illustration must not imply a real check number');
+});
+
+test('responsive layout and accessibility basics remain', () => {
+  assert.ok(css.includes('@media(max-width:620px)'));
+  assert.ok(css.includes('prefers-reduced-motion'));
+  assert.ok(css.includes('focus-visible'));
+  assert.ok(html.includes('class="skip-link"'));
+  assert.ok(html.includes('aria-live="polite"'));
+  assert.ok(css.includes('workflow-request'));
+});
+
+test('documentation and scripts describe standalone and provider boundaries', () => {
+  for (const value of ['Pending Approval','Approved · Awaiting Provider','not secure for real staff review','provider-confirmed outcomes may be marked settled']) assert.ok(readme.includes(value));
+  assert.ok(!readme.includes('sample balances'));
+  assert.ok(pkg.includes('node --check public/workflow.js'));
+  assert.ok(pkg.includes('build:auth'), 'Identity browser client must be built during deployment');
+  assert.ok(netlify.includes('npm run build:auth'), 'Netlify must build the auth bundle before publish');
+  assert.ok(pkg.includes('node --check public/review-assistant.js'));
+  assert.ok(netlify.includes('publish = "public"'), 'backend source must remain outside the published directory');
+  assert.ok(netlify.includes("img-src 'self' data: blob:"), 'check-image previews require blob: under the content security policy');
+  assert.ok(netlify.includes("connect-src 'self'"));
+  assert.ok(netlify.includes('camera=(self)'));
+});
+
+
+test('member transaction history shows calculated annual totals and copyable statements', () => {
+  for (const id of ['view-transactions','history-status','history-credits','history-debits','history-pending-wires','history-pending-bills','history-monthly','history-monthly-requests','history-entries','history-requests','copy-history']) {
+    assert.ok(html.includes('id="' + id + '"'), 'missing transaction history element ' + id);
+  }
+  assert.ok(html.includes('data-nav="transactions"'));
+  assert.ok(app.includes("fetch('/api/workflow?scope=history'"));
+  assert.ok(app.includes('copyTransactionStatement'));
+  assert.ok(app.includes('historySnapshot.monthly_requests'));
+  assert.ok(app.includes('timeZoneName: \'short\''));
+  assert.ok(css.includes('.history-summary-grid'));
+  assert.ok(css.includes('.history-table'));
+  assert.ok(workflow.includes('avcu:workflow-history-updated'));
+});
+
+
+test('member wire request history offers a printable receipt without inventing settlement data', () => {
+  assert.ok(app.includes('data-receipt-request'));
+  assert.ok(app.includes('function openWireReceipt(requestId)'));
+  assert.ok(app.includes('AVCU request reference'));
+  assert.ok(app.includes('Print / Save as PDF'));
+  assert.ok(app.includes('America/New_York'));
+  assert.ok(app.includes('Wire fee'));
+  assert.ok(app.includes('Not confirmed'));
+  assert.ok(app.includes('not a bank-issued wire confirmation'));
+  assert.ok(app.includes('Recipient name entered'));
+  assert.ok(css.includes('.receipt-open-button'));
+});

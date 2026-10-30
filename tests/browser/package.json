@@ -1,0 +1,9 @@
+{
+  "name": "avcu-browser-audit",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Isolated browser-test dependencies for AVCU",
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}
