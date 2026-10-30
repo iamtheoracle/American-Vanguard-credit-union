@@ -42,7 +42,7 @@
       const last=data.lastRecordedActivity||{};
       $('member-history').innerHTML='<h3>'+esc(m.fullName)+'</h3><p class="muted">'+esc(m.memberNumber)+' · '+esc(m.email)+' · '+esc(m.membershipStatus)+' · Member since '+date(m.memberSince)+'</p>'+
         '<h3>Accounts and current recorded balances</h3>'+table(['Account','Status','Opened','Current recorded balance'],accounts)+
-        '<h3>Last recorded activity</h3><p>Last transaction: '+date(last.lastTransactionAt)+' · Last ledger entry: '+date(last.lastLedgerActivityAt)+' · Last withdrawal initiation (if recorded): '+date(last.lastWithdrawalInitiatedAt)+'</p>'+
+        '<h3>Last recorded activity</h3><p>Last transaction: '+date(last.lastTransactionAt)+' · Last ledger entry: '+date(last.lastLedgerActivityAt)+' · Last outgoing transaction initiation: '+date(last.lastOutgoingInitiatedAt)+'</p>'+
         '<h3>Transaction history ('+esc(data.range.from)+' to '+esc(data.range.to)+')</h3>'+table(['Initiated','Type / reference','Route','Status','Amount'],tx)+
         '<h3>Ledger entries and balance-after records</h3>'+table(['Recorded','Account','Direction','Amount','Balance after','Reference / memo'],ledger)+
         '<h3>Weekly totals</h3>'+table(['Week','Transaction count','Gross recorded amount'],periodRows(data.weekly))+
