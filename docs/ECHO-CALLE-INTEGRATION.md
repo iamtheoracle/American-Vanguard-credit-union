@@ -16,7 +16,7 @@ The integration targets the current CALL-E Developer API Calls v2 contract:
 - A fixed production API host; redirects are rejected.
 - API key read only from `CALLE_API_KEY`; never from a request body or source file.
 - Explicit `ECHO_CALL_DISPATCH_ENABLED=true` feature gate; default is disabled.
-- Preflight requirements for verified phone, active consent, do-not-call clearance, calling window, approved caller ID, and compliance approval.
+- Preflight requirements for verified phone, active consent, do-not-call clearance, calling window, approved caller ID, recording-disclosure approval, retention approval, and compliance approval.
 - E.164 recipient validation and deterministic idempotency key derived from the AVCU event key.
 - A generic, privacy-preserving voice task. It does not disclose transaction status, amounts, balances, counterparties, or account references.
 - Provider resource ID persistence requirement and read-only recovery function.
