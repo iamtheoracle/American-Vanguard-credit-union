@@ -4,7 +4,7 @@
   "private": true,
   "description": "Atchison Village Credit Union standalone request and approval workflow workspace",
   "scripts": {
-    "check": "node --check public/app.js && node --check public/providers.js && node --check public/review-assistant.js && node --check public/workflow.js && node --check public/auth-ui.js && node --check src/auth-client.mjs && node --check netlify/functions/workflow.mjs && node --check netlify/functions/identity.mjs && node --test tests/*.test.mjs",
+    "check": "node --check public/app.js && node --check public/plaid.js && node --check public/providers.js && node --check public/review-assistant.js && node --check public/workflow.js && node --check public/auth-ui.js && node --check src/auth-client.mjs && node --check netlify/functions/workflow.mjs && node --check netlify/functions/plaid.mjs && node --check netlify/functions/identity.mjs && node --test tests/*.test.mjs",
     "build:auth": "esbuild src/auth-client.mjs --bundle --format=iife --platform=browser --target=es2020 --outfile=public/auth-client.bundle.js"
   },
   "engines": {
