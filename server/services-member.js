@@ -36,10 +36,16 @@ export async function lookupIdempotent(key, scope) {
   return rows[0] ? rows[0].result : null;
 }
 
-export async function submitMemberTransfer({ member, body, idempotencyKey, aiContext = false }) {
+export function transferRequiresApproval({ amountCents, aiContext = false }) {
+  return Boolean(aiContext) || Number(amountCents) > POLICY.TRANSFER_APPROVAL_LIMIT_CENTS;
+}
+
+export async function submitMemberTransfer({ member, body, idempotencyKey, aiContext = false, client = null }) {
   await assertVerifiedMember(member);
+  const db = client || { query };
   if (idempotencyKey) {
-    const prior = await lookupIdempotent(idempotencyKey, `transfer:${member.id}`);
+    const priorResult = await db.query('SELECT result FROM idempotency_keys WHERE key = $1 AND scope = $2', [idempotencyKey, `transfer:${member.id}`]);
+    const prior = priorResult.rows[0]?.result;
     if (prior) return { transaction: prior, approvalId: prior.approvalId || null, status: prior.status, replayed: true };
   }
   const kind = body.kind === 'bill' ? 'bill' : 'share';
@@ -47,7 +53,7 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
   if (!validAmountCents(amountCents, { maxCents: POLICY.SINGLE_TRANSFER_MAX_CENTS })) {
     throw new LedgerError('Enter a valid amount between $0.01 and $100,000', 400, 'invalid_amount');
   }
-  const { rows: accounts } = await query(
+  const { rows: accounts } = await db.query(
     'SELECT * FROM accounts WHERE member_id = $1 AND status = \'open\'', [member.id]);
   const from = accounts.find(a => a.id === body.fromAccountId);
   if (!from) throw new LedgerError('Unknown source account', 400, 'unknown_account');
@@ -68,64 +74,66 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
 
   if (kind === 'bill') {
     // Bill payments go through the payment adapter (sandbox until authorized).
-    const result = await withTx(async client => {
-      const tx = await createTransaction(client, {
+    const run = async txClient => {
+      const tx = await createTransaction(txClient, {
         type: 'bill_pay', fromAccountId: from.id, amountCents,
         status: 'pending_approval', memo: body.memo || null, payee: String(body.payee).trim(),
         submittedBy: member.id, submittedByType: 'member', idempotencyKey
       });
-      const approvalId = await createTransactionApproval(client, tx,
+      const approvalId = await createTransactionApproval(txClient, tx,
         { submittedByType: 'member', submittedBy: member.id });
-      await audit(client, {
+      await audit(txClient, {
         actorType: 'member', actorId: member.id, action: aiContext ? 'ai.transfer_proposed' : 'transaction.submitted',
         entityType: 'transaction', entityId: tx.id,
         metadata: { amountCents, payee: String(body.payee).trim(), kind }
       });
-      await queueMemberNotification(client, {
+      await queueMemberNotification(txClient, {
         memberId: member.id, eventType: 'transaction.transfer_submitted',
         eventKey: `transaction:${tx.id}:transfer-submitted`,
         title: 'Transfer status update',
         body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
         subject: 'AVCU transfer status update'
       });
-      await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
+      await consumeIdempotency(txClient, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
       return { transaction: tx, approvalId };
-    });
-      return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
+    };
+    const result = client ? await run(client) : await withTx(run);
+    return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
   }
 
-  const needsApproval = amountCents > POLICY.TRANSFER_APPROVAL_LIMIT_CENTS;
-  const result = await withTx(async client => {
+  const needsApproval = transferRequiresApproval({ amountCents, aiContext });
+  const run = async txClient => {
     const status = needsApproval ? 'pending_approval' : 'posted';
-    const tx = await createTransaction(client, {
+    const tx = await createTransaction(txClient, {
       type: 'transfer', fromAccountId: from.id, toAccountId: body.toAccountId,
       amountCents, status, memo: body.memo || null,
       submittedBy: member.id, submittedByType: 'member', idempotencyKey
     });
     let approvalId = null;
     if (needsApproval) {
-      approvalId = await createTransactionApproval(client, tx, { submittedByType: 'member', submittedBy: member.id });
+      approvalId = await createTransactionApproval(txClient, tx, { submittedByType: 'member', submittedBy: member.id });
     } else {
-      await postTwoSided(client, {
+      await postTwoSided(txClient, {
         transactionId: tx.id, fromAccountId: from.id, toAccountId: body.toAccountId,
         amountCents, memo: body.memo
       });
     }
-    await audit(client, {
+    await audit(txClient, {
       actorType: 'member', actorId: member.id, action: aiContext ? 'ai.transfer_proposed' : 'transaction.submitted',
       entityType: 'transaction', entityId: tx.id,
       metadata: { amountCents, kind, needsApproval }
     });
-    await queueMemberNotification(client, {
+    await queueMemberNotification(txClient, {
       memberId: member.id, eventType: 'transaction.transfer_submitted',
       eventKey: `transaction:${tx.id}:transfer-submitted`,
       title: 'Transfer status update',
       body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
       subject: 'AVCU transfer status update'
     });
-    await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
+    await consumeIdempotency(txClient, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
     return { transaction: tx, approvalId };
-  });
+  };
+  const result = client ? await run(client) : await withTx(run);
   return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
 }
 
@@ -252,24 +260,46 @@ export async function testCardPurchase({ member, body }) {
   }
 }
 
-export async function createSupportCase({ member, subject, body }) {
+export async function createSupportCase({ member, subject, body, idempotencyKey = null, client = null }) {
   const cleanSubject = String(subject || '').trim().slice(0, 120);
   if (cleanSubject.length < 3) throw new LedgerError('Provide a short subject', 400, 'invalid_subject');
-  const result = await withTx(async client => {
-    const { rows } = await client.query(
-      `INSERT INTO support_cases (member_id, subject) VALUES ($1,$2) RETURNING *`, [member.id, cleanSubject]);
-    if (body) {
-      await client.query(
-        `INSERT INTO case_messages (case_id, author_type, author_id, body) VALUES ($1,'member',$2,$3)`,
-        [rows[0].id, member.id, String(body).slice(0, 2000)]);
+  if (idempotencyKey && (typeof idempotencyKey !== 'string' || idempotencyKey.length < 12 || idempotencyKey.length > 200)) {
+    throw new LedgerError('Invalid support case idempotency key', 400, 'invalid_idempotency_key');
+  }
+  const run = async txClient => {
+    if (idempotencyKey) {
+      const prior = await txClient.query(
+        'SELECT * FROM support_cases WHERE member_id = $1 AND idempotency_key = $2 FOR UPDATE',
+        [member.id, idempotencyKey]);
+      if (prior.rows[0]) return prior.rows[0];
     }
-    await audit(client, {
+    const inserted = await txClient.query(
+      `INSERT INTO support_cases (member_id, subject, idempotency_key)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (member_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+       DO NOTHING RETURNING *`,
+      [member.id, cleanSubject, idempotencyKey]);
+    const created = inserted.rows[0];
+    if (!created && idempotencyKey) {
+      const prior = await txClient.query(
+        'SELECT * FROM support_cases WHERE member_id = $1 AND idempotency_key = $2 FOR UPDATE',
+        [member.id, idempotencyKey]);
+      return prior.rows[0];
+    }
+    if (!created) throw new LedgerError('Support case could not be created', 500, 'case_create_failed');
+    if (body) {
+      await txClient.query(
+        `INSERT INTO case_messages (case_id, author_type, author_id, body) VALUES ($1,'member',$2,$3)`,
+        [created.id, member.id, String(body).slice(0, 2000)]);
+    }
+    await audit(txClient, {
       actorType: 'member', actorId: member.id, action: 'case.opened',
-      entityType: 'support_case', entityId: rows[0].id
+      entityType: 'support_case', entityId: created.id,
+      metadata: { idempotent: Boolean(idempotencyKey) }
     });
-    return rows[0];
-  });
-  return result;
+    return created;
+  };
+  return client ? run(client) : withTx(run);
 }
 
 function serializeTransfer(tx, approvalId = null) {

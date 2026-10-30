@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { query, withTx, audit } from './db.js';
 import { POLICY, requiredApprovalRoleForAmount } from './policy.js';
 import { postTwoSided, reverseTransaction } from './ledger.js';
@@ -24,7 +25,8 @@ export async function createTransactionApproval(client, transaction, { submitted
     [submittedByType === 'member' ? submittedBy : null,
      transaction.id,
      JSON.stringify({ type: transaction.type, amountCents,
-       memo: transaction.memo, payee: transaction.payee, reference: transaction.reference }),
+       memo: transaction.memo, payee: transaction.payee, reference: transaction.reference,
+       source: transaction.memo === 'Requested via AI assistant' ? 'ai_assistant' : 'member' }),
      requiredRole, submittedBy || null, submittedByType]);
   return rows[0].id;
 }
@@ -65,7 +67,9 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
 
   const result = await withTx(async client => {
     const { rows } = await client.query(
-      `SELECT a.*, t.type AS txn_type, t.amount_cents AS txn_amount, t.id AS txn_id
+      `SELECT a.*, t.type AS txn_type, t.amount_cents AS txn_amount, t.id AS txn_id,
+              t.memo AS txn_memo, t.payee AS txn_payee, t.reference AS txn_reference,
+              t.from_account_id AS txn_from_account_id, t.to_account_id AS txn_to_account_id
        FROM approvals a LEFT JOIN transactions t ON t.id = a.transaction_id
        WHERE a.id = $1 FOR UPDATE OF a`, [approvalId]);
     const approval = rows[0];
@@ -93,6 +97,17 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
     }
 
     const financial = approval.item_type === 'transaction';
+    if (action === 'approve' && financial && approval.payload?.source === 'ai_assistant') {
+      const binding = createHash('sha256').update(JSON.stringify([
+        approval.txn_id, approval.txn_type, Number(approval.txn_amount),
+        approval.txn_memo || '', approval.txn_payee || '', approval.txn_reference || '',
+        approval.txn_from_account_id || '', approval.txn_to_account_id || ''
+      ])).digest('hex');
+      if (!approval.member_confirmed_at || !approval.member_confirmation_hash ||
+          approval.member_confirmation_hash !== binding) {
+        throw new ApprovalError('Member must re-confirm this exact AI transfer before operator approval', 409, 'member_step_up_required');
+      }
+    }
     if (['loan', 'money_request'].includes(approval.item_type) && ['approve', 'reject'].includes(action) && (!reason || !String(reason).trim())) {
       throw new ApprovalError('A written decision reason is required for this final decision', 400, 'reason_required');
     }

@@ -1,0 +1,51 @@
+name: AVCU live AI staging smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Provider to validate (must have matching repository/environment secret)
+        required: true
+        type: choice
+        options:
+          - openrouter
+          - groq
+          - anthropic
+          - gemini
+
+permissions:
+  contents: read
+
+jobs:
+  provider-smoke:
+    name: Real provider function-calling and streaming
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    env:
+      NODE_ENV: staging
+      AVCU_STAGING_APPROVED: 'true'
+      AVCU_AI_PROVIDER: ${{ inputs.provider }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Validate selected provider secret exists
+        shell: bash
+        run: |
+          case "$AVCU_AI_PROVIDER" in
+            openrouter) test -n "$OPENROUTER_API_KEY" ;;
+            groq) test -n "$GROQ_API_KEY" ;;
+            anthropic) test -n "$ANTHROPIC_API_KEY" ;;
+            gemini) test -n "$GEMINI_API_KEY" ;;
+          esac
+      - name: Run live provider tool-call and streaming smoke test
+        run: npm run test:ai:staging
