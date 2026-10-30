@@ -58,15 +58,16 @@ export function runPlatformBenchmark({ platformMetrics, cases = BENCHMARK_CASES 
     'understandingScore', 'providerFallbackSuccessRate', 'p95LatencyMs'
   ];
   const supplied = platformMetrics && typeof platformMetrics === 'object' ? platformMetrics : {};
-  const complete = required.every(key => Number.isFinite(Number(supplied[key])));
+  const hasMetric = key => supplied[key] !== null && supplied[key] !== undefined && supplied[key] !== '' && Number.isFinite(Number(supplied[key]));
+  const complete = required.every(hasMetric);
   const gates = complete ? evaluatePlatformGates({ ...supplied, understandingScore: understanding.score })
-    : { passed: false, gates: Object.fromEntries(required.map(key => [key, Number.isFinite(Number(supplied[key])) ? null : false])) };
+    : { passed: false, gates: Object.fromEntries(required.map(key => [key, hasMetric(key) ? null : false])) };
   return {
     benchmark: 'AVCU Full Platform Benchmark',
     version: '1.0.0',
     passed: complete && gates.passed,
     understanding,
     platformGates: gates,
-    missingMetrics: required.filter(key => !Number.isFinite(Number(supplied[key])))
+    missingMetrics: required.filter(key => !hasMetric(key))
   };
 }
