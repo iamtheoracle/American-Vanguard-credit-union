@@ -40,7 +40,7 @@ Browser automation is not a substitute for real-device/manual accessibility test
 ## Member transaction history
 
 - The member Transaction History view reads the signed-in member's own workflow requests and posted account-ledger entries for the trailing 365 days.
-- Monthly posted credits and debits are calculated from `avcu_account_ledger`; request submissions are not treated as posted cash movement.
+- Monthly posted credits and debits are calculated from `avcu_account_ledger`; in the current workflow those entries represent internal account transfers, not payroll or outside income. Request submissions are not treated as posted cash movement.
 - Monthly wire requests, gift-described wire requests (purpose text containing “gift”), and bill-payment requests are shown in a separate table and are explicitly labeled as request amounts, not deposits or completed payments.
 - Pending wires and bills remain separate from posted totals. A wire is not represented as received or settled unless an authorized provider confirms settlement and a trusted ledger records the posting.
 - The Copy statement action copies the displayed member history, including timestamps, references, posted totals, monthly request amounts, and request statuses.
