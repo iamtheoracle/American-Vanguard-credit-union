@@ -40,9 +40,9 @@ export async function executeAiAction({ member, action, idempotencyKey, request,
   }
   const requestHash = createHash('sha256').update(stableSerialize(request ?? null)).digest('hex');
   return withTx(async client => {
-    await client.query(
+    const inserted = await client.query(
       `INSERT INTO ai_execution_idempotency (member_id, idempotency_key, action, request_hash, status)
-       VALUES ($1,$2,$3,$4,'processing') ON CONFLICT (member_id, idempotency_key) DO NOTHING`,
+       VALUES ($1,$2,$3,$4,'processing') ON CONFLICT (member_id, idempotency_key) DO NOTHING RETURNING idempotency_key`,
       [member.id, idempotencyKey, action, requestHash]);
     const { rows } = await client.query(
       `SELECT action, request_hash, status, result FROM ai_execution_idempotency
@@ -53,7 +53,7 @@ export async function executeAiAction({ member, action, idempotencyKey, request,
       throw new AiExecutionError('Idempotency key was already used for a different request', 'ai_idempotency_conflict', 409);
     }
     if (prior.status === 'succeeded') return { replayed: true, result: prior.result };
-    if (prior.status === 'processing') {
+    if (!inserted.rowCount && prior.status === 'processing') {
       // This row is created and completed in one transaction. A visible processing
       // row here indicates a legacy/manual state and must not be executed twice.
       throw new AiExecutionError('An action with this key is already processing', 'ai_action_in_progress', 409);
