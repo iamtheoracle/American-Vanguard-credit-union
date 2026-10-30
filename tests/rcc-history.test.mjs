@@ -56,7 +56,7 @@ test('operator history defaults to the requested complete reporting period', () 
 
 test('monthly aggregation uses account membership EXISTS and avoids join multiplication', () => {
   const monthlyStart = operatorRoutes.indexOf("date_trunc('month'");
-  const monthlyEnd = operatorRoutes.indexOf('lastRecordedActivity', monthlyStart);
+  const monthlyEnd = operatorRoutes.indexOf('query(`SELECT\n                (SELECT max(t.created_at)', monthlyStart);
   const monthly = operatorRoutes.slice(monthlyStart, monthlyEnd);
   assert.match(monthly, /WHERE EXISTS/);
   assert.doesNotMatch(monthly, /JOIN accounts a ON a\.id = t\.from_account_id OR a\.id = t\.to_account_id/);
