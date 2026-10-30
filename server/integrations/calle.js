@@ -13,15 +13,18 @@ export class CalleIntegrationError extends Error {
   }
 }
 
-function requireConfig() {
-  if (process.env.ECHO_CALL_DISPATCH_ENABLED !== 'true') {
-    throw new CalleIntegrationError('ECHO voice dispatch is disabled', 'echo_dispatch_disabled', { status: 503 });
-  }
+function requireApiKey() {
   const apiKey = process.env.CALLE_API_KEY;
   if (!apiKey || apiKey.length < 12) {
     throw new CalleIntegrationError('CALL-E API credentials are not configured', 'callee_credentials_missing', { status: 503 });
   }
   return apiKey;
+}
+
+function requireDispatchEnabled() {
+  if (process.env.ECHO_CALL_DISPATCH_ENABLED !== 'true') {
+    throw new CalleIntegrationError('ECHO voice dispatch is disabled', 'echo_dispatch_disabled', { status: 503 });
+  }
 }
 
 function assertEligible(preflight) {
@@ -92,7 +95,8 @@ async function request(path, { method = 'GET', apiKey, body, idempotencyKey } = 
 export async function createCalleEchoCall({ phone, eventKey, preflight }) {
   assertEligible(preflight);
   assertPhone(phone);
-  const apiKey = requireConfig();
+  requireDispatchEnabled();
+  const apiKey = requireApiKey();
   const idempotencyKey = stableKey(eventKey);
   const result = await request('/v2/calls', {
     method: 'POST',
@@ -143,7 +147,7 @@ export async function getCalleEchoCall(resourceId) {
   if (typeof resourceId !== 'string' || !/^[A-Za-z0-9_-]{6,200}$/.test(resourceId)) {
     throw new CalleIntegrationError('A valid CALL-E resource ID is required', 'invalid_provider_call_id', { status: 400 });
   }
-  const apiKey = requireConfig();
+  const apiKey = requireApiKey();
   const result = await request(`/v2/calls/${encodeURIComponent(resourceId)}`, { apiKey });
   return {
     resourceId: result.id,
