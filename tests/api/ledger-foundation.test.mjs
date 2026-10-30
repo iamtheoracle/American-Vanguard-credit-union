@@ -35,6 +35,9 @@ test('asset-aware ledger schema enforces ownership, per-asset balancing and appe
   await assert.rejects(
     () => query("UPDATE journal_entries SET amount_minor = 2000 WHERE journal_transaction_id = $1", [txId]),
     /append-only/);
+  await assert.rejects(
+    () => query("UPDATE journal_transactions SET description = 'tampered' WHERE id = $1", [txId]),
+    /Finalized journal transactions are immutable/);
 
   const { rows: balances } = await query(
     `SELECT asset_code,
@@ -160,4 +163,29 @@ test('database constraint rejects an unbalanced journal even when bypassing the 
     /not balanced per asset/);
   const { rows: current } = await query("SELECT status FROM journal_transactions WHERE id=$1", [tx[0].id]);
   assert.equal(current[0].status, 'draft');
+});
+
+test('external payment intents enforce asset and custody-domain compatibility', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { rows: bankUsd } = await query(
+    `INSERT INTO financial_accounts
+      (owner_type, account_code, display_name, account_type, asset_code, asset_kind, asset_precision, custody_domain, status)
+     VALUES ('system','bank-usd','Bank USD','clearing','USD','fiat',2,'bank','open') RETURNING id`);
+  const { rows: custodyUsdc } = await query(
+    `INSERT INTO financial_accounts
+      (owner_type, account_code, display_name, account_type, asset_code, asset_kind, asset_precision, custody_domain, status)
+     VALUES ('system','custody-usdc','Custody USDC','custody','USDC','stablecoin',6,'digital_asset','open') RETURNING id`);
+
+  await assert.rejects(() => query(
+    `INSERT INTO external_payment_intents
+      (reference, financial_account_id, rail, asset_code, amount_minor, destination_ref, idempotency_key)
+     VALUES ('PAY-USD-AS-STABLE',$1,'stablecoin','USD',100,'destination','payment-intent-0001')`,
+    [bankUsd[0].id]), /Stablecoin payments require a digital-asset custody account/);
+
+  await assert.rejects(() => query(
+    `INSERT INTO external_payment_intents
+      (reference, financial_account_id, rail, asset_code, amount_minor, destination_ref, idempotency_key)
+     VALUES ('PAY-USDC-AS-ACH',$1,'ach_credit','USDC',100,'destination','payment-intent-0002')`,
+    [custodyUsdc[0].id]), /ACH and wire payments require a bank-held fiat account/);
 });
