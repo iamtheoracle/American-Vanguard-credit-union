@@ -34,7 +34,7 @@ ECHO may communicate only statuses stored by the banking backend: pending_approv
 - Respect consent, do-not-call status, calling windows, caller-ID rules, recording disclosure, applicable TCPA/FCC/state requirements, and retention policies.
 
 ## Production blockers — explicitly not enabled
-No live calls are enabled by this change. AVCU must select and contract with a production telephony provider, verify authority to use it, provision verified caller ID and signed webhooks, implement phone verification and auditable consent capture, approve the AI speech provider and data-processing terms, configure retention/recording policy, and complete security/legal/compliance review. No provider credentials are stored in source control. Until then, ECHO queues/suppresses events and reports dispatch disabled; it does not simulate successful calls.
+No live calls are enabled by this change. AVCU must select and contract with a production telephony provider, verify authority to use it, provision verified caller ID and signed webhooks, implement phone verification and auditable consent capture, approve the AI speech provider and data-processing terms, configure retention/recording policy, and complete security/legal/compliance review. Phone encryption must use an approved KMS adapter. No provider credentials are stored in source control. Until then, ECHO queues/suppresses events and reports dispatch disabled; it does not simulate successful calls.
 
 ## Scope of this increment
 This increment establishes the database event/outbox foundation and consent gate. It does not claim outbound telephony, real-time speech, inbound routing, production credentials, or live banking integrations are active.
