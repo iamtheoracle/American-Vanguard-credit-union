@@ -294,3 +294,123 @@ export async function generateWithTools({ messages, tools, provider, fallbacks, 
   }
   throw new ModelGatewayError('All configured AI providers failed', 'all_providers_failed', { retryable: true, provider: order.join(',') });
 }
+
+
+function extractStreamDelta(providerKind, payload) {
+  if (providerKind === 'anthropic') {
+    if (payload?.type === 'content_block_delta' && payload.delta?.type === 'text_delta') return payload.delta.text || '';
+    return '';
+  }
+  if (providerKind === 'gemini') {
+    return (payload?.candidates?.[0]?.content?.parts || []).map(part => part.text || '').join('');
+  }
+  return payload?.choices?.[0]?.delta?.content || '';
+}
+
+async function* streamProvider(name, messages, options) {
+  if (circuitOpen(name)) throw new ModelGatewayError('Provider circuit is open', 'provider_circuit_open', { retryable: true, provider: name });
+  const config = providerConfig(name);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs);
+  let emitted = false;
+  try {
+    let url;
+    let headers;
+    let body;
+    if (config.kind === 'anthropic') {
+      url = 'https://api.anthropic.com/v1/messages';
+      headers = { 'x-api-key': config.key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' };
+      body = {
+        model: config.model, max_tokens: options.maxTokens ?? 1200, stream: true,
+        system: messages.filter(m => m.role === 'system').map(m => m.content).join('\\n'),
+        messages: messages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
+      };
+    } else if (config.kind === 'gemini') {
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:streamGenerateContent?alt=sse`;
+      headers = { 'x-goog-api-key': config.key, 'Content-Type': 'application/json' };
+      body = {
+        systemInstruction: { parts: [{ text: messages.filter(m => m.role === 'system').map(m => m.content).join('\\n') }] },
+        contents: messages.filter(m => m.role !== 'system').map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }]
+        })),
+        generationConfig: { temperature: options.temperature ?? 0.2, maxOutputTokens: options.maxTokens ?? 1200 }
+      };
+    } else {
+      url = `${config.baseUrl}/chat/completions`;
+      headers = { Authorization: `Bearer ${config.key}`, 'Content-Type': 'application/json' };
+      body = { model: config.model, messages, stream: true,
+        temperature: options.temperature ?? 0.2, max_tokens: options.maxTokens ?? 1200 };
+    }
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body),
+      signal: controller.signal, redirect: 'error' });
+    if (!response.ok || !response.body) {
+      const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      throw new ModelGatewayError('AI provider streaming request failed', retryable ? 'provider_unavailable' : 'provider_rejected',
+        { retryable, provider: name });
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const processLine = line => {
+      if (!line.startsWith('data:')) return '';
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') return '';
+      let payload;
+      try { payload = JSON.parse(data); } catch {
+        throw new ModelGatewayError('Provider returned malformed streaming data', 'provider_invalid_stream');
+      }
+      return extractStreamDelta(config.kind, payload);
+    };
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const lines = buffer.split(/\\r?\\n/);
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const delta = processLine(line);
+        if (delta) { emitted = true; yield delta; }
+      }
+      if (done) break;
+    }
+    if (buffer.trim()) {
+      const delta = processLine(buffer.trim());
+      if (delta) { emitted = true; yield delta; }
+    }
+    recordSuccess(name);
+  } catch (error) {
+    if (error.retryable) recordFailure(name);
+    if (emitted) throw error;
+    if (error instanceof ModelGatewayError) { error.provider = name; throw error; }
+    throw new ModelGatewayError('AI provider streaming failed', 'provider_stream_failed',
+      { retryable: true, provider: name });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Stream text deltas. Failover is allowed only before the first emitted token. */
+export async function* streamText({ messages, provider, fallbacks, timeoutMs = 20_000, maxTokens, temperature } = {}) {
+  if (!Array.isArray(messages) || !messages.length || messages.some(m =>
+    !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')) {
+    throw new ModelGatewayError('Valid chat messages are required', 'invalid_messages');
+  }
+  const primary = provider || process.env.AVCU_AI_PROVIDER || 'openrouter';
+  const fallbackList = Array.isArray(fallbacks) ? fallbacks
+    : String(process.env.AVCU_AI_FALLBACKS || 'groq,gemini,anthropic').split(',').map(s => s.trim()).filter(Boolean);
+  const order = [...new Set([primary, ...fallbackList.filter(p => p !== primary)])].slice(0, 4);
+  for (const name of order) {
+    let emitted = false;
+    try {
+      for await (const delta of streamProvider(name, messages, { timeoutMs, maxTokens, temperature })) {
+        emitted = true;
+        yield { provider: name, delta };
+      }
+      return;
+    } catch (error) {
+      if (emitted || !error.retryable) throw error;
+      await delay(25);
+    }
+  }
+  throw new ModelGatewayError('All configured AI streaming providers failed', 'all_providers_failed',
+    { retryable: true, provider: order.join(',') });
+}
