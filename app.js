@@ -109,6 +109,57 @@ async function probeAdminAccess() {
     renderReviews(data.reviews || []);
   } catch { /* staff entry stays hidden until the server confirms access */ }
 }
+
+let wirePermissions = {};
+async function wireRequest(body) {
+  const response = await fetch('/api/admin/wire-confirmations', {
+    method: body ? 'POST' : 'GET', credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Wire confirmation queue unavailable.');
+  return data;
+}
+function renderWireCases(cases) {
+  const list = $('#wire-case-list'); list.replaceChildren();
+  if (!cases.length) { list.append(el('p','muted','No external wire cases.')); return; }
+  for (const item of cases) {
+    const card = el('article','review-card');
+    card.append(el('h3','',item.beneficiary_name + ' · ' + item.destination_institution));
+    card.append(el('p','review-meta',item.sender_name + ' · ' + item.purpose + ' · ' + item.amount + ' ' + item.currency));
+    card.append(el('p','review-meta','External reference: ' + item.external_reference));
+    card.append(el('span','status-pill','Status: ' + item.status.replaceAll('_',' ')));
+    for (const ev of item.evidence || []) card.append(el('p','review-statement','Evidence: ' + ev.evidence_summary + ' (' + ev.evidence_reference + ')'));
+    if (item.status === 'awaiting_evidence' && wirePermissions.submitEvidence) {
+      const f=el('form','review-form'), ref=el('input'), summary=el('textarea'), note=el('textarea');
+      ref.required=true; ref.placeholder='vault:private/evidence-reference';
+      summary.required=true; summary.minLength=10; summary.placeholder='Evidence summary; do not enter account numbers';
+      note.required=true; note.minLength=3; note.placeholder='Submission note';
+      const b=el('button','primary','Submit evidence'); b.type='submit';
+      f.append(el('label','','Private vault reference'),ref,el('label','','Evidence summary'),summary,el('label','','Note'),note,b);
+      f.addEventListener('submit',async e=>{e.preventDefault();b.disabled=true;try{await wireRequest({action:'submit_evidence',caseId:item.id,evidenceReference:ref.value,evidenceSummary:summary.value,note:note.value});await loadWireQueue();}catch(err){showNotice(err.message,'error',$('#wire-notice'));b.disabled=false;}});
+      card.append(f);
+    }
+    if (item.status === 'evidence_submitted' && wirePermissions.decide) {
+      const f=el('form','review-form'), decision=el('select'), note=el('textarea');
+      for(const pair of [['confirmed','Confirm receiving-bank credit'],['rejected','Reject evidence'],['escalated','Escalate']]) { const o=el('option','',pair[1]);o.value=pair[0];decision.append(o); }
+      note.required=true;note.minLength=10;note.placeholder='Document independent verification and decision';
+      const b=el('button','primary','Record review decision');b.type='submit';
+      f.append(el('label','','Decision'),decision,el('label','','Review note'),note,b);
+      f.addEventListener('submit',async e=>{e.preventDefault();b.disabled=true;try{await wireRequest({action:'decide',caseId:item.id,decision:decision.value,note:note.value});await loadWireQueue();}catch(err){showNotice(err.message,'error',$('#wire-notice'));b.disabled=false;}});
+      card.append(f);
+    }
+    const history=el('details','history');history.append(el('summary','','Audit history ('+(item.history||[]).length+')'));
+    for(const ev of item.history||[]) history.append(el('p','review-meta',ev.action+' · '+ev.actor_identity_user_id+' · '+ev.note+' · '+new Date(ev.created_at).toLocaleString()));
+    card.append(history); list.append(card);
+  }
+}
+async function loadWireQueue() {
+  const data=await wireRequest(); wirePermissions=data.permissions||{};
+  $('#wire-create-form').hidden=!wirePermissions.create;
+  renderWireCases(data.cases||[]);
+}
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -267,12 +318,21 @@ $('#signout').addEventListener('click', async () => {
 $('#open-admin').addEventListener('click', async () => {
   try {
     await refreshReviews();
+    await loadWireQueue();
     $('#member-panel').hidden = true;
     $('#admin-panel').hidden = false;
     $('#admin-notice').hidden = true;
   } catch (error) { showNotice(error.message, 'error', $('#member-notice')); }
 });
 $('#back-member').addEventListener('click', () => { $('#admin-panel').hidden = true; $('#member-panel').hidden = false; });
+$('#wire-create-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const formEl=event.currentTarget, button=formEl.querySelector('button'); button.disabled=true;
+  const values=Object.fromEntries(new FormData(formEl).entries());
+  try { await wireRequest({action:'create',...values}); formEl.reset(); showNotice('Case registered. No payment was sent.','success',$('#wire-notice')); await loadWireQueue(); }
+  catch(error) { showNotice(error.message,'error',$('#wire-notice')); }
+  finally { button.disabled=false; }
+});
 (async () => {
   const recoveryHandled = await handleHash();
   if (recoveryHandled) return;
