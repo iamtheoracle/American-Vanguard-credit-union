@@ -40,10 +40,12 @@ export function transferRequiresApproval({ amountCents, aiContext = false }) {
   return Boolean(aiContext) || Number(amountCents) > POLICY.TRANSFER_APPROVAL_LIMIT_CENTS;
 }
 
-export async function submitMemberTransfer({ member, body, idempotencyKey, aiContext = false }) {
+export async function submitMemberTransfer({ member, body, idempotencyKey, aiContext = false, client = null }) {
   await assertVerifiedMember(member);
+  const db = client || { query };
   if (idempotencyKey) {
-    const prior = await lookupIdempotent(idempotencyKey, `transfer:${member.id}`);
+    const priorResult = await db.query('SELECT result FROM idempotency_keys WHERE key = $1 AND scope = $2', [idempotencyKey, `transfer:${member.id}`]);
+    const prior = priorResult.rows[0]?.result;
     if (prior) return { transaction: prior, approvalId: prior.approvalId || null, status: prior.status, replayed: true };
   }
   const kind = body.kind === 'bill' ? 'bill' : 'share';
@@ -51,7 +53,7 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
   if (!validAmountCents(amountCents, { maxCents: POLICY.SINGLE_TRANSFER_MAX_CENTS })) {
     throw new LedgerError('Enter a valid amount between $0.01 and $100,000', 400, 'invalid_amount');
   }
-  const { rows: accounts } = await query(
+  const { rows: accounts } = await db.query(
     'SELECT * FROM accounts WHERE member_id = $1 AND status = \'open\'', [member.id]);
   const from = accounts.find(a => a.id === body.fromAccountId);
   if (!from) throw new LedgerError('Unknown source account', 400, 'unknown_account');
@@ -72,64 +74,66 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
 
   if (kind === 'bill') {
     // Bill payments go through the payment adapter (sandbox until authorized).
-    const result = await withTx(async client => {
-      const tx = await createTransaction(client, {
+    const run = async txClient => {
+      const tx = await createTransaction(txClient, {
         type: 'bill_pay', fromAccountId: from.id, amountCents,
         status: 'pending_approval', memo: body.memo || null, payee: String(body.payee).trim(),
         submittedBy: member.id, submittedByType: 'member', idempotencyKey
       });
-      const approvalId = await createTransactionApproval(client, tx,
+      const approvalId = await createTransactionApproval(txClient, tx,
         { submittedByType: 'member', submittedBy: member.id });
-      await audit(client, {
+      await audit(txClient, {
         actorType: 'member', actorId: member.id, action: aiContext ? 'ai.transfer_proposed' : 'transaction.submitted',
         entityType: 'transaction', entityId: tx.id,
         metadata: { amountCents, payee: String(body.payee).trim(), kind }
       });
-      await queueMemberNotification(client, {
+      await queueMemberNotification(txClient, {
         memberId: member.id, eventType: 'transaction.transfer_submitted',
         eventKey: `transaction:${tx.id}:transfer-submitted`,
         title: 'Transfer status update',
         body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
         subject: 'AVCU transfer status update'
       });
-      await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
+      await consumeIdempotency(txClient, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
       return { transaction: tx, approvalId };
-    });
-      return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
+    };
+    const result = client ? await run(client) : await withTx(run);
+    return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
   }
 
   const needsApproval = transferRequiresApproval({ amountCents, aiContext });
-  const result = await withTx(async client => {
+  const run = async txClient => {
     const status = needsApproval ? 'pending_approval' : 'posted';
-    const tx = await createTransaction(client, {
+    const tx = await createTransaction(txClient, {
       type: 'transfer', fromAccountId: from.id, toAccountId: body.toAccountId,
       amountCents, status, memo: body.memo || null,
       submittedBy: member.id, submittedByType: 'member', idempotencyKey
     });
     let approvalId = null;
     if (needsApproval) {
-      approvalId = await createTransactionApproval(client, tx, { submittedByType: 'member', submittedBy: member.id });
+      approvalId = await createTransactionApproval(txClient, tx, { submittedByType: 'member', submittedBy: member.id });
     } else {
-      await postTwoSided(client, {
+      await postTwoSided(txClient, {
         transactionId: tx.id, fromAccountId: from.id, toAccountId: body.toAccountId,
         amountCents, memo: body.memo
       });
     }
-    await audit(client, {
+    await audit(txClient, {
       actorType: 'member', actorId: member.id, action: aiContext ? 'ai.transfer_proposed' : 'transaction.submitted',
       entityType: 'transaction', entityId: tx.id,
       metadata: { amountCents, kind, needsApproval }
     });
-    await queueMemberNotification(client, {
+    await queueMemberNotification(txClient, {
       memberId: member.id, eventType: 'transaction.transfer_submitted',
       eventKey: `transaction:${tx.id}:transfer-submitted`,
       title: 'Transfer status update',
       body: `Your transfer ${tx.reference} is ${tx.status.replaceAll('_', ' ')}.`,
       subject: 'AVCU transfer status update'
     });
-    await consumeIdempotency(client, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
+    await consumeIdempotency(txClient, idempotencyKey, `transfer:${member.id}`, serializeTransfer(tx, approvalId));
     return { transaction: tx, approvalId };
-  });
+  };
+  const result = client ? await run(client) : await withTx(run);
   return { transaction: result.transaction, approvalId: result.approvalId, status: result.transaction.status };
 }
 
