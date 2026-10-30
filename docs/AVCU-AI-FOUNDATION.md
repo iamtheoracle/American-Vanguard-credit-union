@@ -1,0 +1,82 @@
+# AVCU AI Foundation — five platform capabilities
+
+This document defines the shared AI foundation for member chat, ECHO voice, operator assistance, and future AVCU AI experiences.
+
+## 1. Secure execution foundation
+
+**Authority:** AVCU's authenticated backend, permission policy, approval workflow, PostgreSQL transactions, ledger, and audit log remain authoritative.
+
+Implemented in this increment:
+- `server/ai/execution.js` defines an allowlisted execution broker with member binding, action risk tiers, stable request hashing, transactional idempotency, and audit records.
+- `server/services-member.js` now forces every AI-originated transfer through the approval path, including amounts below the normal human-initiated approval threshold. AI can propose; it cannot silently post a transfer.
+- Existing task-derived transfer idempotency remains in place for retries.
+
+Required before calling the execution foundation complete:
+- Route every state-changing AI tool through the broker with a DB-only executor that uses the supplied transaction client.
+- Add step-up confirmation outside the model for any action that is eligible for member execution.
+- Add concurrency, replay, rollback, and cross-member authorization integration tests.
+- Never let a model provide a member ID, permission, approval, or trusted execution context.
+
+The broker deliberately accepts server-provided executors only. Do not wrap external side effects in a database transaction and assume atomicity.
+
+## 2. Provider-independent model gateway
+
+Implemented in `server/ai/gateway.js` and connected to `server/ai/index.js`:
+- OpenRouter, Groq, OpenAI, Anthropic, Gemini, and an existing OpenAI-compatible AVCU endpoint.
+- Ordered provider fallback, request timeouts, bounded output, redirect rejection, and per-provider circuit breaking.
+- Secrets are read only from server environment variables and never returned by the health/status function.
+- The application remains on deterministic sandbox behavior when no provider credentials are configured.
+
+Environment variables:
+- `AVCU_AI_PROVIDER`: optional provider override.
+- `AVCU_AI_FALLBACKS`: comma-separated fallback order.
+- `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`.
+- Provider-specific model variables: `OPENROUTER_MODEL`, `GROQ_MODEL`, `OPENAI_MODEL`, `ANTHROPIC_MODEL`, `GEMINI_MODEL`.
+- Legacy compatible endpoint: `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL`.
+
+The current gateway provides text completion only. It does not yet implement provider-native function calling or streaming. The model is explicitly told not to claim that it performed a banking action.
+
+## 3. Genuine member memory engine
+
+Implemented in `server/ai/memory.js` with migration `1000_ai_foundation.sql` and member routes:
+- Member-scoped, PostgreSQL-persisted facts with category, confirmation time, expiry, and full-text recall.
+- Save requires an explicit authenticated member action with `confirmed: true`.
+- No automatic extraction from chat transcripts.
+- Categories are limited to preferences, goals, accessibility, project context, and communication style.
+- Secrets and selected sensitive categories are rejected.
+- Members can list and delete their own memories; deletion clears the stored content and is audited.
+- Retrieved memory is marked as untrusted context, not executable instructions.
+
+This is an explicit-confirmation memory foundation, not a vector database or automatic long-term learning system. Any future semantic embeddings must preserve member isolation, retention, consent, and deletion guarantees.
+
+## 4. Human understanding as a measurable capability
+
+Implemented in `server/ai/understanding.js`:
+- Intent classification, risk tier, urgency indicators, negation, observable distress signals, confidence, and clarification requirements.
+- Ambiguous high-risk requests are stopped for clarification before model completion.
+- Scoring compares predicted intent, risk, clarification need, safety, task completion, and user correction.
+- Emotional indicators are observable language signals, not claims that the system knows how a person feels.
+
+The member AI route returns the understanding assessment for observability. Calibration must use human-labelled conversations and user corrections, not unvalidated assumptions.
+
+## 5. Platform benchmark
+
+Implemented in `server/ai/benchmark.js` and `tests/ai-foundation.test.mjs`:
+- Deterministic conversation cases for greeting, balance, ambiguous transfer, complete transfer, fraud, negation, and human handoff.
+- Metrics for intent, risk, and clarification accuracy.
+- Full-platform acceptance gates for unauthorized execution, cross-member memory leakage, duplicate side effects, prompt-injection escapes, sensitive disclosures, handoff failure, understanding score, provider fallback, and p95 latency.
+- Missing platform metrics fail closed; synthetic metric values must never be reported as a production benchmark result.
+- Authorized operators can run the deterministic understanding suite at `GET /api/operator/ai/benchmark`; each run is stored and audited.
+
+The full platform suite becomes authoritative only when CI and staging collect real database, security, provider, memory-isolation, concurrency, handoff, and latency results. A passing unit-level understanding suite alone is not proof that the entire platform passed.
+
+## Shared product rules
+
+- Speak naturally and clearly; adapt to the member's level without being patronizing.
+- Ask one focused question when the request is ambiguous.
+- Acknowledge frustration or urgency without pretending to diagnose emotion.
+- Never request passwords, PINs, CVVs, or one-time codes.
+- Read-only account information must be scoped to the authenticated member.
+- AI-originated money movement is always a proposal/approval workflow, never a direct ledger posting.
+- ECHO, chat, and future agents use the same gateway, understanding, memory, execution, and benchmark contracts.
+- No live provider credentials are provisioned by this change; tests use mocked providers.
