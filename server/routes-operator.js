@@ -11,6 +11,7 @@ import { integrationHealth } from './integrations/index.js';
 import { notifyMember } from './notifications.js';
 import { MEMBERSHIP_TIERS, recalculateMemberTier, overrideMemberTier, clearMemberTierOverride } from './membership-tiers.js';
 import { validateLegacyTransactions } from './migration-validation.js';
+import { inspectEchoQueue } from './echo.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -630,6 +631,13 @@ router.get('/operator/audit', ...guard('management', 'super_admin', 'auditor'), 
               created_at AS "createdAt"
        FROM audit_events ORDER BY id DESC LIMIT ${limit}`);
     res.json({ events: rows });
+  } catch (error) { next(error); }
+});
+
+// ---- ECHO voice delivery oversight ---------------------------------------------
+router.get('/operator/echo/queue', ...guard('management', 'operator'), async (req, res, next) => {
+  try {
+    res.json(await inspectEchoQueue());
   } catch (error) { next(error); }
 });
 
