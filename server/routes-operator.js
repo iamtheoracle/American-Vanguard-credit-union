@@ -64,8 +64,8 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
     };
     const from = req.query.from || '2018-03-25';
     const to = req.query.to || '2026-10-31';
-    if (!validDate(from) || !validDate(to) || from > to) {
-      return res.status(400).json({ error: 'Use valid from/to dates in YYYY-MM-DD format; from must not be after to.' });
+    if (!validDate(from) || !validDate(to) || from > to || from < '2018-03-25' || to > '2026-10-31') {
+      return res.status(400).json({ error: 'Use valid dates within the supported reporting period, 2018-03-25 through 2026-10-31; from must not be after to.' });
     }
     const memberResult = await query(
       `SELECT id, member_number AS "memberNumber", full_name AS "fullName", email,
@@ -74,10 +74,19 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
     const member = memberResult.rows[0];
     if (!member) return res.status(404).json({ error: 'Member account not found' });
 
-    const page = value => Number.isInteger(Number(value)) && Number(value) >= 0 ? Number(value) : 0;
-    const transactionOffset = page(req.query.transactionOffset);
-    const ledgerOffset = page(req.query.ledgerOffset);
-    const pageSize = Math.min(250, Math.max(1, page(req.query.pageSize) || 100));
+    const page = (value, fallback) => {
+      if (value == null || value === '') return fallback;
+      if (!/^\\d+$/.test(String(value))) return null;
+      const parsed = Number(value);
+      return Number.isSafeInteger(parsed) && parsed <= 1000000000 ? parsed : null;
+    };
+    const transactionOffset = page(req.query.transactionOffset, 0);
+    const ledgerOffset = page(req.query.ledgerOffset, 0);
+    const requestedPageSize = page(req.query.pageSize, 100);
+    if (transactionOffset == null || ledgerOffset == null || requestedPageSize == null || requestedPageSize < 1) {
+      return res.status(400).json({ error: 'Pagination offsets must be whole numbers from 0 to 1,000,000,000 and pageSize must be 1 to 250.' });
+    }
+    const pageSize = Math.min(250, requestedPageSize);
     const [accountResult, transactionResult, ledgerResult, dailyResult, weeklyResult, monthlyResult, lastResult] = await Promise.all([
       query(`SELECT id, kind, name, suffix, status, balance_cents AS "currentBalanceCents",
                     created_at AS "openedAt"
