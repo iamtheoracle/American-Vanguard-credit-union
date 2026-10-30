@@ -67,13 +67,13 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$echo$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_echo_transaction_status ON transactions;
 CREATE TRIGGER trg_echo_transaction_status
 AFTER INSERT OR UPDATE ON transactions
 FOR EACH ROW EXECUTE FUNCTION avcu_enqueue_echo_transaction_status();
 CREATE OR REPLACE FUNCTION avcu_cancel_echo_calls_on_consent_revocation()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $echo2$
 BEGIN
   IF OLD.voice_consent = TRUE AND (
     NEW.voice_consent = FALSE OR NEW.voice_consent_revoked_at IS NOT NULL
@@ -83,7 +83,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$echo2$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_echo_consent_revoked ON member_voice_preferences;
 CREATE TRIGGER trg_echo_consent_revoked
 AFTER UPDATE OF voice_consent, voice_consent_revoked_at
