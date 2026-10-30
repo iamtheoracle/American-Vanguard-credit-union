@@ -105,3 +105,32 @@ body{background:var(--wash);color:var(--ink)}
   #auth-status { max-width: 118px; font-size: 10px; }
   .auth-button { padding: 8px 9px; min-height: 36px; font-size: 11px; }
 }
+
+
+/* Member transaction history */
+.history-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:var(--paper)}
+.history-status{margin:0;color:var(--muted);font-size:11px;line-height:1.6}
+.history-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:0 0 16px}
+.history-summary-card{display:flex;flex-direction:column;gap:8px;padding:16px}
+.history-summary-card span{font-size:10px;color:var(--muted);font-weight:700}
+.history-summary-card strong{font:800 clamp(18px,2vw,24px)/1.2 Manrope,sans-serif;color:var(--navy);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.history-summary-card small{font-size:9px;line-height:1.5;color:#839087}
+.history-panel{margin-top:15px}
+.history-table-wrap{width:100%;overflow-x:auto}
+.history-table{width:100%;border-collapse:collapse;min-width:480px;font-size:11px}
+.history-table th,.history-table td{padding:11px 12px;border-bottom:1px solid #e9eee9;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.history-table th:first-child,.history-table td:first-child{text-align:left}
+.history-table th{font-size:9px;letter-spacing:.04em;color:#788780;background:#f7f8f4}
+.history-table td{color:#42564d}
+.history-positive{color:#28764f!important}
+.history-negative{color:#a44a4a!important}
+.history-entry-list{display:flex;flex-direction:column}
+.history-entry{display:flex;align-items:center;gap:14px;justify-content:space-between;padding:13px 0;border-bottom:1px solid #e9eee9;min-width:0}
+.history-entry:last-child{border-bottom:0}
+.history-entry-main{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+.history-entry-main strong{font-size:11px;color:#263e33;overflow-wrap:anywhere}
+.history-entry-main small{font-size:9px;color:#788780;line-height:1.45;overflow-wrap:anywhere}
+.history-entry>strong{font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.history-status-pill{display:inline-flex;padding:5px 8px;border-radius:999px;background:#f4ead4;color:#795d27;font-size:9px;font-weight:800;text-align:center}
+@media(max-width:900px){.history-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.history-toolbar{align-items:flex-start;flex-direction:column}.history-toolbar .secondary-button{width:100%}.history-entry{align-items:flex-start;flex-wrap:wrap}.history-entry>strong{margin-left:auto}.mobile-nav{grid-template-columns:repeat(7,minmax(0,1fr))}.mobile-nav-item small{font-size:7px}}
