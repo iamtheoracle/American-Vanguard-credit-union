@@ -74,3 +74,20 @@ test('operator statement labels distinguish initiation from posting', () => {
   assert.match(operatorScript, /Weekly Account Summary/);
   assert.match(operatorScript, /Monthly Account Statement Summary/);
 });
+
+test('daily, weekly and monthly summaries are sourced from ledger debit and credit entries', () => {
+  assert.match(operatorRoutes, /date_trunc\('day', le\.created_at\)/);
+  assert.match(operatorRoutes, /sum\(le\.amount_cents\) FILTER \(WHERE le\.direction = 'credit'\)/);
+  assert.match(operatorRoutes, /sum\(le\.amount_cents\) FILTER \(WHERE le\.direction = 'debit'\)/);
+  assert.match(operatorRoutes, /"netLedgerActivityCents"/);
+  assert.match(operatorScript, /Daily ledger summary/);
+  assert.match(operatorScript, /Ledger-based credits, debits and net activity/);
+});
+
+test('history API paginates transaction and ledger rows without silent truncation', () => {
+  assert.match(operatorRoutes, /LIMIT \$4 OFFSET \$5/);
+  assert.match(operatorRoutes, /transactionPage: \{ offset: transactionOffset, limit: pageSize, hasMore:/);
+  assert.match(operatorRoutes, /ledgerPage: \{ offset: ledgerOffset, limit: pageSize, hasMore:/);
+  assert.match(operatorScript, /data-history-page/);
+  assert.match(operatorScript, /pageSize:'100'/);
+});
