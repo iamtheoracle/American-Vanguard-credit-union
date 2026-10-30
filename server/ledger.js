@@ -8,12 +8,16 @@ import { POLICY } from './policy.js';
  */
 
 export async function loadAccountsForUpdate(client, ids) {
-  const { rows } = await client.query(
-    'SELECT * FROM accounts WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE', [ids]);
-  const byId = new Map(rows.map(r => [r.id, r]));
-  for (const id of ids) if (!byId.has(id)) throw Object.assign(new Error('Account not found'), { status: 404 });
-  for (const row of rows) {
-    if (row.status !== 'open') throw Object.assign(new Error(`Account ${row.suffix} is not open`), { status: 400 });
+  // Lock one row at a time in a canonical order. ORDER BY on a SELECT FOR UPDATE
+  // does not guarantee the executor acquires row locks in sorted order.
+  const byId = new Map();
+  for (const id of [...new Set(ids)].sort()) {
+    const { rows } = await client.query('SELECT * FROM accounts WHERE id = $1 FOR UPDATE', [id]);
+    if (!rows[0]) throw Object.assign(new Error('Account not found'), { status: 404 });
+    if (rows[0].status !== 'open') {
+      throw Object.assign(new Error(`Account ${rows[0].suffix} is not open`), { status: 400 });
+    }
+    byId.set(id, rows[0]);
   }
   return byId;
 }
