@@ -9,7 +9,7 @@ import {
 import { rateLimiter, clientKey, validEmail, validPassword, PASSWORD_MIN, COOKIE_MEMBER, COOKIE_OPERATOR } from './util.js';
 import { submitMemberTransfer, submitMemberDeposit, freezeCard, testCardPurchase,
   createSupportCase, lookupIdempotent } from './services-member.js';
-import { runChat, renderReply, activeProvider } from './ai/index.js';
+import { runChat, renderReply, activeProvider, streamChatReply } from './ai/index.js';
 import { submitMemberTransfer as svcTransfer } from './services-member.js';
 import { notifyMember, queueMemberNotification, queueOperationsEmail } from './notifications.js';
 import { recalculateMemberTier } from './membership-tiers.js';
@@ -834,6 +834,36 @@ router.post('/ai/chat', memberAuth, async (req, res, next) => {
     res.json({ taskId: task.id, status: rendered.status, message: rendered.message,
       toolCalls: rendered.toolCalls || [], provider: completion.provider || activeProvider(), understanding: completion.understanding || null });
   } catch (error) { next(error); }
+});
+
+router.post('/ai/chat/stream', memberAuth, async (req, res, next) => {
+  if (!aiLimiter(clientKey(req))) return res.status(429).json({ error: 'Too many assistant messages. Try again shortly.' });
+  const message = String(req.body?.message || '').trim().slice(0, 4000);
+  if (!message) return res.status(400).json({ error: 'Message cannot be empty' });
+  res.status(200);
+  res.set({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.flushHeaders?.();
+  try {
+    res.write(`event: start\\ndata: ${JSON.stringify({ provider: activeProvider(), mode: 'text_only' })}\\n\\n`);
+    for await (const chunk of streamChatReply({ message, provider: activeProvider() })) {
+      if (res.destroyed) break;
+      res.write(`event: delta\\ndata: ${JSON.stringify({ text: chunk.delta, provider: chunk.provider })}\\n\\n`);
+    }
+    if (!res.destroyed) {
+      res.write('event: done\\ndata: {}\\n\\n');
+      res.end();
+    }
+  } catch (error) {
+    if (!res.destroyed) {
+      res.write(`event: error\\ndata: ${JSON.stringify({ error: 'Streaming is temporarily unavailable. Your message was not executed.' })}\\n\\n`);
+      res.end();
+    }
+  }
 });
 
 router.get('/ai/memory', memberAuth, async (req, res, next) => {
