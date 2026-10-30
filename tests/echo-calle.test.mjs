@@ -8,6 +8,8 @@ const preflight = {
   notDoNotCall: true,
   withinCallingWindow: true,
   callerIdApproved: true,
+  recordingDisclosureApproved: true,
+  retentionApproved: true,
   complianceApproved: true
 };
 
