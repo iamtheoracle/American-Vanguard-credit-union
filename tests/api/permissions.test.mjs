@@ -31,8 +31,8 @@ test('operator tiers are enforced on the server, not the UI', async t => {
   // Reversals are super-admin only.
   const accounts = await getAccounts(env.base, (await loginMember(env.base)).cookie);
   const list = await api(env.base, '/api/transactions', { cookie: (await loginMember(env.base)).cookie });
-  const posted = list.data.transactions.find(t => t.status === 'posted');
-  assert.ok(posted, 'expected a seeded posted transaction');
+  const posted = list.data.transactions.find(t => t.type === 'deposit' && t.status === 'posted');
+  assert.ok(posted, 'expected a seeded posted one-sided deposit');
   const reverseMgr = await api(env.base, `/api/operator/transactions/${posted.id}/reverse`, {
     method: 'POST', cookie: managerCookie, body: { reason: 'test' }
   });
@@ -40,7 +40,7 @@ test('operator tiers are enforced on the server, not the UI', async t => {
   const reverseAdmin = await api(env.base, `/api/operator/transactions/${posted.id}/reverse`, {
     method: 'POST', cookie: adminCookie, body: { reason: 'test reversal' }
   });
-  assert.equal(reverseAdmin.status, 200);
+  assert.equal(reverseAdmin.status, 200, JSON.stringify(reverseAdmin.data));
 
   // Member session cannot reach operator endpoints (direct API attempt).
   const memberCookie = (await loginMember(env.base)).cookie;

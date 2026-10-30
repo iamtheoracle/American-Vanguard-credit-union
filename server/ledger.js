@@ -8,12 +8,16 @@ import { POLICY } from './policy.js';
  */
 
 export async function loadAccountsForUpdate(client, ids) {
-  const { rows } = await client.query(
-    'SELECT * FROM accounts WHERE id = ANY($1::uuid[]) FOR UPDATE', [ids]);
-  const byId = new Map(rows.map(r => [r.id, r]));
-  for (const id of ids) if (!byId.has(id)) throw Object.assign(new Error('Account not found'), { status: 404 });
-  for (const row of rows) {
-    if (row.status !== 'open') throw Object.assign(new Error(`Account ${row.suffix} is not open`), { status: 400 });
+  // Lock one row at a time in a canonical order. ORDER BY on a SELECT FOR UPDATE
+  // does not guarantee the executor acquires row locks in sorted order.
+  const byId = new Map();
+  for (const id of [...new Set(ids)].sort()) {
+    const { rows } = await client.query('SELECT * FROM accounts WHERE id = $1 FOR UPDATE', [id]);
+    if (!rows[0]) throw Object.assign(new Error('Account not found'), { status: 404 });
+    if (rows[0].status !== 'open') {
+      throw Object.assign(new Error(`Account ${rows[0].suffix} is not open`), { status: 400 });
+    }
+    byId.set(id, rows[0]);
   }
   return byId;
 }
@@ -38,6 +42,9 @@ async function postEntry(client, accountId, direction, amountCents, balanceAfter
  * transactionId must exist with status 'pending_approval' or 'pending_review'.
  */
 export async function postTwoSided(client, { transactionId, fromAccountId, toAccountId, amountCents, memo }) {
+  if (fromAccountId && toAccountId && fromAccountId === toAccountId) {
+    throw new LedgerError('Source and destination accounts must be different', 400, 'invalid_destination');
+  }
   const normalizedAmountCents = Number(amountCents);
   if (!validAmountCents(normalizedAmountCents, { maxCents: POLICY.SINGLE_TRANSFER_MAX_CENTS })) {
     throw new LedgerError('Amount outside permitted range');
@@ -86,8 +93,10 @@ export async function reverseTransaction(client, transactionId, { actor, reason 
   if (original.status !== 'posted') throw new LedgerError('Only posted transactions can be reversed', 400);
   const reversal = await createTransaction(client, {
     type: 'reversal',
-    fromAccountId: original.to_account_id || original.from_account_id,
-    toAccountId: original.from_account_id || original.to_account_id,
+    // Swap the original sides exactly. A one-sided deposit reverses as a debit
+    // from the member account to the system side; it must not target itself.
+    fromAccountId: original.to_account_id,
+    toAccountId: original.from_account_id,
     amountCents: original.amount_cents,
     status: 'pending_approval',
     memo: `Reversal of ${original.reference}: ${reason}`,

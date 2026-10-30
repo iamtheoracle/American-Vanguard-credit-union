@@ -1,7 +1,7 @@
 import { query, withTx, audit } from './db.js';
 import { POLICY } from './policy.js';
 import { createTransactionApproval } from './approvals.js';
-import { postTwoSided, createTransaction, LedgerError } from './ledger.js';
+import { postTwoSided, createTransaction, loadAccountsForUpdate, LedgerError } from './ledger.js';
 import { validAmountCents } from './util.js';
 import { queueMemberNotification } from './notifications.js';
 import { cardIssuerAdapter, paymentsAdapter, outbound } from './integrations/index.js';
@@ -96,6 +96,10 @@ export async function submitMemberTransfer({ member, body, idempotencyKey, aiCon
 
   const needsApproval = amountCents > POLICY.TRANSFER_APPROVAL_LIMIT_CENTS;
   const result = await withTx(async client => {
+    // Acquire both account locks before inserting the transaction row. Its
+    // foreign keys take key-share locks; inserting first can deadlock when
+    // opposite-direction transfers then upgrade those locks concurrently.
+    await loadAccountsForUpdate(client, [from.id, body.toAccountId]);
     const status = needsApproval ? 'pending_approval' : 'posted';
     const tx = await createTransaction(client, {
       type: 'transfer', fromAccountId: from.id, toAccountId: body.toAccountId,
