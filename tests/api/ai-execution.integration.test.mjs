@@ -193,7 +193,7 @@ test('AI transfer step-up requires password re-authentication and binds exact ap
   const good = await api(env.base, `/api/ai/approvals/${approvalId}/confirm`, {
     method: 'POST', cookie, body: { password: MEMBER_PASSWORD }
   });
-  assert.equal(good.status, 200);
+  assert.equal(good.status, 200, `step-up response: ${JSON.stringify(good.data)}`);
   assert.equal(good.data.approvalId, approvalId);
   assert.ok(good.data.confirmedAt);
   const stored = await query(
