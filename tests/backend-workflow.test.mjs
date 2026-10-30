@@ -94,3 +94,55 @@ test('backend requires Identity roles and prevents operators from reviewing thei
   assert.ok(source.includes("nextStatus = external.has(row.type) ? 'approved-awaiting-provider'"));
   assert.ok(!source.includes("nextStatus = 'settled'"));
 });
+
+
+test('member history returns only the signed-in member 365-day ledger and monthly totals', async () => {
+  const calls = [];
+  const database = {
+    sql: async (parts, ...values) => {
+      const query = parts.join(' ? ');
+      calls.push({ query, values });
+      if (query.includes('FROM avcu_workflow_requests r') && query.includes('COALESCE')) {
+        return [{
+          id:'wire-request-1',type:'wire-transfer',source_account:'draft',destination_account:null,
+          recipient:'Receiving institution',destination_details:'Secure details on file',currency:'USD',
+          amount_cents:2500,purpose:'Birthday gift',status:'approved-awaiting-provider',
+          assigned_team:'Payments Operations',assigned_role:'Wire Operator',operator_note:'',
+          provider_state:'not-connected',recipient_verified:false,created_at:'2026-10-01T12:00:00.000Z',
+          updated_at:'2026-10-01T12:00:00.000Z',audit:[]
+        }];
+      }
+      if (query.includes('FROM avcu_account_ledger l') && query.includes('JOIN avcu_workflow_requests')) {
+        return [{
+          id:1,request_id:'posted-transfer-1',account_type:'primary',direction:'credit',
+          amount_cents:'1250',created_at:'2026-09-15T10:30:00.000Z',request_type:'internal-transfer',
+          purpose:'Move savings',recipient:'',currency:'USD'
+        }];
+      }
+      if (query.includes('FROM avcu_account_ledger l') && query.includes('SUM(')) {
+        return [{month_key:'2026-09',credits_cents:'1250',debits_cents:'1250',entry_count:2}];
+      }
+      if (query.includes('FROM avcu_workflow_requests r') && query.includes('SUM(')) {
+        return [{month_key:'2026-10',wire_request_cents:'2500',gift_wire_request_cents:'2500',bill_request_cents:'0',request_count:1}];
+      }
+      return [];
+    }
+  };
+  const response = await handleWorkflowRequest(new Request('https://avcu.example/api/workflow?scope=history'), {
+    getUser: async () => ({ id:'member-private-1', roles:['member'] }),
+    getDatabase: () => database
+  });
+  assert.equal(response.status,200);
+  const data = await response.json();
+  assert.equal(data.period_days,365);
+  assert.equal(data.requests[0].id,'wire-request-1');
+  assert.equal(data.ledger[0].amount_cents,1250);
+  assert.equal(data.monthly[0].credits_cents,1250);
+  assert.equal(data.monthly_requests[0].gift_wire_request_cents,2500);
+  const ledgerQuery = calls.find(call => call.query.includes('FROM avcu_account_ledger l') && call.query.includes('JOIN avcu_workflow_requests'));
+  const memberRequestsQuery = calls.find(call => call.query.includes('FROM avcu_workflow_requests r') && call.query.includes('COALESCE'));
+  assert.ok(ledgerQuery.values.includes('member-private-1'), 'ledger must be scoped to the authenticated member');
+  assert.ok(memberRequestsQuery.values.includes('member-private-1'), 'requests must be scoped to the authenticated member');
+  assert.ok(ledgerQuery.query.includes("interval '365 days'"));
+  assert.ok(memberRequestsQuery.query.includes("interval '365 days'"));
+});
