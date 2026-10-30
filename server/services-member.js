@@ -256,22 +256,44 @@ export async function testCardPurchase({ member, body }) {
   }
 }
 
-export async function createSupportCase({ member, subject, body }) {
+export async function createSupportCase({ member, subject, body, idempotencyKey = null }) {
   const cleanSubject = String(subject || '').trim().slice(0, 120);
   if (cleanSubject.length < 3) throw new LedgerError('Provide a short subject', 400, 'invalid_subject');
+  if (idempotencyKey && (typeof idempotencyKey !== 'string' || idempotencyKey.length < 12 || idempotencyKey.length > 200)) {
+    throw new LedgerError('Invalid support case idempotency key', 400, 'invalid_idempotency_key');
+  }
   const result = await withTx(async client => {
-    const { rows } = await client.query(
-      `INSERT INTO support_cases (member_id, subject) VALUES ($1,$2) RETURNING *`, [member.id, cleanSubject]);
+    if (idempotencyKey) {
+      const prior = await client.query(
+        'SELECT * FROM support_cases WHERE member_id = $1 AND idempotency_key = $2 FOR UPDATE',
+        [member.id, idempotencyKey]);
+      if (prior.rows[0]) return prior.rows[0];
+    }
+    const inserted = await client.query(
+      `INSERT INTO support_cases (member_id, subject, idempotency_key)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (member_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+       DO NOTHING RETURNING *`,
+      [member.id, cleanSubject, idempotencyKey]);
+    const created = inserted.rows[0];
+    if (!created && idempotencyKey) {
+      const prior = await client.query(
+        'SELECT * FROM support_cases WHERE member_id = $1 AND idempotency_key = $2 FOR UPDATE',
+        [member.id, idempotencyKey]);
+      return prior.rows[0];
+    }
+    if (!created) throw new LedgerError('Support case could not be created', 500, 'case_create_failed');
     if (body) {
       await client.query(
         `INSERT INTO case_messages (case_id, author_type, author_id, body) VALUES ($1,'member',$2,$3)`,
-        [rows[0].id, member.id, String(body).slice(0, 2000)]);
+        [created.id, member.id, String(body).slice(0, 2000)]);
     }
     await audit(client, {
       actorType: 'member', actorId: member.id, action: 'case.opened',
-      entityType: 'support_case', entityId: rows[0].id
+      entityType: 'support_case', entityId: created.id,
+      metadata: { idempotent: Boolean(idempotencyKey) }
     });
-    return rows[0];
+    return created;
   });
   return result;
 }
