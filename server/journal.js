@@ -35,11 +35,12 @@ function normalizePostings(postings) {
   });
 }
 
-function requestDigest(type, description, postings) {
+function requestDigest(type, description, sourceSystem, sourceEventId, postings) {
   return createHash('sha256').update(JSON.stringify({
-    type, description: description || null,
-    postings: postings.map(({ financialAccountId, direction, amountMinor }) =>
-      ({ financialAccountId, direction, amountMinor }))
+    type, description: description || null, sourceSystem: sourceSystem || null,
+    sourceEventId: sourceEventId || null,
+    postings: postings.map(({ financialAccountId, direction, amountMinor, memo }) =>
+      ({ financialAccountId, direction, amountMinor, memo }))
   })).digest('hex');
 }
 
@@ -63,7 +64,7 @@ export async function postJournalTransaction(client, {
     throw new JournalError('Invalid journal actor type');
   }
   const normalized = normalizePostings(postings);
-  const digest = requestDigest(transactionType, description, normalized);
+  const digest = requestDigest(transactionType, description, sourceSystem, sourceEventId, normalized);
 
   const existing = await client.query(
     `SELECT id, reference, status, request_hash
@@ -103,9 +104,19 @@ export async function postJournalTransaction(client, {
       (reference, transaction_type, status, idempotency_key, request_hash,
        source_system, source_event_id, description, created_by_type, created_by)
      VALUES ($1,$2,'draft',$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT (idempotency_key) DO NOTHING
      RETURNING id, reference, status, request_hash`,
     [newReference(), transactionType, idempotencyKey, digest,
       sourceSystem || null, sourceEventId || null, description || null, createdByType, createdBy]);
+  if (!created[0]) {
+    const raced = await client.query(
+      `SELECT id, reference, status, request_hash FROM journal_transactions WHERE idempotency_key = $1`,
+      [idempotencyKey]);
+    if (!raced.rowCount || raced.rows[0].request_hash !== digest) {
+      throw new JournalError('Idempotency key was concurrently used for a different journal request', 409, 'idempotency_conflict');
+    }
+    return { transaction: raced.rows[0], replayed: true };
+  }
   const transaction = created[0];
 
   for (const posting of normalized) {
