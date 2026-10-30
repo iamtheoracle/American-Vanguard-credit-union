@@ -76,7 +76,7 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
 
     const page = (value, fallback) => {
       if (value == null || value === '') return fallback;
-      if (!/^\\d+$/.test(String(value))) return null;
+      if (!/^\d+$/.test(String(value))) return null;
       const parsed = Number(value);
       return Number.isSafeInteger(parsed) && parsed <= 1000000000 ? parsed : null;
     };
