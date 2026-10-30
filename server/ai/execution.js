@@ -8,6 +8,14 @@ const ACTION_POLICY = Object.freeze({
   'transfer.proposal.create': { risk: 'high', memberStatus: 'verified', approvalRequired: true }
 });
 
+function stableSerialize(value) {
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export class AiExecutionError extends Error {
   constructor(message, code, status = 403) {
     super(message); this.name = 'AiExecutionError'; this.code = code; this.status = status;
@@ -30,7 +38,7 @@ export async function executeAiAction({ member, action, idempotencyKey, request,
   if (policy.memberStatus === 'verified' && member.status !== 'verified') {
     throw new AiExecutionError('Membership verification is required for this action', 'ai_member_not_verified', 403);
   }
-  const requestHash = createHash('sha256').update(JSON.stringify(request ?? null)).digest('hex');
+  const requestHash = createHash('sha256').update(stableSerialize(request ?? null)).digest('hex');
   return withTx(async client => {
     await client.query(
       `INSERT INTO ai_execution_idempotency (member_id, idempotency_key, action, request_hash, status)
