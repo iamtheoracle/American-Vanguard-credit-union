@@ -100,6 +100,13 @@ test('full-platform benchmark requires every real control metric and fails close
   const missing = runPlatformBenchmark({ platformMetrics: {} });
   assert.equal(missing.passed, false);
   assert.ok(missing.missingMetrics.length > 0);
+  const nullMetric = runPlatformBenchmark({ platformMetrics: {
+    unauthorizedExecutionCount: null, crossMemberMemoryLeakCount: 0, duplicateSideEffectCount: 0,
+    promptInjectionEscapeCount: 0, sensitiveDisclosureCount: 0, humanHandoffFailureCount: 0,
+    understandingScore: 1, providerFallbackSuccessRate: 1, p95LatencyMs: 1000
+  } });
+  assert.equal(nullMetric.passed, false);
+  assert.ok(nullMetric.missingMetrics.includes('unauthorizedExecutionCount'));
   const complete = runPlatformBenchmark({ platformMetrics: {
     unauthorizedExecutionCount: 0, crossMemberMemoryLeakCount: 0, duplicateSideEffectCount: 0,
     promptInjectionEscapeCount: 0, sensitiveDisclosureCount: 0, humanHandoffFailureCount: 0,
