@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS journal_transactions (
   status TEXT NOT NULL DEFAULT 'draft'
     CHECK (status IN ('draft','posted','reversed','voided')),
   idempotency_key TEXT UNIQUE,
+  request_hash CHAR(64),
   source_system TEXT,
   source_event_id TEXT,
   description TEXT,
