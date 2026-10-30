@@ -67,7 +67,9 @@ export async function decideApproval({ approvalId, operator, action, reason }) {
 
   const result = await withTx(async client => {
     const { rows } = await client.query(
-      `SELECT a.*, t.type AS txn_type, t.amount_cents AS txn_amount, t.id AS txn_id
+      `SELECT a.*, t.type AS txn_type, t.amount_cents AS txn_amount, t.id AS txn_id,
+              t.memo AS txn_memo, t.payee AS txn_payee, t.reference AS txn_reference,
+              t.from_account_id AS txn_from_account_id, t.to_account_id AS txn_to_account_id
        FROM approvals a LEFT JOIN transactions t ON t.id = a.transaction_id
        WHERE a.id = $1 FOR UPDATE OF a`, [approvalId]);
     const approval = rows[0];
