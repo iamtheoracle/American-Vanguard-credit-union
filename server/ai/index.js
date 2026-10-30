@@ -4,6 +4,7 @@ import { POLICY } from '../policy.js';
 import { validAmountCents } from '../util.js';
 import { generateText } from './gateway.js';
 import { understandMessage } from './understanding.js';
+import { executeAiAction } from './execution.js';
 
 /**
  * Provider-independent AI layer.
@@ -77,11 +78,19 @@ const TOOLS = {
       if (from.balance_cents < args.amountCents) throw new Error('Insufficient available funds');
       if (ctx.member.status !== 'verified') throw new Error('Membership is pending verification');
       // Proposal only: money moves through the standard approval-limited pipeline.
-      const result = await ctx.submitTransfer({
-        fromAccountId: from.id, toAccountId: to.id,
-        amountCents: args.amountCents, memo: 'Requested via AI assistant'
+      const result = await executeAiAction({
+        member: ctx.member, action: 'transfer.proposal.create',
+        idempotencyKey: ctx.idempotencyKey('transfer'), request: args,
+        execute: async client => {
+          const submitted = await ctx.submitTransfer({
+            fromAccountId: from.id, toAccountId: to.id,
+            amountCents: args.amountCents, memo: 'Requested via AI assistant'
+          }, client);
+          return { proposalCreated: true, reference: submitted.transaction?.reference || submitted.reference,
+            status: submitted.status, approvalId: submitted.approvalId || null };
+        }
       });
-      return { proposalCreated: true, reference: result.reference, status: result.status };
+      return result.result;
     }
   },
   create_support_case: {
@@ -92,7 +101,17 @@ const TOOLS = {
       }
       return { subject: input.subject.trim().slice(0, 120), body: String(input.body || '').trim().slice(0, 2000) };
     },
-    exec: async (ctx, args) => ctx.createSupportCase(args)
+    exec: async (ctx, args) => {
+      const result = await executeAiAction({
+        member: ctx.member, action: 'support.case.create',
+        idempotencyKey: ctx.idempotencyKey('support-case'), request: args,
+        execute: async client => {
+          const created = await ctx.createSupportCase(args, client);
+          return { caseId: created.id };
+        }
+      });
+      return result.result;
+    }
   }
 };
 export const TOOL_NAMES = Object.keys(TOOLS);
@@ -188,7 +207,8 @@ export async function runChat({ member, message, history, hooks }) {
   const hooksCtx = {
     member,
     submitTransfer: hooks.submitTransfer,
-    createSupportCase: hooks.createSupportCase
+    createSupportCase: hooks.createSupportCase,
+    idempotencyKey: hooks.idempotencyKey
   };
   try {
     let completion;
