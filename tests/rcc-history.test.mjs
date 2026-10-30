@@ -54,12 +54,17 @@ test('operator history defaults to the requested complete reporting period', () 
   assert.match(operatorHtml, /value="2026-10-31"/);
 });
 
-test('monthly aggregation uses account membership EXISTS and avoids join multiplication', () => {
-  const monthlyStart = operatorRoutes.indexOf("date_trunc('month'");
+test('transaction membership filtering avoids duplicate rows and ledger summaries use member-owned accounts', () => {
+  const transactionStart = operatorRoutes.indexOf('SELECT t.id, t.reference');
+  const dailyStart = operatorRoutes.indexOf("date_trunc('day', le.created_at)");
+  const transactionQuery = operatorRoutes.slice(transactionStart, dailyStart);
+  assert.match(transactionQuery, /WHERE EXISTS/);
+  assert.doesNotMatch(transactionQuery, /JOIN accounts a ON a\.id = t\.from_account_id OR a\.id = t\.to_account_id/);
+  const monthlyStart = operatorRoutes.indexOf("date_trunc('month', le.created_at)");
   const monthlyEnd = operatorRoutes.indexOf('query(`SELECT\n                (SELECT max(t.created_at)', monthlyStart);
   const monthly = operatorRoutes.slice(monthlyStart, monthlyEnd);
-  assert.match(monthly, /WHERE EXISTS/);
-  assert.doesNotMatch(monthly, /JOIN accounts a ON a\.id = t\.from_account_id OR a\.id = t\.to_account_id/);
+  assert.match(monthly, /JOIN accounts a ON a\.id = le\.account_id/);
+  assert.match(monthly, /a\.member_id = \$1/);
 });
 
 test('history API and operator UI preserve exact cent values', () => {
@@ -70,7 +75,7 @@ test('history API and operator UI preserve exact cent values', () => {
 });
 
 test('operator statement labels distinguish initiation from posting', () => {
-  assert.match(operatorScript, /Initiation time is not proof of settlement or posting/);
+  assert.match(operatorScript, /Initiation is not proof of settlement or posting/);
   assert.match(operatorScript, /Weekly Account Summary/);
   assert.match(operatorScript, /Monthly Account Statement Summary/);
 });
