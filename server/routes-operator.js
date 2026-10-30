@@ -74,7 +74,11 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
     const member = memberResult.rows[0];
     if (!member) return res.status(404).json({ error: 'Member account not found' });
 
-    const [accountResult, transactionResult, ledgerResult, weeklyResult, monthlyResult, lastResult] = await Promise.all([
+    const page = value => Number.isInteger(Number(value)) && Number(value) >= 0 ? Number(value) : 0;
+    const transactionOffset = page(req.query.transactionOffset);
+    const ledgerOffset = page(req.query.ledgerOffset);
+    const pageSize = Math.min(250, Math.max(1, page(req.query.pageSize) || 100));
+    const [accountResult, transactionResult, ledgerResult, dailyResult, weeklyResult, monthlyResult, lastResult] = await Promise.all([
       query(`SELECT id, kind, name, suffix, status, balance_cents AS "currentBalanceCents",
                     created_at AS "openedAt"
              FROM accounts WHERE member_id = $1 ORDER BY created_at, id`, [member.id]),
@@ -91,7 +95,8 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
              )
                AND t.created_at >= $2::date
                AND t.created_at < ($3::date + INTERVAL '1 day')
-             ORDER BY t.created_at DESC, t.id DESC LIMIT 5000`, [member.id, from, to]),
+             ORDER BY t.created_at DESC, t.id DESC LIMIT $4 OFFSET $5`,
+        [member.id, from, to, pageSize + 1, transactionOffset]),
       query(`SELECT le.id, le.account_id AS "accountId", a.name AS "accountName",
                     le.transaction_id AS "transactionId", t.reference, le.direction,
                     le.amount_cents AS "amountCents", le.balance_after_cents AS "balanceAfterCents",
@@ -100,35 +105,44 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
              LEFT JOIN transactions t ON t.id = le.transaction_id
              WHERE a.member_id = $1 AND le.created_at >= $2::date
                AND le.created_at < ($3::date + INTERVAL '1 day')
-             ORDER BY le.created_at DESC, le.id DESC LIMIT 10000`, [member.id, from, to]),
-      query(`SELECT date_trunc('week', t.created_at)::date AS period,
-                    count(*)::int AS "transactionCount",
-                    sum(t.amount_cents)::bigint AS "grossAmountCents"
-             FROM transactions t
-             WHERE EXISTS (
-               SELECT 1 FROM accounts owned
-               WHERE owned.member_id = $1
-                 AND owned.id IN (t.from_account_id, t.to_account_id)
-             )
-               AND t.created_at >= $2::date
-               AND t.created_at < ($3::date + INTERVAL '1 day')
+             ORDER BY le.created_at DESC, le.id DESC LIMIT $4 OFFSET $5`,
+        [member.id, from, to, pageSize + 1, ledgerOffset]),
+      query(`SELECT date_trunc('day', le.created_at)::date AS period,
+                    count(*)::int AS "ledgerEntryCount",
+                    count(*) FILTER (WHERE le.direction = 'credit')::int AS "creditEntryCount",
+                    count(*) FILTER (WHERE le.direction = 'debit')::int AS "debitEntryCount",
+                    COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'credit'), 0)::bigint AS "creditsCents",
+                    COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'debit'), 0)::bigint AS "debitsCents",
+                    (COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'credit'), 0) -
+                     COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'debit'), 0))::bigint AS "netLedgerActivityCents"
+             FROM ledger_entries le JOIN accounts a ON a.id = le.account_id
+             WHERE a.member_id = $1 AND le.created_at >= $2::date
+               AND le.created_at < ($3::date + INTERVAL '1 day')
+             GROUP BY 1 ORDER BY 1 DESC`, [member.id, from, to]),
+      query(`SELECT date_trunc('week', le.created_at)::date AS period,
+                    count(*)::int AS "ledgerEntryCount",
+                    COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'credit'), 0)::bigint AS "creditsCents",
+                    COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'debit'), 0)::bigint AS "debitsCents",
+                    (COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'credit'), 0) -
+                     COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'debit'), 0))::bigint AS "netLedgerActivityCents"
+             FROM ledger_entries le JOIN accounts a ON a.id = le.account_id
+             WHERE a.member_id = $1 AND le.created_at >= $2::date
+               AND le.created_at < ($3::date + INTERVAL '1 day')
              GROUP BY 1 ORDER BY 1`, [member.id, from, to]),
-      query(`SELECT date_trunc('month', t.created_at)::date AS period,
-                    count(*)::int AS "transactionCount",
-                    sum(t.amount_cents)::bigint AS "grossAmountCents"
-             FROM transactions t
-             WHERE EXISTS (
-               SELECT 1 FROM accounts owned
-               WHERE owned.member_id = $1
-                 AND owned.id IN (t.from_account_id, t.to_account_id)
-             )
-               AND t.created_at >= $2::date
-               AND t.created_at < ($3::date + INTERVAL '1 day')
+      query(`SELECT date_trunc('month', le.created_at)::date AS period,
+                    count(*)::int AS "ledgerEntryCount",
+                    COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'credit'), 0)::bigint AS "creditsCents",
+                    COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'debit'), 0)::bigint AS "debitsCents",
+                    (COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'credit'), 0) -
+                     COALESCE(sum(le.amount_cents) FILTER (WHERE le.direction = 'debit'), 0))::bigint AS "netLedgerActivityCents"
+             FROM ledger_entries le JOIN accounts a ON a.id = le.account_id
+             WHERE a.member_id = $1 AND le.created_at >= $2::date
+               AND le.created_at < ($3::date + INTERVAL '1 day')
              GROUP BY 1 ORDER BY 1`, [member.id, from, to]),
       query(`SELECT
                 (SELECT max(t.created_at) FROM transactions t
-                 JOIN accounts a ON a.id = t.from_account_id OR a.id = t.to_account_id
-                 WHERE a.member_id = $1) AS "lastTransactionAt",
+                 WHERE EXISTS (SELECT 1 FROM accounts a WHERE a.member_id = $1
+                   AND a.id IN (t.from_account_id, t.to_account_id))) AS "lastTransactionAt",
                 (SELECT max(le.created_at) FROM ledger_entries le
                  JOIN accounts a ON a.id = le.account_id WHERE a.member_id = $1) AS "lastLedgerActivityAt",
                 (SELECT t.created_at FROM transactions t
@@ -151,8 +165,11 @@ router.get('/operator/members/:memberId/account-history', requireOperatorRole('m
       range: { from, to },
       member,
       accounts: exactMoney(accountResult.rows),
-      transactions: exactMoney(transactionResult.rows),
-      ledgerEntries: exactMoney(ledgerResult.rows),
+      transactions: exactMoney(transactionResult.rows.slice(0, pageSize)),
+      transactionPage: { offset: transactionOffset, limit: pageSize, hasMore: transactionResult.rows.length > pageSize, nextOffset: transactionOffset + pageSize },
+      ledgerEntries: exactMoney(ledgerResult.rows.slice(0, pageSize)),
+      ledgerPage: { offset: ledgerOffset, limit: pageSize, hasMore: ledgerResult.rows.length > pageSize, nextOffset: ledgerOffset + pageSize },
+      daily: exactMoney(dailyResult.rows),
       weekly: exactMoney(weeklyResult.rows),
       monthly: exactMoney(monthlyResult.rows),
       lastRecordedActivity: lastResult.rows[0] || null,
