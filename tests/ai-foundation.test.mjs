@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { understandMessage, scoreUnderstanding } from '../server/ai/understanding.js';
 import { runUnderstandingBenchmark, evaluatePlatformGates, runPlatformBenchmark } from '../server/ai/benchmark.js';
-import { generateText, generateWithTools, modelGatewayStatus } from '../server/ai/gateway.js';
+import { generateText, generateWithTools, streamText, modelGatewayStatus } from '../server/ai/gateway.js';
 import { rememberMemberFact } from '../server/ai/memory.js';
 import { executeAiAction } from '../server/ai/execution.js';
 import { transferRequiresApproval } from '../server/services-member.js';
@@ -169,5 +169,61 @@ test('gateway rejects malformed provider tool arguments instead of passing them 
   } finally {
     globalThis.fetch = oldFetch;
     if (oldKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldKey;
+  }
+});
+
+
+test('gateway streams provider-native text deltas over SSE', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldKey = process.env.OPENAI_API_KEY;
+  try {
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    globalThis.fetch = async (_url, options) => {
+      const request = JSON.parse(options.body);
+      assert.equal(request.stream, true);
+      return new Response([
+        'data: {"choices":[{"delta":{"content":"Hello "}}]}\\n\\n',
+        'data: {"choices":[{"delta":{"content":"member."}}]}\\n\\n',
+        'data: [DONE]\\n\\n'
+      ].join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    };
+    const chunks = [];
+    for await (const chunk of streamText({
+      provider: 'openai', fallbacks: [],
+      messages: [{ role: 'user', content: 'Say hello' }]
+    })) chunks.push(chunk.delta);
+    assert.deepEqual(chunks, ['Hello ', 'member.']);
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = oldKey;
+  }
+});
+
+test('streaming fallback occurs only before the first token', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldOpenAi = process.env.OPENAI_API_KEY;
+  const oldGroq = process.env.GROQ_API_KEY;
+  try {
+    process.env.OPENAI_API_KEY = 'test-openai-key';
+    process.env.GROQ_API_KEY = 'test-groq-key';
+    let calls = 0;
+    globalThis.fetch = async url => {
+      calls += 1;
+      if (String(url).includes('api.openai.com')) return new Response('unavailable', { status: 503 });
+      return new Response('data: {"choices":[{"delta":{"content":"fallback"}}]}\\n\\ndata: [DONE]\\n\\n', {
+        status: 200, headers: { 'Content-Type': 'text/event-stream' }
+      });
+    };
+    const chunks = [];
+    for await (const chunk of streamText({
+      provider: 'openai', fallbacks: ['groq'],
+      messages: [{ role: 'user', content: 'Say fallback' }]
+    })) chunks.push(chunk.delta);
+    assert.deepEqual(chunks, ['fallback']);
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldOpenAi === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = oldOpenAi;
+    if (oldGroq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = oldGroq;
   }
 });
