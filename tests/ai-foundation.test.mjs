@@ -181,11 +181,13 @@ test('gateway streams provider-native text deltas over SSE', async () => {
     globalThis.fetch = async (_url, options) => {
       const request = JSON.parse(options.body);
       assert.equal(request.stream, true);
-      return new Response([
-        'data: {"choices":[{"delta":{"content":"Hello "}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":"member."}}]}\n\n',
-        'data: [DONE]\n\n'
-      ].join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+      const sep = String.fromCharCode(10, 10);
+      const body = [
+        'data: {"choices":[{"delta":{"content":"Hello "}}]}',
+        'data: {"choices":[{"delta":{"content":"member."}}]}',
+        'data: [DONE]'
+      ].join(sep) + sep;
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
     };
     const chunks = [];
     for await (const chunk of streamText({
@@ -210,7 +212,8 @@ test('streaming fallback occurs only before the first token', async () => {
     globalThis.fetch = async url => {
       calls += 1;
       if (String(url).includes('api.openai.com')) return new Response('unavailable', { status: 503 });
-      return new Response('data: {"choices":[{"delta":{"content":"fallback"}}]}\n\ndata: [DONE]\n\n', {
+      const sep = String.fromCharCode(10, 10);
+      return new Response(['data: {"choices":[{"delta":{"content":"fallback"}}]}', 'data: [DONE]', ''].join(sep), {
         status: 200, headers: { 'Content-Type': 'text/event-stream' }
       });
     };
@@ -227,7 +230,6 @@ test('streaming fallback occurs only before the first token', async () => {
     if (oldGroq === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = oldGroq;
   }
 });
-
 
 test('Anthropic native tool-use blocks normalize into validated tool-call records', async () => {
   const oldFetch = globalThis.fetch;
