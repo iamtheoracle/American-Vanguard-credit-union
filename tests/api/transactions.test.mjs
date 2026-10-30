@@ -162,3 +162,29 @@ test('card freeze controls sandbox authorizations', async t => {
   assert.equal(byStatus.completed, (beforeCounts.completed || 0) + 1);
   assert.equal(byStatus.rejected, (beforeCounts.rejected || 0) + 1);
 });
+
+test('opposite-direction concurrent transfers lock accounts in deterministic order', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { cookie } = await loginMember(env.base);
+  const accounts = await getAccounts(env.base, cookie);
+  const draft = accounts.find(a => a.name === 'Share Draft');
+  const primary = accounts.find(a => a.name === 'Primary Share');
+  const amountCents = 1250;
+
+  const [forward, reverse] = await Promise.all([
+    api(env.base, '/api/transfers', {
+      method: 'POST', cookie, headers: { 'Idempotency-Key': 'opposite-forward-001' },
+      body: { kind: 'share', fromAccountId: draft.id, toAccountId: primary.id, amountCents }
+    }),
+    api(env.base, '/api/transfers', {
+      method: 'POST', cookie, headers: { 'Idempotency-Key': 'opposite-reverse-001' },
+      body: { kind: 'share', fromAccountId: primary.id, toAccountId: draft.id, amountCents }
+    })
+  ]);
+  assert.equal(forward.status, 201);
+  assert.equal(reverse.status, 201);
+  const after = await getAccounts(env.base, cookie);
+  assert.equal(after.find(a => a.id === draft.id).balanceCents, draft.balanceCents);
+  assert.equal(after.find(a => a.id === primary.id).balanceCents, primary.balanceCents);
+});
