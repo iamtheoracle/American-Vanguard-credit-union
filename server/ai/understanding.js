@@ -35,7 +35,7 @@ export function understandMessage(input) {
   confidence = Math.max(0.1, Math.min(0.95, confidence));
   const risk = /\b(transfer|send|move|pay|withdraw|wire|ach|close account|change phone)\b/i.test(text)
     ? 'high' : /\b(balance|account|card|fraud|dispute)\b/i.test(text) ? 'medium' : 'low';
-  const clarificationRequired = (action && missingTarget) || (negated && action) || confidence < 0.62;
+  const clarificationRequired = (action && missingTarget) || (negated && action) || confidence < 0.58;
   const clarificationQuestion = missingTarget
     ? 'Which account should this come from, and where should it go?'
     : negated && action ? 'Just to confirm, are you asking me not to proceed with that action?'
