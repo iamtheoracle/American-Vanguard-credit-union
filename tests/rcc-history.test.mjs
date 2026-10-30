@@ -11,7 +11,7 @@ const [html, script, styles] = await Promise.all([
 test('RCC reporting identity and period are present', () => {
   assert.match(html, /RCC — Road Construction Company/);
   assert.match(html, /Kessler Lazaroski/);
-  assert.match(html, /Mar 25, 2018 — Oct 28, 2026/);
+  assert.match(html, /Mar 25, 2018 — Apr 20, 2026/);
 });
 
 test('all supplied annual closing snapshots are preserved in cents', () => {
