@@ -64,3 +64,11 @@ The backend foundation is now in the branch, but the shared queue is not product
 - The receipt is generated from the authenticated member's returned request record, displays its current workflow status, and formats the submitted timestamp in Brooklyn/New York time.
 - The reference is explicitly an AVCU request reference, not a bank wire trace number. Recipient and destination fields are labelled as member-entered. Fees and total debit are not invented when they are absent from the request record.
 - Print / Save as PDF uses the browser print dialog. The receipt clearly states that it is not a bank-issued wire confirmation or proof of receiving-bank credit.
+
+
+## Plaid bank connection
+
+- The member Overview includes a Plaid Link connection panel for external US checking and savings accounts when signed in.
+- The server creates Link tokens with Plaid Auth, exchanges public tokens server-side, encrypts access tokens with AES-256-GCM, and stores masked account metadata per member.
+- Configure `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, and `PLAID_TOKEN_ENCRYPTION_KEY` as Netlify server-side environment variables, then apply `netlify/database/migrations/202610300001_create_avcu_plaid_items.sql`. See [Plaid integration setup](docs/plaid-integration.md).
+- This connection does not create AVCU deposit accounts, supply AVCU balances, initiate ACH, or send domestic wires. Production use requires Plaid approval and institution authorization.
