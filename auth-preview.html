@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102b4e">
+  <meta name="description" content="AVCU secure member access preview.">
+  <title>Welcome back | American Vanguard Credit Union</title>
+  <style>
+    :root{color-scheme:light;--navy:#102b4e;--navy2:#173b61;--ivory:#fbfaf6;--gold:#b89a58;--green:#315d4b;--ink:#172536;--muted:#697586;--line:#d9dde2;--white:#fff}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--ivory);color:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+    .preview{background:#fff5df;color:#73551d;text-align:center;padding:9px 16px;font-size:12px;font-weight:700;letter-spacing:.04em;border-bottom:1px solid #ead9b4}
+    .shell{width:min(1120px,100%);margin:auto;padding:32px clamp(22px,6vw,76px) 48px;display:grid;grid-template-columns:1fr 1fr;gap:clamp(40px,8vw,100px);align-items:center;flex:1}
+    .brand{display:inline-flex;align-items:center;gap:13px;text-decoration:none;color:var(--navy);margin-bottom:clamp(54px,10vh,100px)}
+    .brand-mark{width:48px;height:48px;border:1.5px solid var(--gold);border-radius:14px;display:grid;place-items:center;background:#fff}
+    .brand-mark svg{width:29px;height:29px}.brand-name{font-family:Georgia,serif;font-size:15px;letter-spacing:.11em;font-weight:700}.brand-name small{display:block;font-family:inherit;font-size:10px;letter-spacing:.2em;color:var(--green);margin-top:4px}
+    h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;letter-spacing:-.045em;font-size:clamp(42px,5.2vw,66px);line-height:1.05;color:var(--navy);margin:0 0 18px}
+    .lead{font-size:17px;line-height:1.65;color:var(--muted);max-width:440px;margin:0 0 30px}
+    .trust{display:flex;gap:12px;align-items:center;color:var(--green);font-size:13px;font-weight:650}.trust svg{width:18px;height:18px}
+    .form-card{background:#fff;border:1px solid #e6e4dd;border-radius:24px;padding:clamp(24px,4vw,40px);box-shadow:0 18px 55px #102b4e0b}
+    .form-title{font-family:Georgia,serif;color:var(--navy);font-size:25px;margin:0 0 8px}.form-sub{color:var(--muted);font-size:14px;line-height:1.5;margin:0 0 25px}
+    .google,.primary,.secondary{width:100%;min-height:56px;border-radius:13px;font:600 15px inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px}
+    .google{background:#fff;border:1px solid var(--line);color:#26364a}.google svg{width:20px;height:20px}
+    .divider{display:flex;align-items:center;gap:14px;color:#9aa3ae;font-size:12px;letter-spacing:.12em;margin:23px 0}.divider:before,.divider:after{content:"";height:1px;background:#e5e7eb;flex:1}
+    label{display:block;font-size:13px;font-weight:650;color:#344255;margin:0 0 9px}
+    input{width:100%;height:54px;border:1px solid #cfd5dc;border-radius:12px;padding:0 15px;font:16px inherit;color:var(--ink);background:#fff;outline:none}
+    input:focus{border-color:var(--gold);box-shadow:0 0 0 3px #b89a5826}
+    .field{margin-bottom:16px}.primary{border:0;background:var(--navy);color:#fff;margin-top:6px;transition:background .2s}.primary:hover{background:var(--navy2)}
+    .secondary{background:#fff;border:1px solid var(--line);color:var(--navy);margin-top:12px}
+    .text-action{border:0;background:none;color:var(--green);font:600 13px inherit;cursor:pointer;padding:12px 0}
+    .password-row{display:flex;justify-content:space-between;align-items:center;margin-top:2px}.hidden{display:none!important}
+    .foot{font-size:12px;line-height:1.55;color:#788392;text-align:center;margin:20px 0 0}.foot a{color:var(--green)}
+    .status{margin-top:15px;padding:12px 14px;background:#f5f7f5;border:1px solid #dce7df;border-radius:10px;color:#365743;font-size:13px;line-height:1.5}
+    .visual{background:linear-gradient(145deg,var(--navy),#173d5d);border-radius:28px;min-height:510px;padding:42px;position:relative;overflow:hidden;color:#fff;display:flex;flex-direction:column;justify-content:space-between}
+    .visual:before,.visual:after{content:"";position:absolute;border:1px solid #ffffff20;border-radius:50%;width:420px;height:420px;right:-140px;top:-110px}.visual:after{width:300px;height:300px;right:-80px;top:-50px}
+    .visual-kicker{position:relative;z-index:1;color:#d9c58f;font-size:11px;letter-spacing:.18em;font-weight:700}.visual-quote{position:relative;z-index:1;max-width:360px;font:36px/1.2 Georgia,serif}.visual-quote span{color:#d9c58f}.visual-note{position:relative;z-index:1;color:#d2dce5;font-size:13px;line-height:1.6;max-width:320px}
+    .locale-row{display:flex;justify-content:flex-end;align-items:center;gap:9px;margin:-8px 0 22px}.locale-row label{margin:0;color:var(--muted);font-size:12px}.locale-row select{border:1px solid var(--line);border-radius:9px;padding:8px 28px 8px 10px;background:#fff;color:var(--navy);font:600 12px inherit}\n    footer{padding:18px 24px;text-align:center;color:#8993a0;font-size:11px}
+    @media(max-width:800px){.shell{grid-template-columns:1fr;max-width:560px;gap:26px;padding-top:26px}.brand{margin-bottom:48px}.visual{display:none}h1{font-size:48px}.lead{font-size:16px}.form-card{padding:25px 21px}.preview{font-size:11px}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <div class="preview">DESIGN PREVIEW · MEMBER AUTHENTICATION IS NOT CONNECTED</div>
+  <main class="shell">
+    <section>
+      <a class="brand" href="./index.html" aria-label="American Vanguard Credit Union home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 44 44" fill="none"><path d="M22 3 39 10v12c0 9-7 15-17 19C12 37 5 31 5 22V10L22 3Z" stroke="#102b4e" stroke-width="2.2"/><path d="m12 26 7-13 5 10 3-6 6 12H11l1-3Z" fill="#315d4b"/><path d="M10 31h24" stroke="#b89a58" stroke-width="2"/></svg></span>
+        <span class="brand-name">AMERICAN VANGUARD<small>CREDIT UNION</small></span>
+      </a>
+      <h1>Welcome back.</h1>
+      <p class="lead">A clearer way to stay connected to your money. Sign in to access your AVCU member space.</p>
+      <div class="trust"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 20 6v5c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-3Z" stroke="currentColor" stroke-width="1.7"/><path d="m8.5 12 2.2 2.2 4.8-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg> Member-first security and privacy</div>
+    </section>
+    <section class="form-card" aria-labelledby="signin-title">\n      <div class="locale-row"><label for="locale">Language</label><select id="locale" aria-label="Language"><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option></select></div>
+      <h2 class="form-title" id="signin-title">Sign in to AVCU</h2>
+      <p class="form-sub">Use your registered email address to continue.</p>
+      <button class="google" id="google" type="button"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h11a9.4 9.4 0 0 1-4.1 6.2v5h6.6c3.9-3.6 6.1-8.8 6.1-14.9Z"/><path fill="#34A853" d="M24 44c5.5 0 10.1-1.8 13.5-4.8l-6.6-5c-1.8 1.2-4.1 2-6.9 2-5.3 0-9.8-3.6-11.4-8.4H5.8v5.2A20 20 0 0 0 24 44Z"/><path fill="#4A90E2" d="M12.6 27.8a12 12 0 0 1 0-7.6V15H5.8a20 20 0 0 0 0 18l6.8-5.2Z"/><path fill="#EA4335" d="M24 11.8c3 0 5.7 1 7.8 3.1l5.8-5.8C34.1 5.8 29.5 4 24 4A20 20 0 0 0 5.8 15l6.8 5.2c1.6-4.8 6.1-8.4 11.4-8.4Z"/></svg> Continue with Google</button>
+      <div class="divider">OR</div>
+      <form id="email-form" novalidate>
+        <div class="field"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="username" placeholder="you@organization.com" required></div>
+        <div class="field hidden" id="password-field"><div class="password-row"><label for="password">Password</label><button class="text-action" id="forgot" type="button">Forgot password?</button></div><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password"></div>
+        <button class="primary" id="continue" type="submit">Continue with email <span aria-hidden="true">→</span></button>
+      </form>
+      <button class="secondary" id="password-mode" type="button">Sign in with password</button>
+      <div class="status" id="status" role="status" aria-live="polite">This is a visual preview. No credentials are sent or stored. Real sign-in and password recovery will activate after AVCU's Supabase project and email service are configured.</div>
+      <p class="foot">Need access? Contact your AVCU administrator to ask about membership.</p>
+    </section>
+    <aside class="visual" aria-label="AVCU member promise">
+      <div class="visual-kicker">AMERICAN VANGUARD · MEMBER SPACE</div>
+      <div class="visual-quote">Your financial life, <span>with clarity.</span></div>
+      <div class="visual-note">A calm, secure place for the things that matter. Built around members, trust and thoughtful service.</div>
+    </aside>
+  </main>
+  <footer>© American Vanguard Credit Union · Authentication preview only · No real account access</footer>
+  <script>
+    (() => {
+      const form=document.querySelector('#email-form'), email=document.querySelector('#email'), password=document.querySelector('#password'), passwordField=document.querySelector('#password-field'), continueButton=document.querySelector('#continue'), status=document.querySelector('#status');
+      const showPassword=()=>{passwordField.classList.remove('hidden');password.required=true;continueButton.innerHTML='Sign in securely <span aria-hidden="true">→</span>';password.focus()};
+      document.querySelector('#password-mode').addEventListener('click',showPassword);
+      document.querySelector('#forgot').addEventListener('click',()=>{status.textContent='Password recovery is not active in this preview. Once Supabase and verified email delivery are configured, this link will send a secure, time-limited recovery email.'});
+      document.querySelector('#google').addEventListener('click',()=>{status.textContent='Google sign-in is shown as a design option. It is not connected to an identity provider yet.'});
+      form.addEventListener('submit',event=>{event.preventDefault();if(!email.checkValidity()){email.reportValidity();return}if(passwordField.classList.contains('hidden')){showPassword();return}status.textContent='Preview only: authentication is not connected. Your email and password have not been sent or saved.';password.value=''});
+    })();
+  </script>
+  <script>
+  (()=>{const el=document.querySelector('#locale');const copy={
+  en:['Welcome back.','A clearer way to stay connected to your money. Sign in to access your AVCU member space.','Member-first security and privacy','Sign in to AVCU','Use your registered email address to continue.','Continue with Google','OR','Email address','Password','Forgot password?','Continue with email','Sign in with password','This is a visual preview. No credentials are sent or stored. Real sign-in and password recovery will activate after AVCU’s Supabase project and email service are configured.','Need access? Contact your AVCU administrator to ask about membership.','© American Vanguard Credit Union · Authentication preview only · No real account access'],
+  de:['Willkommen zurück.','Behalten Sie den Überblick über Ihr Geld. Melden Sie sich an, um Ihren AVCU-Mitgliederbereich zu öffnen.','Sicherheit und Datenschutz stehen an erster Stelle','Bei AVCU anmelden','Geben Sie Ihre registrierte E-Mail-Adresse ein.','Weiter mit Google','ODER','E-Mail-Adresse','Passwort','Passwort vergessen?','Mit E-Mail fortfahren','Mit Passwort anmelden','Dies ist eine Designvorschau. Es werden keine Zugangsdaten gesendet oder gespeichert. Die Anmeldung und Passwortwiederherstellung werden nach Einrichtung von Supabase und E-Mail-Versand aktiviert.','Sie benötigen Zugang? Wenden Sie sich an Ihre AVCU-Administration.','© American Vanguard Credit Union · Nur Anmeldevorschau · Kein echter Kontozugriff'],
+  es:['Te damos la bienvenida.','Mantén tus finanzas bajo control. Inicia sesión para acceder a tu espacio de miembro de AVCU.','Seguridad y privacidad centradas en los miembros','Iniciar sesión en AVCU','Usa tu correo electrónico registrado para continuar.','Continuar con Google','O','Correo electrónico','Contraseña','¿Olvidaste tu contraseña?','Continuar con correo','Iniciar sesión con contraseña','Esta es una vista previa del diseño. No se envían ni guardan credenciales. El inicio de sesión y la recuperación se activarán cuando se configuren Supabase y el servicio de correo.','¿Necesitas acceso? Contacta con el administrador de AVCU.','© American Vanguard Credit Union · Vista previa de acceso · Sin acceso a cuentas reales']};
+  const apply=()=>{const t=copy[el.value]||copy.en;document.documentElement.lang=el.value;document.querySelector('h1').textContent=t[0];document.querySelector('.lead').textContent=t[1];document.querySelector('.trust').lastChild.textContent=' '+t[2];document.querySelector('#signin-title').textContent=t[3];document.querySelector('.form-sub').textContent=t[4];document.querySelector('#google').lastChild.textContent=' '+t[5];document.querySelector('.divider').textContent=t[6];document.querySelector('label[for=email]').textContent=t[7];document.querySelector('label[for=password]').textContent=t[8];document.querySelector('#forgot').textContent=t[9];document.querySelector('#continue').innerHTML=t[10]+' <span aria-hidden="true">→</span>';document.querySelector('#password-mode').textContent=t[11];document.querySelector('#status').textContent=t[12];document.querySelector('.foot').textContent=t[13];document.querySelector('footer').textContent=t[14]};let saved='en';try{saved=localStorage.getItem('avcu-auth-locale')||'en'}catch{}el.value=copy[saved]?saved:'en';apply();el.addEventListener('change',()=>{try{localStorage.setItem('avcu-auth-locale',el.value)}catch{}apply()})})();
+  </script>
+</body>
+</html>

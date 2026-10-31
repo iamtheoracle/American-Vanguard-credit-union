@@ -22,3 +22,21 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 
 .empty-state{padding:16px 0;color:#7f8d9b;font-size:11px;line-height:1.6}.danger-button{border-color:#edcaca;background:#fff6f6;color:#a53f46}.danger-button:hover{border-color:#dca3a5;background:#fff0f0}
+
+/* Accessible address autocomplete */
+.address-panel{grid-column:1/-1}
+.address-toggle{display:flex;align-items:flex-start;gap:11px;padding:13px;background:#f5f8fa;border:1px solid #e4ebf0;border-radius:10px;cursor:pointer}
+.address-toggle input{width:18px;height:18px;min-height:18px;flex:0 0 18px;margin:2px 0 0;accent-color:#285b86}
+.address-toggle span{display:flex;flex-direction:column;gap:4px}
+.address-toggle strong{font-size:11px;color:#34495e}
+.address-toggle small,.address-help{font-size:10px;line-height:1.5;color:#7c8b99}
+.address-field{position:relative;margin-top:16px}
+.address-field>label,.address-fields-grid label{display:block;margin:0 0 7px;color:#4b5e71;font-size:10px;font-weight:800}
+.address-fields-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:13px}
+.address-suggestions{position:absolute;z-index:20;top:72px;left:0;right:0;max-height:260px;overflow:auto;padding:5px;background:#fff;border:1px solid #dce4eb;border-radius:10px;box-shadow:0 12px 28px rgba(24,48,72,.14)}
+.address-suggestion{display:flex;flex-direction:column;gap:4px;width:100%;padding:11px;text-align:left;border:0;border-radius:7px;background:#fff;color:#263b50;cursor:pointer}
+.address-suggestion:hover,.address-suggestion[aria-selected=true]{background:#edf3f8}
+.address-suggestion strong{font-size:11px}.address-suggestion small{font-size:9px;color:#7d8b99}
+.address-help{min-height:16px;margin:7px 0 0}
+.address-panel .fine-print{margin-top:13px}
+@media(max-width:620px){.address-fields-grid{grid-template-columns:1fr}}

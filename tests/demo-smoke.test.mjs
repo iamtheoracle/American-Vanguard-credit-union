@@ -48,10 +48,12 @@ test('member-facing navigation supports desktop and mobile layouts', () => {
 });
 
 test('the demo does not connect to external services or use remote fonts', () => {
-  assert.doesNotMatch(js, /\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource/);
+  assert.match(js, /fetch\(\`\$\{endpoint\}\?q=/);
+  assert.match(js, /credentials: 'same-origin'/);
+  assert.ok(!js.includes('https://') && !js.includes('http://'));
   assert.doesNotMatch(html, /https?:\/\//);
   assert.doesNotMatch(css, /@import\s+url\s*\(/i);
-  assert.match(netlify, /connect-src 'none'/);
+  assert.match(netlify, /connect-src 'self'/);
   assert.match(netlify, /publish = "\."/);
 });
 
@@ -61,3 +63,10 @@ test('user-entered strings are escaped before HTML rendering', () => {
   assert.match(js, /escapeHtml\(merchant\)/);
   assert.match(js, /escapeHtml\(payee\)/);
 });
+  assert.ok(js.includes('encodeURIComponent(query)'));
+  assert.ok(js.includes("credentials: 'same-origin'"));
+  assert.ok(js.includes('encodeURIComponent(query)'));
+  assert.ok(js.includes("credentials: 'same-origin'"));
+  assert.ok(js.includes('encodeURIComponent(query)'));
+  assert.ok(js.includes("credentials: 'same-origin'"));
+  assert.ok(!js.includes('https://') && !js.includes('http://'));

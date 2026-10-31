@@ -394,6 +394,124 @@
     });
   }
 
+  const addressLookup = {
+    timer: null,
+    controller: null,
+    activeIndex: -1,
+    items: []
+  };
+
+  function renderAddressSuggestions(items) {
+    const list = $('#address-suggestions');
+    list.replaceChildren();
+    addressLookup.items = items;
+    addressLookup.activeIndex = -1;
+    items.forEach((item, index) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'address-suggestion';
+      option.role = 'option';
+      option.id = `address-option-${index}`;
+      option.setAttribute('aria-selected', 'false');
+      const title = document.createElement('strong');
+      title.textContent = item.label;
+      const detail = document.createElement('small');
+      detail.textContent = [item.city, item.region, item.postal_code, item.country_code].filter(Boolean).join(', ');
+      option.append(title, detail);
+      option.addEventListener('pointerdown', event => event.preventDefault());
+      option.addEventListener('click', () => selectAddressSuggestion(item));
+      list.append(option);
+    });
+    list.classList.toggle('hidden', items.length === 0);
+    $('#address-search').setAttribute('aria-expanded', String(items.length > 0));
+  }
+
+  function selectAddressSuggestion(item) {
+    $('#address-search').value = item.street || item.label || '';
+    $('#address-city').value = item.city || '';
+    $('#address-region').value = item.region || '';
+    $('#address-postal').value = item.postal_code || '';
+    $('#address-country').value = String(item.country_code || '').toUpperCase();
+    renderAddressSuggestions([]);
+    $('#address-help').textContent = 'Address selected. Check every field before continuing.';
+    $('#address-search').focus();
+  }
+
+  async function requestAddressSuggestions(query) {
+    const endpoint = document.querySelector('meta[name="avcu-address-suggestions-endpoint"]')?.content;
+    if (!endpoint || !endpoint.startsWith('/') || endpoint.startsWith('//')) {
+      $('#address-help').textContent = 'Address lookup is not configured yet. You can enter the address manually.';
+      return;
+    }
+    if (addressLookup.controller) addressLookup.controller.abort();
+    addressLookup.controller = new AbortController();
+    $('#address-help').textContent = 'Looking for matching addresses…';
+    try {
+      const response = await fetch(`${endpoint}?q=${encodeURIComponent(query)}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+        signal: addressLookup.controller.signal
+      });
+      if (!response.ok) throw new Error('Address service unavailable');
+      const payload = await response.json();
+      const items = Array.isArray(payload.suggestions) ? payload.suggestions.slice(0, 6) : [];
+      const valid = items.filter(item => item && typeof item.label === 'string' && item.label.length <= 240);
+      renderAddressSuggestions(valid);
+      $('#address-help').textContent = valid.length ? 'Choose an address to fill the fields, then verify it.' : 'No matches found. You can enter the address manually.';
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      renderAddressSuggestions([]);
+      $('#address-help').textContent = 'Address suggestions are unavailable. You can enter the address manually.';
+    }
+  }
+
+  function bindAddressAutocomplete() {
+    const enabled = $('#address-suggestions-enabled');
+    const search = $('#address-search');
+    if (!enabled || !search) return;
+    enabled.addEventListener('change', () => {
+      search.disabled = false;
+      if (!enabled.checked) {
+        clearTimeout(addressLookup.timer);
+        if (addressLookup.controller) addressLookup.controller.abort();
+        renderAddressSuggestions([]);
+        $('#address-help').textContent = 'Suggestions are off. Enter an address manually in the fields below.';
+      } else {
+        $('#address-help').textContent = 'Type at least 3 characters. Suggestions appear only when the trusted service is configured.';
+        search.focus();
+      }
+    });
+    search.addEventListener('input', () => {
+      const query = search.value.trim();
+      clearTimeout(addressLookup.timer);
+      if (addressLookup.controller) addressLookup.controller.abort();
+      if (!enabled.checked || query.length < 3) {
+        renderAddressSuggestions([]);
+        $('#address-help').textContent = enabled.checked ? 'Type at least 3 characters to search.' : 'Turn on suggestions to use address lookup.';
+        return;
+      }
+      addressLookup.timer = setTimeout(() => requestAddressSuggestions(query), 300);
+    });
+    search.addEventListener('keydown', event => {
+      const options = $$('.address-suggestion', $('#address-suggestions'));
+      if (!options.length) return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        addressLookup.activeIndex = (addressLookup.activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+        options.forEach((option, index) => {
+          option.setAttribute('aria-selected', String(index === addressLookup.activeIndex));
+        });
+        search.setAttribute('aria-activedescendant', options[addressLookup.activeIndex].id);
+      } else if (event.key === 'Enter' && addressLookup.activeIndex >= 0) {
+        event.preventDefault();
+        addressLookup.items[addressLookup.activeIndex] && selectAddressSuggestion(addressLookup.items[addressLookup.activeIndex]);
+      } else if (event.key === 'Escape') {
+        renderAddressSuggestions([]);
+      }
+    });
+  }
+
   function bindEvents() {
     document.addEventListener('click', event => {
       const nav = event.target.closest('[data-nav]');
