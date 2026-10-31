@@ -63,3 +63,6 @@ test('user-entered strings are escaped before HTML rendering', () => {
   assert.match(js, /escapeHtml\(merchant\)/);
   assert.match(js, /escapeHtml\(payee\)/);
 });
+  assert.ok(js.includes('encodeURIComponent(query)'));
+  assert.ok(js.includes("credentials: 'same-origin'"));
+  assert.ok(!js.includes('https://') && !js.includes('http://'));
