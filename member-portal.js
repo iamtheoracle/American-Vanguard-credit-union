@@ -58,6 +58,7 @@
       if (accounts.some(a => a.id === previous)) select.value = previous;
     }
     await loadActivity();
+    await loadProductApplications();
     $('notifications-list').innerHTML = notificationData.notifications?.length ? notificationData.notifications.map(n => `<article class="notification-row ${n.read ? '' : 'unread'}"><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.body)}</p><small>${escapeHtml(new Date(n.createdAt).toLocaleString())}</small></article>`).join('') : '<p class="muted">No notifications yet.</p>';
   }
   let activityOffset = 0;
@@ -170,6 +171,69 @@
       const result = await api('/transfers',{method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({kind:'share',fromAccountId:$('transfer-from').value,toAccountId:$('transfer-to').value,amountCents,memo:$('transfer-memo').value})});
       showMessage('dashboard-message',result.message || 'Transfer submitted.'); await refresh();
     } catch(error) { showMessage('dashboard-message',error.message,true); }
+  });
+  const PRODUCT_LABELS = {
+    debit_card: 'AVCU Debit Card', credit_card: 'AVCU Premium Credit Card', business_card: 'AVCU Business Card',
+    personal_loan: 'Personal Loan', home_loan: 'Home Loan', auto_loan: 'Auto Loan',
+    education_loan: 'Education Loan', business_loan: 'Business Loan'
+  };
+  function openProductForm(type) {
+    const loan = type.endsWith('_loan');
+    $('product-type').value = type;
+    $('product-form-title').textContent = PRODUCT_LABELS[type] || 'Product request';
+    $('product-form-description').textContent = loan
+      ? 'Submit a loan request for an initial review. This is not a credit decision or funding commitment.'
+      : 'Submit a card request for eligibility and issuer review. A request does not mean a card has been issued.';
+    $('product-amount').closest('label').hidden = !loan;
+    $('product-amount').hidden = !loan;
+    $('product-application-form').classList.remove('hidden');
+    showMessage('product-application-message', '');
+    $('product-application-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  document.querySelectorAll('.product-pick,.loan-pick').forEach(button =>
+    button.addEventListener('click', () => openProductForm(button.dataset.product)));
+  $('product-form-close').addEventListener('click', () => $('product-application-form').classList.add('hidden'));
+  async function loadProductApplications() {
+    try {
+      const data = await api('/product-applications');
+      const items = data.applications || [];
+      $('product-applications-list').innerHTML = items.length ? items.map(item => {
+        const amount = item.requestedAmountCents == null ? '' : ' · ' + dollars(item.requestedAmountCents);
+        return '<article class="application-row"><div><strong>' + escapeHtml(PRODUCT_LABELS[item.productType] || item.productType) + '</strong><small>' + escapeHtml(new Date(item.createdAt).toLocaleString()) + amount + '</small></div><span class="status-pill">' + escapeHtml(String(item.status).replaceAll('_',' ')) + '</span></article>';
+      }).join('') : '<p class="muted small">You have not submitted any card or loan requests.</p>';
+    } catch (error) { $('product-applications-list').innerHTML = '<p class="muted small">Product requests could not be loaded. ' + escapeHtml(error.message) + '</p>'; }
+  }
+  $('product-application-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const productType = $('product-type').value;
+    const loan = productType.endsWith('_loan');
+    const amount = Number($('product-amount').value);
+    const purpose = $('product-purpose').value.trim();
+    if (purpose.length < 10) return showMessage('product-application-message','Please provide at least 10 characters.',true);
+    if (loan && (!Number.isFinite(amount) || amount < 100 || amount > 10000000)) return showMessage('product-application-message','Enter a loan amount between $100 and $10,000,000.',true);
+    showMessage('product-application-message','Submitting request…');
+    try {
+      const result = await post('/product-applications', { productType, purpose, requestedAmountCents: loan ? Math.round(amount * 100) : null });
+      showMessage('product-application-message', result.message || 'Request recorded.');
+      $('product-purpose').value = ''; $('product-amount').value = '';
+      await loadProductApplications();
+    } catch (error) { showMessage('product-application-message',error.message,true); }
+  });
+  $('refresh-product-applications').addEventListener('click', loadProductApplications);
+  $('credit-estimator').addEventListener('submit', event => {
+    event.preventDefault();
+    const payment = Number($('credit-payment').value);
+    const utilization = Number($('credit-utilization').value);
+    const age = Number($('credit-age').value);
+    const mix = Number($('credit-mix').value);
+    const inquiries = Number($('credit-inquiries').value);
+    const utilizationPoints = utilization < 0 ? 12 : utilization <= 10 ? 30 : utilization <= 29 ? 26 : utilization <= 49 ? 19 : utilization <= 74 ? 11 : 4;
+    const agePoints = age === 0 ? 3 : age === 1 ? 7 : age === 3 ? 11 : age === 6 ? 13 : 15;
+    const mixPoints = mix === 0 ? 2 : mix === 1 ? 5 : mix === 2 ? 8 : 10;
+    const inquiryPoints = inquiries === 0 ? 10 : inquiries === 1 ? 8 : inquiries === 2 ? 5 : 2;
+    const score = Math.max(300, Math.min(850, Math.round(300 + payment * .35 + utilizationPoints + agePoints + mixPoints + inquiryPoints)));
+    const band = score >= 760 ? 'Strong estimated readiness' : score >= 700 ? 'Positive estimated readiness' : score >= 640 ? 'Developing estimated readiness' : 'Needs attention';
+    $('credit-result').innerHTML = '<strong>' + score + '</strong><span>' + band + ' · Educational estimate only</span>';
   });
   $('read-notifications').addEventListener('click', async () => {
     try { await post('/notifications/mark-read',{}); await refresh(); }
