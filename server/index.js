@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { close, audit } from './db.js';
 import memberRoutes from './routes-member.js';
 import operatorRoutes from './routes-operator.js';
+import kycRoutes, { handleTruliooWebhook } from './kyc.js';
 import { verifyWebhookSignature, webhookSecret, integrationHealth } from './integrations/index.js';
 import { query } from './db.js';
 import { startNotificationWorker, stopNotificationWorker } from './notifications.js';
@@ -17,11 +18,13 @@ export function createApp() {
   app.set('trust proxy', 1);
   // Webhooks must receive the exact raw bytes for HMAC verification.
   // Register the raw-body route before the general JSON parser consumes the stream.
+  app.post('/api/kyc/webhooks/trulioo', express.raw({ type: '*/*', limit: '512kb' }), (req, res, next) => handleTruliooWebhook(req, res).catch(next));
   app.use('/api/integrations/webhooks', express.raw({ type: '*/*', limit: '256kb' }), webhookHandler);
 
   app.use(express.json({ limit: '256kb' }));
 
   app.use('/api', memberRoutes);
+  app.use('/api', kycRoutes);
   app.use('/api', operatorRoutes);
 
   // Liveness is process-only: dependency outages must not trigger restart loops.
