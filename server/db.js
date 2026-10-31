@@ -13,6 +13,12 @@ function getPool() {
   return pool;
 }
 export default { get pool() { return getPool(); } };
+
+export function configurePoolForTests(testPool) {
+  if (process.env.NODE_ENV !== 'test') throw new Error('Test pool injection is disabled outside NODE_ENV=test');
+  if (!testPool || typeof testPool.connect !== 'function' || typeof testPool.query !== 'function') throw new TypeError('Invalid test pool');
+  pool = testPool;
+}
 export const query = (text, params) => getPool().query(text, params);
 
 export async function withTx(fn) {
