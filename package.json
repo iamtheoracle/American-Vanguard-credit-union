@@ -10,7 +10,7 @@
     "seed": "node server/seed.js",
     "check": "node --check app.js && node --check member-portal.js && node --check operator-portal.js && node --check server/index.js && node --check server/auth.js && node --check server/db.js && node --check server/migrate.js && node --check server/seed.js && node --check server/approvals.js && node --check server/ledger.js && node --check server/policy.js && node --check server/routes-member.js && node --check server/routes-operator.js && node --check server/services-member.js && node --check server/util.js && node --check server/notifications.js && node --check server/membership-tiers.js && node --check server/integrations/index.js && node --check server/integrations/privy.js && node --check server/ai/index.js && node --check server/team-runtime.js && node --check server/job-queue.js && node --check server/worker.js && node --check server/routes-operator.js && node --check server/repositories/auth.js && node --check server/repositories/member.js && node --check server/repositories/operator.js",
     "test": "node --test tests/demo-smoke.test.mjs tests/membership-tiers.test.mjs tests/team-runtime.test.mjs tests/job-queue.test.mjs tests/operator-roles.test.mjs tests/db-access-context.test.mjs",
-    "test:api": "node --test tests/api/*.test.mjs",
+    "test:api": "node --test --test-concurrency=1 tests/api/*.test.mjs",
     "worker": "node server/worker.js"
   },
   "engines": {
