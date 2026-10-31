@@ -150,3 +150,49 @@ export async function acknowledgeOperationsAlert({ alertId, operator }) {
     return updated.rows[0];
   });
 }
+
+
+export async function stageValidatedMigrationBatch({ sourceSystem, sourceFileName, payloadHash, validation, normalizedInput, operator }) {
+  return withTx(async client => {
+    const status = validation.exceptionCount ? 'blocked' : 'validated';
+    const inserted = await client.query(
+      `INSERT INTO migration_batches
+       (source_system, source_file_name, source_payload_sha256, created_by, status,
+        source_count, accepted_count, exception_count, source_totals, exception_summary, validated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()) RETURNING id, created_at`,
+      [sourceSystem, sourceFileName || 'authorized-export.json', payloadHash, operator.id, status,
+        validation.sourceCount, validation.acceptedCount, validation.exceptionCount,
+        JSON.stringify(validation.totals), JSON.stringify(validation.exceptions)]);
+    const batchId = inserted.rows[0].id;
+    const acceptedByRow = new Map(validation.accepted.map(item => [item.rowNumber, item]));
+    const exceptionByRow = new Map(validation.exceptions.map(item => [item.rowNumber, item]));
+    for (let index = 0; index < normalizedInput.length; index += 1) {
+      const rowNumber = index + 1, raw = normalizedInput[index];
+      const row = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+      const accepted = acceptedByRow.get(rowNumber), exception = exceptionByRow.get(rowNumber);
+      await client.query(
+        `INSERT INTO migration_staged_transactions
+         (batch_id, row_number, source_system, source_transaction_id, source_account_id,
+          occurred_at, original_timestamp, amount_minor, currency, status, description, reference,
+          validation_status, exception_code, exception_fields, raw_record)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        [batchId, rowNumber, sourceSystem,
+          typeof row.sourceTransactionId === 'string' ? row.sourceTransactionId.slice(0, 250) : null,
+          typeof row.sourceAccountId === 'string' ? row.sourceAccountId.slice(0, 250) : null,
+          accepted ? accepted.occurredAt : null,
+          typeof row.occurredAt === 'string' ? row.occurredAt.slice(0, 100) : null,
+          Number.isSafeInteger(row.amountMinor) ? row.amountMinor : null,
+          typeof row.currency === 'string' && /^[A-Z]{3}$/.test(row.currency) ? row.currency : null,
+          typeof row.status === 'string' && ['pending','posted','settled','failed','reversed'].includes(row.status) ? row.status : null,
+          typeof row.description === 'string' ? row.description.slice(0, 2000) : '',
+          typeof row.reference === 'string' ? row.reference.slice(0, 250) : null,
+          accepted ? 'accepted' : 'exception', accepted ? null : (exception?.code || 'unknown_exception'),
+          JSON.stringify(exception?.fields || []), JSON.stringify(raw ?? null)]);
+    }
+    await audit(client, { actorType: 'operator', actorId: operator.id, actorRole: operator.role,
+      action: 'migration.batch_validated', entityType: 'migration_batch', entityId: batchId,
+      metadata: { sourceSystem, payloadSha256: payloadHash, sourceCount: validation.sourceCount,
+        acceptedCount: validation.acceptedCount, exceptionCount: validation.exceptionCount, status } });
+    return { id: batchId, createdAt: inserted.rows[0].created_at, status };
+  });
+}
