@@ -6,7 +6,6 @@ const { Pool } = pg;
 const adminUrl = process.env.AVCU_TEST_ADMIN_URL || process.env.DATABASE_URL;
 if (!adminUrl) throw new Error('AVCU_TEST_ADMIN_URL or DATABASE_URL is required');
 const admin = new Pool({ connectionString: adminUrl, max: 2 });
-const app = new Pool({ connectionString: adminUrl, max: 2 });
 const schema = 'avcu_role_matrix_disposable';
 const roles = ['member', 'support', 'management', 'auditor', 'admin', 'worker', 'migration']
   .map(name => 'avcu_test_' + name);
@@ -36,7 +35,7 @@ async function asRole(role, actor, fn) {
 before(async () => {
   for (const role of roles) {
     const password = 'avcu-disposable-' + role + '-only';
-    await admin.query(`DO $ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS; END IF; END $`);
+    await admin.query(`DO $do$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role} LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS; END IF; END $do$`);
     await admin.query(`ALTER ROLE ${role} LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
   }
   await admin.query(`
@@ -106,7 +105,6 @@ before(async () => {
 });
 
 after(async () => {
-  await app.end();
   await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
   for (const role of roles) await admin.query(`DROP ROLE IF EXISTS ${role}`);
   await admin.end();
