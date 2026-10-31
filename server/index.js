@@ -6,6 +6,7 @@ import memberRoutes from './routes-member.js';
 import operatorRoutes from './routes-operator.js';
 import kycRoutes, { handleTruliooWebhook } from './kyc.js';
 import identityGovernanceRoutes from './identity-governance.js';
+import livenessRoutes from './liveness.js';
 import { verifyWebhookSignature, webhookSecret, integrationHealth } from './integrations/index.js';
 import { query } from './db.js';
 import { startNotificationWorker, stopNotificationWorker } from './notifications.js';
@@ -27,6 +28,7 @@ export function createApp() {
   app.use('/api', memberRoutes);
   app.use('/api', kycRoutes);
   app.use('/api', identityGovernanceRoutes);
+  app.use('/api', livenessRoutes);
   app.use('/api', operatorRoutes);
 
   // Liveness is process-only: dependency outages must not trigger restart loops.
