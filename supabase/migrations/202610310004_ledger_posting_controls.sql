@@ -150,7 +150,7 @@ create or replace function public.avcu_create_draft_ledger_transaction(
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   v_tx public.avcu_ledger_transactions;
   v_fingerprint text;
@@ -232,7 +232,7 @@ begin
 
   return v_tx;
 end;
-$;
+$$;
 
 create or replace function public.avcu_post_ledger_transaction(p_transaction_id uuid)
 returns public.avcu_ledger_transactions
