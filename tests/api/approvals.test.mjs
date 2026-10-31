@@ -38,7 +38,7 @@ test('high-value transfers require approval and approvals execute the posting', 
 
   const { cookie: manager } = await loginOperator(env.base, 'manager@avcu.demo');
   const approved = await api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
-    method: 'POST', cookie: managerCookie, body: { action: 'approve' }
+    method: 'POST', cookie: manager, body: { action: 'approve' }
   });
   assert.equal(approved.status, 200);
   assert.equal(approved.data.approval.status, 'approved');
@@ -177,7 +177,7 @@ test('terminal approvals reject all subsequent state transitions', async t => {
 
   const [approveAgain, escalateAgain, requestInfoAgain] = await Promise.all([
     api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
-      method: 'POST', cookie: manager, body: { action: 'approve' }
+      method: 'POST', cookie: managerCookie, body: { action: 'approve' }
     }),
     api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
       method: 'POST', cookie: managerCookie, body: { action: 'escalate', reason: 'Should not reopen' }
