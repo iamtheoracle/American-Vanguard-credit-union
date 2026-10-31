@@ -95,7 +95,9 @@ test('authentication and session lifecycle', async t => {
   const { response: login2, cookie: cookie2 } = await loginMember(env.base);
   assert.equal(login2.status, 200);
   const { query } = await import('../../server/db.js');
-  await query(`UPDATE member_sessions SET expires_at = now() - interval '1 minute'`);
+  const sessionToken = cookie2.split(';')[0].split('=').slice(1).join('=');
+  assert.ok(sessionToken);
+  await query(`UPDATE member_sessions SET expires_at = now() - interval '1 minute' WHERE token = $1`, [sessionToken]);
   const expired = await api(env.base, '/api/auth/me', { cookie: cookie2 });
   assert.equal(expired.status, 401);
 
