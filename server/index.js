@@ -7,6 +7,7 @@ import operatorRoutes from './routes-operator.js';
 import { verifyWebhookSignature, webhookSecret, integrationHealth } from './integrations/index.js';
 import { query } from './db.js';
 import { startNotificationWorker, stopNotificationWorker } from './notifications.js';
+import { registerTeams, listTeams } from './team-runtime.js';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -27,7 +28,8 @@ export function createApp() {
     try {
       await query('SELECT 1');
       const integrations = await integrationHealth();
-      res.json({ ok: true, service: 'avcu-api', time: new Date().toISOString(), integrations });
+      const teams = await listTeams();
+      res.json({ ok: true, service: 'avcu-api', time: new Date().toISOString(), integrations, teams });
     } catch (error) {
       res.status(500).json({ ok: false, error: 'Database unavailable' });
     }
@@ -87,6 +89,7 @@ async function webhookHandler(req, res) {
 
 export async function startServer({ port = process.env.PORT || 3000 } = {}) {
   await migrate();
+  await registerTeams();
   startNotificationWorker();
   const app = createApp();
   const server = app.listen(port, '0.0.0.0');
