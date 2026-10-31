@@ -1,6 +1,6 @@
 import express from 'express';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { query, audit } from './db.js';
+import { query, audit, withTx } from './db.js';
 import { memberAuth, operatorAuth, requireOperatorRole } from './auth.js';
 
 const router = express.Router();
@@ -41,32 +41,40 @@ export async function handleTruliooWebhook(req, res) {
   const transactionId = String(event.transactionId || event.transaction_id || '').slice(0, 200);
   if (!eventId || !transactionId) return res.status(400).json({ error:'Provider event identifiers are required' });
   const hash = createHash('sha256').update(raw).digest('hex');
-  const result = await query(
-    `SELECT id FROM kyc_cases WHERE provider_key='trulioo' AND provider_transaction_id=$1 LIMIT 1`,
-    [transactionId]);
-  const caseId = result.rows[0]?.id || null;
-  try {
-    await query(
+  const response = await withTx(async client => {
+    const matched = await client.query(
+      `SELECT id FROM kyc_cases WHERE provider_key='trulioo' AND provider_transaction_id=$1 LIMIT 1`,
+      [transactionId]);
+    const caseId = matched.rows[0]?.id || null;
+    const inserted = await client.query(
       `INSERT INTO kyc_provider_events(provider_key,provider_event_id,kyc_case_id,event_type,signature_verified_at,payload_hash,sanitized_payload)
-       VALUES('trulioo',$1,$2,$3,now(),$4,$5::jsonb)`,
+       VALUES('trulioo',$1,$2,$3,now(),$4,$5::jsonb)
+       ON CONFLICT(provider_key,provider_event_id) DO NOTHING RETURNING id`,
       [eventId, caseId, String(event.event?.status || event.event?.type || 'status_update').slice(0,100), hash,
        JSON.stringify({ transactionId, event: event.event || {}, errorCode: event.error?.code || null })]);
-  } catch (error) {
-    if (error.code === '23505') return res.json({ received:true, replay:true });
-    throw error;
-  }
-  if (!caseId) {
-    await query(`UPDATE kyc_provider_events SET processing_status='quarantined' WHERE provider_key='trulioo' AND provider_event_id=$1`, [eventId]);
-    return res.json({ received:true, quarantined:true });
-  }
-  const providerStatus = event.event?.status || event.event?.type || event.event?.state;
-  const outcome = normalizeOutcome(providerStatus);
-  await query('UPDATE kyc_cases SET status=$2,updated_at=now(),completed_at=CASE WHEN $2 IN (\'verified\',\'rejected\',\'expired\',\'cancelled\') THEN now() ELSE completed_at END WHERE id=$1',
-    [caseId, outcome === 'pending' ? 'provider_pending' : outcome]);
-  await query('INSERT INTO kyc_results(kyc_case_id,provider_key,outcome,reason_codes,checks_json,provider_report_ref) VALUES($1,\'trulioo\',$2,$3::jsonb,$4::jsonb,$5)',
-    [caseId, outcome, JSON.stringify([]), JSON.stringify({ status: providerStatus || 'unknown' }), null]);
-  await query(`UPDATE kyc_provider_events SET processing_status='processed' WHERE provider_key='trulioo' AND provider_event_id=$1`, [eventId]);
-  return res.json({ received:true });
+    if (!inserted.rowCount) return { received:true, replay:true };
+    if (!caseId) {
+      await client.query(`UPDATE kyc_provider_events SET processing_status='quarantined' WHERE provider_key='trulioo' AND provider_event_id=$1`, [eventId]);
+      await audit(client,{actorType:'system',action:'kyc.webhook.quarantined',entityType:'provider_event',entityId:eventId,metadata:{provider:'trulioo'}});
+      return { received:true, quarantined:true };
+    }
+    const providerStatus = event.event?.status || event.event?.type || event.event?.state;
+    const outcome = normalizeOutcome(providerStatus);
+    await client.query(
+      `UPDATE kyc_cases SET status=$2,updated_at=now(),
+       completed_at=CASE WHEN $2 IN ('verified','rejected','expired','cancelled') THEN now() ELSE completed_at END
+       WHERE id=$1`,[caseId,outcome==='pending'?'provider_pending':outcome]);
+    await client.query(
+      `INSERT INTO kyc_results(kyc_case_id,provider_key,outcome,reason_codes,checks_json,provider_report_ref)
+       VALUES($1,'trulioo',$2,$3::jsonb,$4::jsonb,$5)`,
+      [caseId,outcome,JSON.stringify([]),JSON.stringify({status:providerStatus||'unknown'}),null]);
+    await client.query(
+      `UPDATE kyc_provider_events SET processing_status='processed'
+       WHERE provider_key='trulioo' AND provider_event_id=$1`,[eventId]);
+    await audit(client,{actorType:'system',action:'kyc.webhook.processed',entityType:'kyc_case',entityId:caseId,metadata:{provider:'trulioo',eventId,outcome}});
+    return { received:true };
+  });
+  return res.json(response);
 }
 
 router.post('/kyc/cases', memberAuth, async (req,res,next) => {
