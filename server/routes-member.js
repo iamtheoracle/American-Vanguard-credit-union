@@ -1,5 +1,5 @@
 import express from 'express';
-import { query, withTx } from './db.js';
+import { query, withTx, audit } from './db.js';
 import {
   memberAuth, operatorAuth, applySessionCookie, clearAuthCookie,
   createMemberSession, createOperatorSession, destroySession, hashPassword, verifyPassword,
@@ -197,6 +197,47 @@ router.post('/deposits', memberAuth, (_req, res) => {
     error: 'Deposit requests are unavailable. No deposit was created and no funds were credited.',
     code: 'deposit_service_unavailable'
   });
+});
+
+// ---- member product applications --------------------------------------------
+const PRODUCT_TYPES = new Set([
+  'debit_card','credit_card','business_card',
+  'personal_loan','home_loan','auto_loan','education_loan','business_loan'
+]);
+router.get('/product-applications', memberAuth, async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, product_type AS "productType", requested_amount_cents AS "requestedAmountCents",
+              purpose, status, review_note AS "reviewNote", created_at AS "createdAt", updated_at AS "updatedAt"
+       FROM product_applications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`,
+      [req.member.id]);
+    res.json({ applications: rows.map(row => ({ ...row, requestedAmountCents: row.requestedAmountCents == null ? null : Number(row.requestedAmountCents) })) });
+  } catch (error) { next(error); }
+});
+router.post('/product-applications', memberAuth, async (req, res, next) => {
+  try {
+    const productType = String(req.body?.productType || '');
+    if (!PRODUCT_TYPES.has(productType)) return res.status(400).json({ error: 'Choose a supported card or loan product.' });
+    if (req.member.status !== 'verified') {
+      return res.status(403).json({ error: 'Membership verification is required before submitting a product application.', code: 'membership_verification_required' });
+    }
+    const purpose = String(req.body?.purpose || '').trim().slice(0, 500);
+    const amount = req.body?.requestedAmountCents;
+    const amountCents = amount == null || amount === '' ? null : Number(amount);
+    const loanType = productType.endsWith('_loan');
+    if (loanType && (!Number.isSafeInteger(amountCents) || amountCents < 10000 || amountCents > 1000000000)) {
+      return res.status(400).json({ error: 'Enter a requested loan amount between $100 and $10,000,000.' });
+    }
+    if (!loanType && amountCents !== null) return res.status(400).json({ error: 'A requested amount is only accepted for loan applications.' });
+    if (purpose.length < 10) return res.status(400).json({ error: 'Please provide at least 10 characters explaining your request.' });
+    const { rows } = await query(
+      `INSERT INTO product_applications (member_id, product_type, requested_amount_cents, purpose, payload)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id, product_type AS "productType", status, created_at AS "createdAt"`,
+      [req.member.id, productType, amountCents, purpose, JSON.stringify({ channel: 'member_portal' })]);
+    await audit(null, { actorType: 'member', actorId: req.member.id, action: 'product_application.submitted',
+      entityType: 'product_application', entityId: rows[0].id, metadata: { productType, requestedAmountCents: amountCents } });
+    res.status(201).json({ application: rows[0], message: 'Your request has been recorded for review. This is not a card issuance, loan approval, or funding decision.' });
+  } catch (error) { next(error); }
 });
 
 // ---- card -------------------------------------------------------------------

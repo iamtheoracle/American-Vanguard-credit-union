@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, portal, portalJs, netlify] = await Promise.all([
+const [html, portal, portalJs, netlify, homeCss, cardArt] = await Promise.all([
   readFile(new URL('../index.html', import.meta.url), 'utf8'),
   readFile(new URL('../member-portal.html', import.meta.url), 'utf8'),
   readFile(new URL('../member-portal.js', import.meta.url), 'utf8'),
   readFile(new URL('../netlify.toml', import.meta.url), 'utf8'),
+  readFile(new URL('../home.css', import.meta.url), 'utf8'),
+  readFile(new URL('../assets/avcu-card-collection.svg', import.meta.url), 'utf8'),
 ]);
 
 test('public entry page routes members and authorized staff to their separate sign-in spaces', () => {
@@ -24,12 +26,13 @@ test('public entry page does not present invented account balances or seeded mem
 });
 
 test('landing page uses self-hosted vector branding and responsive, accessible styling', () => {
-  assert.match(html, /<svg[\s\S]*?aria-hidden="true"/);
-  assert.match(html, /@media\(max-width:850px\)/);
-  assert.match(html, /prefers-reduced-motion/);
+  assert.match(html, /assets\/avcu-card-collection\.svg/);
+  assert.match(cardArt, /<svg[\s\S]*?role="img"/);
+  assert.match(homeCss, /@media\(max-width:620px\)/);
+  assert.match(homeCss, /prefers-reduced-motion/);
   assert.match(html, /Skip to content/);
-  assert.doesNotMatch(html, /https?:\/\//);
-  assert.doesNotMatch(html, /fonts\.googleapis|fonts\.gstatic/i);
+  assert.doesNotMatch(html + homeCss, /https?:\/\//);
+  assert.doesNotMatch(homeCss, /fonts\.googleapis|fonts\.gstatic/i);
   assert.match(netlify, /connect-src 'self'/);
   assert.match(netlify, /publish = "\."/);
 });

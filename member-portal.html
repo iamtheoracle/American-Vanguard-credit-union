@@ -64,6 +64,45 @@
         </section>
         <section class="panel wide"><div class="section-head"><h2>Notifications</h2><button id="read-notifications" class="text-button" type="button">Mark all read</button></div><div id="notifications-list" class="notification-list"></div></section>
       </div>
+      <section class="panel wide product-hub" id="product-applications">
+        <div class="section-head"><div><p class="eyebrow">MEMBER PRODUCT CENTRE</p><h2>Cards &amp; lending</h2><p class="muted small">Choose a product and submit a secure request. Submission is not approval, card issuance or funding.</p></div><span class="tag">MEMBER REQUESTS</span></div>
+        <div class="member-product-grid">
+          <article class="member-product"><div class="mini-card mini-card-navy"><span>AVCU</span><small>DEBIT</small><b>•••• •••• •••• 4821</b></div><h3>AVCU Debit</h3><p>Everyday purchases linked to an eligible share draft account.</p><button class="secondary product-pick" data-product="debit_card" type="button">Request debit card</button></article>
+          <article class="member-product"><div class="mini-card mini-card-green"><span>AVCU</span><small>PREMIUM CREDIT</small><b>MEMBER CREDIT</b></div><h3>Premium Credit</h3><p>Credit application subject to underwriting and partner issuer approval.</p><button class="secondary product-pick" data-product="credit_card" type="button">Request credit card</button></article>
+          <article class="member-product"><div class="mini-card mini-card-ivory"><span>AVCU</span><small>BUSINESS</small><b>BUSINESS MEMBER</b></div><h3>Business Card</h3><p>For eligible business members and authorized card users.</p><button class="secondary product-pick" data-product="business_card" type="button">Request business card</button></article>
+        </div>
+        <div class="loan-request-grid">
+          <button class="loan-pick" data-product="personal_loan" type="button"><strong>Personal loan</strong><span>Personal expenses and planned purchases →</span></button>
+          <button class="loan-pick" data-product="home_loan" type="button"><strong>Home loan</strong><span>Housing and eligible home improvements →</span></button>
+          <button class="loan-pick" data-product="auto_loan" type="button"><strong>Auto loan</strong><span>Vehicle purchase or refinancing →</span></button>
+          <button class="loan-pick" data-product="education_loan" type="button"><strong>Education loan</strong><span>Education and skills development →</span></button>
+          <button class="loan-pick" data-product="business_loan" type="button"><strong>Business loan</strong><span>Eligible business needs →</span></button>
+        </div>
+        <form id="product-application-form" class="stack product-form hidden">
+          <div class="section-head"><div><h3 id="product-form-title">Product request</h3><p id="product-form-description" class="muted small"></p></div><button id="product-form-close" class="text-button" type="button">Close</button></div>
+          <input id="product-type" type="hidden">
+          <label id="product-amount-label" for="product-amount">Requested loan amount (USD) — loans only</label><input id="product-amount" type="number" min="100" max="10000000" step="0.01" placeholder="e.g. 12000">
+          <label for="product-purpose">Tell us what you need</label><textarea id="product-purpose" rows="3" maxlength="500" minlength="10" required placeholder="Share the purpose of your request and any relevant details."></textarea>
+          <button class="primary" type="submit">Submit secure request</button>
+          <p id="product-application-message" class="notice" role="status" aria-live="polite"></p>
+        </form>
+        <div class="section-head top-gap"><h3>Your product requests</h3><button id="refresh-product-applications" class="text-button" type="button">Refresh</button></div>
+        <div id="product-applications-list" class="application-list"><p class="muted small">Sign in to view your requests.</p></div>
+      </section>
+      <section class="panel wide" id="credit-readiness">
+        <p class="eyebrow">CREDIT EDUCATION</p><h2>Credit readiness estimate</h2>
+        <p class="muted small">A transparent educational estimate based on the information you enter. This is not a FICO® or bureau score and is not used to approve or decline credit. A bureau score requires your consent and a verified bureau connection.</p>
+        <form id="credit-estimator" class="credit-estimator">
+          <label>On-time payment record <select id="credit-payment"><option value="100">Always on time</option><option value="85">Usually on time</option><option value="65">Some missed payments</option><option value="35">Frequent missed payments</option></select></label>
+          <label>Credit utilization <select id="credit-utilization"><option value="10">Below 10%</option><option value="25">10–29%</option><option value="50">30–49%</option><option value="75">50–74%</option><option value="90">75% or higher</option><option value="-1">I don't know</option></select></label>
+          <label>Credit history length <select id="credit-age"><option value="0">Under 6 months</option><option value="1">6–12 months</option><option value="3">1–3 years</option><option value="6">3–6 years</option><option value="10">Over 6 years</option></select></label>
+          <label>Credit account types <select id="credit-mix"><option value="1">One type</option><option value="2">Two types</option><option value="3">Three or more types</option><option value="0">No credit history</option></select></label>
+          <label>Recent credit applications <select id="credit-inquiries"><option value="0">None in the last 6 months</option><option value="1">One</option><option value="2">Two</option><option value="4">Three or more</option></select></label>
+          <button class="primary" type="submit">Calculate estimate</button>
+        </form>
+        <div id="credit-result" class="credit-result" aria-live="polite"><strong>—</strong><span>Complete the questions to see an educational estimate.</span></div>
+        <p class="form-note">This simplified model is illustrative only, does not access a credit bureau, does not verify the answers, and must not be used for underwriting or pricing.</p>
+      </section>
       <p class="disclaimer">Online services and account records depend on the configured system and your authorization. Deposit-taking, payment-network access, card processing, and financial-institution status are not established by this software. Do not use this portal to represent that real funds are held or moved.</p>
     </section>
   </main>

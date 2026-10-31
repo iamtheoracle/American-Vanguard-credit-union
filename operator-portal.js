@@ -54,7 +54,7 @@
       $('member-history').innerHTML='<h3>'+esc(m.fullName)+'</h3><p class="muted">'+esc(m.memberNumber)+' · '+esc(m.email)+' · '+esc(m.membershipStatus)+' · Member since '+date(m.memberSince)+'</p>'+
         '<h3>Accounts and current recorded balances</h3>'+table(['Account','Status','Opened','Current recorded balance'],accounts)+
         '<h3>Last recorded activity</h3><p>Last transaction: '+date(last.lastTransactionAt)+' · Last ledger entry: '+date(last.lastLedgerActivityAt)+' · Last outgoing transaction initiation: '+date(last.lastOutgoingInitiatedAt)+'</p>'+
-        '<h3>Daily Account Activity &mdash; '+esc(data.range.from)+' through '+esc(data.range.to)+'</h3><p class="muted small">Transaction timestamps are initiation timestamps in '+esc(zone)+'. Initiation is not proof of posting or settlement. Transaction rows are paginated.</p>'+table(['Initiated date / time','Transaction type / reference','Account route','Status','Amount'],tx)+pager('transaction',data.transactionPage)+
+        '<h3>Daily Account Activity &mdash; '+esc(data.range.from)+' through '+esc(data.range.to)+'</h3><p class="muted small">Transaction timestamps are initiation timestamps in '+esc(zone)+'. Initiation is not proof of settlement or posting. Transaction rows are paginated.</p>'+table(['Initiated date / time','Transaction type / reference','Account route','Status','Amount'],tx)+pager('transaction',data.transactionPage)+
         '<h3>Daily ledger summary</h3><p class="muted small">Grouped by ledger-entry recorded date. Credits and debits are sourced from posted ledger entries; dates with no ledger entries are not inferred as zero-activity days.</p>'+table(['Ledger date','Entries','Credits','Debits','Net ledger activity'],periodRows(data.daily))+
         '<h3>Ledger entries and balance-after records</h3><p class="muted small">Ledger rows are paginated. Recorded time is not a separately verified settlement timestamp.</p>'+table(['Recorded','Account','Direction','Amount','Balance after','Reference / memo'],ledger)+pager('ledger',data.ledgerPage)+
         '<h3>Weekly Account Summary</h3><p class="muted small">Ledger-based credits, debits and net activity; no opening or closing balance is inferred.</p>'+table(['Week commencing','Ledger entries','Credits','Debits','Net activity'],periodRows(data.weekly))+
@@ -91,12 +91,32 @@
       $('email-log').innerHTML=data.deliveries?.length?`<table><thead><tr><th>Time</th><th>Recipient</th><th>Event</th><th>Subject</th><th>Status</th><th>Error</th></tr></thead><tbody>${data.deliveries.map(e=>`<tr><td>${esc(new Date(e.createdAt).toLocaleString())}</td><td>${esc(e.recipient)}</td><td>${esc(e.eventType)}</td><td>${esc(e.subject)}</td><td><span class="status-pill">${esc(e.status)}</span></td><td>${esc(e.errorCode||'—')}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">No email delivery records yet.</p>';
     }catch(error){$('gmail-config-status').textContent='Not available for this role';$('email-log').innerHTML=`<p class="muted">${esc(error.message)}</p>`;}
   }
+  async function loadProductApplicationQueue(){
+    const data=await api('/operator/product-applications?status=all');
+    const rows=data.applications||[];
+    $('product-application-queue').innerHTML=rows.length?'<table><thead><tr><th>Submitted</th><th>Member</th><th>Product</th><th>Requested amount</th><th>Membership</th><th>Status</th><th>Review</th></tr></thead><tbody>'+rows.map(a=>{
+      const amount=a.requestedAmountCents==null?'—':money(a.requestedAmountCents);
+      const controls=operator&&['management','super_admin'].includes(operator.role)&&!['closed','referred_to_partner'].includes(a.status)
+        ?'<select aria-label="Review status" data-product-status="'+esc(a.id)+'"><option value="needs_information">Needs information</option><option value="referred_to_partner">Refer to partner</option><option value="closed">Close request</option></select><button class="mini-action" data-product-review="'+esc(a.id)+'">Save</button>'
+        :'—';
+      return '<tr><td>'+esc(new Date(a.createdAt).toLocaleString())+'</td><td><strong>'+esc(a.memberName)+'</strong><small>'+esc(a.memberEmail)+' · '+esc(a.memberNumber)+'</small></td><td>'+esc(a.productType.replaceAll('_',' '))+'</td><td>'+amount+'</td><td>'+esc(a.membershipStatus)+'</td><td><span class="status-pill">'+esc(a.status.replaceAll('_',' '))+'</span></td><td class="action-cell">'+controls+'</td></tr>';
+    }).join('')+'</tbody></table>':'<p class="muted">No product requests have been submitted.</p>';
+    $('product-application-queue').querySelectorAll('[data-product-review]').forEach(button=>button.addEventListener('click',async()=>{
+      const id=button.dataset.productReview;
+      const select=$('product-application-queue').querySelector('[data-product-status="'+CSS.escape(id)+'"]');
+      const note=window.prompt('Add a review note for the member and audit trail:')||'';
+      if(note.trim().length<5)return;
+      try{await api('/operator/product-applications/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({status:select.value,note})});notice('operator-message','Product request review saved.');await loadProductApplicationQueue();}
+      catch(error){notice('operator-message',error.message,true);}
+    }));
+  }
   async function loadAll(){
     const queue=await api('/operator/queue');
     $('queue-approvals').textContent=Number(queue.approvals?.pending||0)+Number(queue.approvals?.escalated||0);
     $('queue-members').textContent=queue.membershipPending??0;
     $('queue-cases').textContent=queue.cases?.open??0;
     await loadApprovals();
+    await loadProductApplicationQueue();
     await loadTiers();
     await loadEmailLog();
   }
@@ -108,6 +128,7 @@
   $('operator-logout').addEventListener('click',async()=>{try{await post('/operator/logout',{});}catch{}operator=null;setAuthed(false);});
   $('refresh-operator').addEventListener('click',async()=>{try{await loadAll();notice('operator-message','Console refreshed.');}catch(error){notice('operator-message',error.message,true);}});
   $('history-form').addEventListener('submit',loadMemberHistory);
+  $('refresh-product-queue').addEventListener('click',async()=>{try{await loadProductApplicationQueue();notice('operator-message','Product request queue refreshed.');}catch(error){notice('operator-message',error.message,true);}});
   $('tier-filter').addEventListener('submit',async event=>{event.preventDefault();try{await loadTiers();}catch(error){notice('operator-message',error.message,true);}});
   (async()=>{try{const data=await api('/auth/operator/me');operator=data.operator;setAuthed(true);$('operator-identity').textContent=`${operator.name} · ${operator.email} · Role: ${operator.role}`;await loadAll();}catch{setAuthed(false);}})();
 })();
