@@ -99,6 +99,8 @@ test('ordinary KYC operators see only actively assigned identity cases',async()=
   const before=await api(app.base,'/api/operator/kyc/cases',{cookie:teller.cookie});
   assert.equal(before.status,200);
   assert.equal(before.data.cases.length,0);
+  const hiddenDetail=await api(app.base,`/api/operator/kyc/cases/${kycCaseId}`,{cookie:teller.cookie});
+  assert.equal(hiddenDetail.status,404);
 
   const operatorRow=await db.pool.query('SELECT id FROM operators WHERE email=$1',['teller@avcu.demo']);
   assert.equal(operatorRow.rowCount,1);
@@ -115,6 +117,8 @@ test('ordinary KYC operators see only actively assigned identity cases',async()=
   const after=await api(app.base,'/api/operator/kyc/cases',{cookie:teller.cookie});
   assert.equal(after.status,200);
   assert.equal(after.data.cases.some(item=>item.id===kycCaseId),true);
+  const visibleDetail=await api(app.base,`/api/operator/kyc/cases/${kycCaseId}`,{cookie:teller.cookie});
+  assert.equal(visibleDetail.status,200);
 
   const revoked=await api(app.base,`/api/operator/identity/assignments/${assignmentId}/revoke',{
     method:'POST',cookie:manager.cookie,body:{}
@@ -123,4 +127,6 @@ test('ordinary KYC operators see only actively assigned identity cases',async()=
   const afterRevoke=await api(app.base,'/api/operator/kyc/cases',{cookie:teller.cookie});
   assert.equal(afterRevoke.status,200);
   assert.equal(afterRevoke.data.cases.length,0);
+  const hiddenAfterRevoke=await api(app.base,`/api/operator/kyc/cases/${kycCaseId}`,{cookie:teller.cookie});
+  assert.equal(hiddenAfterRevoke.status,404);
 });
