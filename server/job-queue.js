@@ -54,7 +54,29 @@ export function providerAdapter(provider, {baseUrl,allowedHosts,tokenEnv,timeout
   });
 }
 
-export async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKey,maxAttempts=8,delaySeconds=0}) {
+
+export async function registerServiceIdentity({teamId,serviceId,capabilities}) {
+ const token=serviceSecret(serviceId);
+ if(!token) return {registered:false,reason:'credential_not_configured'};
+ const allowed=TEAM_CAPABILITIES[teamId]||[];
+ if(!Array.isArray(capabilities)||capabilities.some(c=>!allowed.includes(c))) throw new Error('Service identity requests capabilities outside its team boundary.');
+ const hash=createHash('sha256').update(token).digest('hex');
+ await query(
+  `INSERT INTO avcu_service_identities(service_id,team_id,token_sha256,capabilities,active,rotated_at)
+   VALUES($1,$2,$3,$4::jsonb,true,now())
+   ON CONFLICT(service_id) DO UPDATE SET team_id=EXCLUDED.team_id,token_sha256=EXCLUDED.token_sha256,capabilities=EXCLUDED.capabilities,active=true,rotated_at=now()`,
+  [serviceId,teamId,hash,JSON.stringify(capabilities)]);
+ return {registered:true,serviceId,teamId};
+}
+export async function validateWorkerIdentity({teamId,serviceId,token}) {
+ const {rows}=await query('SELECT team_id,token_sha256,capabilities,active FROM avcu_service_identities WHERE service_id=$1',[serviceId]);
+ const row=rows[0];
+ if(!row||!row.active||row.team_id!==teamId||!verifyServiceIdentity(serviceId,token)) return false;
+ const hash=createHash('sha256').update(token).digest('hex');
+ const a=Buffer.from(row.token_sha256,'hex'),b=Buffer.from(hash,'hex');
+ return a.length===b.length&&timingSafeEqual(a,b);
+}
+\nexport async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKey,maxAttempts=8,delaySeconds=0}) {
   if(!TEAM_CAPABILITIES[teamId] || !JOB_TYPES.has(jobType)) throw new Error('Unknown team or job type.');
   if(!TEAM_CAPABILITIES[teamId].some(c=>c)) throw new Error('Team has no capabilities.');
   const serialized=JSON.stringify(payload ?? {});
@@ -64,10 +86,10 @@ export async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKe
    `INSERT INTO avcu_jobs(team_id,service_id,job_type,payload,idempotency_key,max_attempts,available_at)
     SELECT $1,$2,$3,$4::jsonb,$5,$6,now()+($7*interval '1 second')
     WHERE EXISTS(SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active)
-      AND EXISTS(SELECT 1 FROM avcu_team_runtime t WHERE t.team_id=$1 AND t.desired_state='ACTIVE')
+      AND EXISTS(SELECT 1 FROM avcu_team_runtime t WHERE t.team_id=$1 AND t.desired_state='ACTIVE')\n      AND EXISTS(SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active AND s.capabilities ? $3)
     ON CONFLICT(team_id,idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
     RETURNING id,team_id,status,attempts,created_at`,
-   [teamId,serviceId,jobType,serialized,idempotencyKey,maxAttempts,delaySeconds]);
+   [teamId,serviceId,jobType,serialized,idempotencyKey,maxAttempts,delaySeconds,jobType]);
   if(!result.rowCount) throw new Error('Service identity inactive or team not enabled.');
   return result.rows[0];
 }
