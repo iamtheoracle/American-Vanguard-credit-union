@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { query, audit, bindActorContext } from './db.js';
+import { audit, bindActorContext } from './db.js';
 import * as authRepo from './repositories/auth.js';
 import { COOKIE_MEMBER, COOKIE_OPERATOR, parseCookies, setSessionCookie, clearSessionCookie, newToken } from './util.js';
 
@@ -37,11 +37,6 @@ export async function destroySession(kind, token) {
 export async function destroyAllSessions(kind, subjectId) {
   await authRepo.destroyAllSessions(kind, subjectId);
 }
-
-const MEMBER_SELECT = `SELECT m.id, m.member_number, m.email, m.full_name, m.status, s.token, s.expires_at
-  FROM member_sessions s JOIN members m ON m.id = s.member_id WHERE s.token = $1`;
-const OPERATOR_SELECT = `SELECT o.id, o.email, o.name, o.role, o.active, s.token, s.expires_at
-  FROM operator_sessions s JOIN operators o ON o.id = s.operator_id WHERE s.token = $1`;
 
 export function memberAuth(req, res, next) {
   const token = parseCookies(req.headers.cookie)[COOKIE_MEMBER];
