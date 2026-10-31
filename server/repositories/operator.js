@@ -79,14 +79,21 @@ export async function updateSupportCaseStatus({ caseId, status, operator }) {
       `UPDATE support_cases SET status = $1,
          priority = CASE WHEN $1 = 'escalated' THEN 'high' ELSE priority END,
          updated_at = now() WHERE id = $2 RETURNING id`, [status, caseId]);
+    if (updated.rowCount) await audit(client, { actorType: 'operator', actorId: operator.id, actorRole: operator.role,
+      action: 'support.case_status_changed', entityType: 'support_case', entityId: caseId,
+      metadata: { status } });
     return updated.rowCount ? { kind: 'updated' } : { kind: 'not_found' };
   });
 }
 export async function assignApproval({ approvalId, operatorId }) {
-  return query(
-    `UPDATE approvals SET assigned_to = $1, updated_at = now()
-     WHERE id = $2 AND status IN ('pending','escalated') RETURNING id`,
-    [operatorId, approvalId]);
+  return withTx(async client => {
+    const assignee = await client.query('SELECT id FROM operators WHERE id = $1 AND active = TRUE', [operatorId]);
+    if (!assignee.rowCount) return { rowCount: 0, rows: [] };
+    return client.query(
+      `UPDATE approvals SET assigned_to = $1, updated_at = now()
+       WHERE id = $2 AND status IN ('pending','escalated') RETURNING id`,
+      [operatorId, approvalId]);
+  });
 }
 export async function createOperator({ email, passwordHash, name, role, actor }) {
   return withTx(async client => {
@@ -102,6 +109,9 @@ export async function createOperator({ email, passwordHash, name, role, actor })
 }
 export async function updateOperator({ targetId, role, active, actor }) {
   return withTx(async client => {
+    // Serialize privileged-account changes to avoid concurrent last-admin races
+    // and inconsistent lock ordering when two administrators edit each other.
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('avcu.operator.super_admin_guard'))");
     const { rows } = await client.query('SELECT id, role, active FROM operators WHERE id = $1 FOR UPDATE', [targetId]);
     const subject = rows[0];
     if (!subject) return { kind: 'not_found' };
