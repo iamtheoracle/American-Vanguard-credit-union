@@ -175,15 +175,21 @@ router.post('/operator/kyc/cases/:caseId/review', operatorAuth, requireOperatorR
     const notes=String(req.body?.notes||'').trim().slice(0,2000);
     if(!['verified','rejected','review_required','request_information'].includes(decision)||reasonCode.length<2||notes.length<10)
       return res.status(422).json({error:'Select a valid review outcome and provide a reason code and meaningful notes.'});
-    const current=await query(`SELECT c.status,c.member_id FROM kyc_cases c WHERE c.id=$1 AND EXISTS (SELECT 1 FROM avcu_identity_profiles ip JOIN avcu_identity_case_assignments ia ON ia.identity_profile_id=ip.id WHERE ip.member_id=c.member_id AND ia.operator_id=$2 AND ia.scope='review' AND ia.revoked_at IS NULL AND (ia.expires_at IS NULL OR ia.expires_at>now()))`,[req.params.caseId,req.operator.id]);
-    if(!current.rowCount)return res.status(404).json({error:'KYC case not found'});
-    if(['verified','rejected'].includes(current.rows[0].status))return res.status(409).json({error:'A completed case cannot be manually overwritten.'});
-    if(decision==='verified' && current.rows[0].status!=='review_required')return res.status(409).json({error:'Manual verification is permitted only after a provider result explicitly requires human review.'});
-    await query('INSERT INTO kyc_reviews(kyc_case_id,reviewer_id,decision,reason_code,notes_redacted) VALUES($1,$2,$3,$4,$5)',[req.params.caseId,req.operator.id,decision,reasonCode,notes]);
-    const nextStatus=decision==='request_information'?'review_required':decision;
-    await query('UPDATE kyc_cases SET status=$2,updated_at=now(),completed_at=CASE WHEN $2 IN (\'verified\',\'rejected\') THEN now() ELSE completed_at END WHERE id=$1',[req.params.caseId,nextStatus]);
-    await audit(null,{actorType:'operator',actorId:req.operator.id,actorRole:req.operator.role,action:'kyc.case.reviewed',entityType:'kyc_case',entityId:req.params.caseId,metadata:{decision,reasonCode}});
-    res.json({ok:true,status:nextStatus,note:'This KYC decision does not itself approve membership or activate a financial account.'});
+    const outcome=await withTx(async client=>{
+      const current=await client.query(`SELECT c.status,c.member_id FROM kyc_cases c WHERE c.id=$1 AND EXISTS (SELECT 1 FROM avcu_identity_profiles ip JOIN avcu_identity_case_assignments ia ON ia.identity_profile_id=ip.id WHERE ip.member_id=c.member_id AND ia.operator_id=$2 AND ia.scope='review' AND ia.revoked_at IS NULL AND (ia.expires_at IS NULL OR ia.expires_at>now())) FOR UPDATE OF c`,[req.params.caseId,req.operator.id]);
+      if(!current.rowCount)return 'not_found';
+      if(['verified','rejected'].includes(current.rows[0].status))return 'completed';
+      if(decision==='verified' && current.rows[0].status!=='review_required')return 'not_reviewable';
+      const nextStatus=decision==='request_information'?'review_required':decision;
+      await client.query('INSERT INTO kyc_reviews(kyc_case_id,reviewer_id,decision,reason_code,notes_redacted) VALUES($1,$2,$3,$4,$5)',[req.params.caseId,req.operator.id,decision,reasonCode,notes]);
+      await client.query(`UPDATE kyc_cases SET status=$2,updated_at=now(),completed_at=CASE WHEN $2 IN ('verified','rejected') THEN now() ELSE completed_at END WHERE id=$1`,[req.params.caseId,nextStatus]);
+      await audit(client,{actorType:'operator',actorId:req.operator.id,actorRole:req.operator.role,action:'kyc.case.reviewed',entityType:'kyc_case',entityId:req.params.caseId,metadata:{decision,reasonCode}});
+      return nextStatus;
+    });
+    if(outcome==='not_found')return res.status(404).json({error:'KYC case not found or no active review assignment.'});
+    if(outcome==='completed')return res.status(409).json({error:'A completed case cannot be manually overwritten.'});
+    if(outcome==='not_reviewable')return res.status(409).json({error:'Manual verification is permitted only after a provider result explicitly requires human review.'});
+    res.json({ok:true,status:outcome,note:'This KYC decision does not itself approve membership or activate a financial account.'});
   }catch(error){next(error);}
 });
 
