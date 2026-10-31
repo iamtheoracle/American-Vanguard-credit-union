@@ -52,3 +52,17 @@ Before the Supabase change, inventory every public table, view, function, trigge
 - Worker identity is bound to its exact service/team capability set.
 - Audit history cannot be updated/deleted through application routes.
 - API, notification worker and durable queue remain healthy after each staged migration.
+
+## Implemented on this branch
+
+- `server/db.js` now routes application queries through an AsyncLocalStorage request context when a validated member/operator request is active.
+- Cookie authentication still validates the opaque token against `member_sessions` / `operator_sessions` before binding an actor.
+- Each authenticated request receives one pinned PostgreSQL transaction with transaction-local `app.actor_type`, `app.actor_id`, and `app.actor_role` settings. The transaction commits when the response finishes and rolls back on an interrupted response.
+- Nested application transactions use savepoints on the pinned request connection. Actor identity cannot be replaced by nested middleware.
+- Dedicated repositories now own cookie session lookups/creation/revocation, member notifications and support-case reads/writes, operator queue summaries, and operator audit reads.
+- Remaining route-level SQL is routed through the same request-scoped query boundary, but not all route SQL has yet been extracted into named repository methods.
+- Test-only pool injection is gated behind `NODE_ENV=test`; it is not an application configuration path.
+
+## Important limitation
+
+The actor settings are trusted server context, not proof that RLS is active. The current application database connection may still use a privileged/bypass role. Do not create RLS policies that trust these settings until the exact runtime database role, role grants, SQL injection boundary, and transaction behavior have been independently reviewed. Production Supabase has not been changed.
