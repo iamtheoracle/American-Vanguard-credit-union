@@ -97,8 +97,11 @@ begin
        or new.idempotency_key is distinct from old.idempotency_key
        or new.transaction_type is distinct from old.transaction_type
        or new.description is distinct from old.description
+       or new.external_reference is distinct from old.external_reference
+       or new.effective_at is distinct from old.effective_at
        or new.metadata is distinct from old.metadata
-       or new.created_at is distinct from old.created_at then
+       or new.created_at is distinct from old.created_at
+       or new.reversed_by is distinct from old.reversed_by then
       raise exception 'Draft transactions can only be posted through the controlled posting function' using errcode = '55000';
     end if;
     return new;
@@ -110,6 +113,8 @@ begin
        or new.idempotency_key is distinct from old.idempotency_key
        or new.transaction_type is distinct from old.transaction_type
        or new.description is distinct from old.description
+       or new.external_reference is distinct from old.external_reference
+       or new.effective_at is distinct from old.effective_at
        or new.metadata is distinct from old.metadata
        or new.created_at is distinct from old.created_at
        or new.posted_at is distinct from old.posted_at
@@ -203,12 +208,12 @@ begin
 
   update public.avcu_ledger_transactions
   set status = 'posted',
-      posted_at = coalesce(effective_at, now())
+      posted_at = now()
   where id = p_transaction_id
   returning * into v_tx;
 
   insert into public.avcu_ledger_audit_events(transaction_id,event_type,actor_role,reason)
-  values (p_transaction_id,'posted',current_user,'Balanced journal posted');
+  values (p_transaction_id,'posted',coalesce(nullif(current_setting('request.jwt.claim.role',true),''),session_user::text),'Balanced journal posted');
 
   return v_tx;
 end;
@@ -291,7 +296,7 @@ begin
 
   insert into public.avcu_ledger_audit_events(transaction_id,event_type,actor_role,reason,metadata)
   values (
-    v_original.id,'reversed',current_user,trim(p_reason),
+    v_original.id,'reversed',coalesce(nullif(current_setting('request.jwt.claim.role',true),''),session_user::text),trim(p_reason),
     jsonb_build_object('reversal_transaction_id',v_reversal.id)
   );
 
