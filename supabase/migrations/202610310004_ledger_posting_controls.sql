@@ -133,6 +133,106 @@ create trigger avcu_ledger_transaction_update_guard
 before insert or update on public.avcu_ledger_transactions
 for each row execute function public.avcu_guard_ledger_transaction_update();
 
+-- Store a canonical request fingerprint so a reused idempotency key cannot
+-- silently refer to a different journal request.
+alter table public.avcu_ledger_transactions
+  add column if not exists request_fingerprint text;
+
+create or replace function public.avcu_create_draft_ledger_transaction(
+  p_idempotency_key text,
+  p_transaction_type text,
+  p_description text,
+  p_external_reference text,
+  p_effective_at timestamptz,
+  p_metadata jsonb,
+  p_entries jsonb
+) returns public.avcu_ledger_transactions
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  v_tx public.avcu_ledger_transactions;
+  v_fingerprint text;
+  v_inserted integer;
+  v_count integer;
+  v_entry jsonb;
+begin
+  if p_idempotency_key is null or length(trim(p_idempotency_key)) < 8 or length(p_idempotency_key) > 200 then
+    raise exception 'Idempotency key must be between 8 and 200 characters' using errcode = '22023';
+  end if;
+  if p_transaction_type is null or length(trim(p_transaction_type)) = 0 then
+    raise exception 'Transaction type is required' using errcode = '22023';
+  end if;
+  if jsonb_typeof(p_entries) <> 'array' then
+    raise exception 'Journal entries must be supplied as a JSON array' using errcode = '22023';
+  end if;
+
+  v_count := jsonb_array_length(p_entries);
+  if v_count < 2 or v_count > 500 then
+    raise exception 'A draft journal must contain between 2 and 500 entries' using errcode = '22023';
+  end if;
+
+  for v_entry in select value from jsonb_array_elements(p_entries)
+  loop
+    if not (v_entry ? 'ledger_account_id')
+       or not (v_entry ? 'currency_code')
+       or not (v_entry ? 'debit_amount')
+       or not (v_entry ? 'credit_amount') then
+      raise exception 'Each journal entry requires account, currency, debit and credit fields' using errcode = '22023';
+    end if;
+  end loop;
+
+  v_fingerprint := encode(digest(jsonb_build_object(
+    'transaction_type',trim(p_transaction_type),
+    'description',p_description,
+    'external_reference',p_external_reference,
+    'effective_at',p_effective_at,
+    'metadata',coalesce(p_metadata,'{}'::jsonb),
+    'entries',p_entries
+  )::text,'sha256'),'hex');
+
+  insert into public.avcu_ledger_transactions(
+    idempotency_key,transaction_type,description,external_reference,
+    effective_at,metadata,request_fingerprint
+  ) values (
+    trim(p_idempotency_key),trim(p_transaction_type),p_description,p_external_reference,
+    p_effective_at,coalesce(p_metadata,'{}'::jsonb),v_fingerprint
+  )
+  on conflict (idempotency_key) do nothing;
+
+  get diagnostics v_inserted = row_count;
+
+  select * into v_tx
+  from public.avcu_ledger_transactions
+  where idempotency_key = trim(p_idempotency_key)
+  for update;
+
+  if v_inserted = 0 then
+    if v_tx.request_fingerprint is distinct from v_fingerprint then
+      raise exception 'Idempotency key was already used for a different journal request'
+        using errcode = '23505';
+    end if;
+    return v_tx;
+  end if;
+
+  for v_entry in select value from jsonb_array_elements(p_entries)
+  loop
+    insert into public.avcu_ledger_entries(
+      transaction_id,ledger_account_id,currency_code,debit_amount,credit_amount
+    ) values (
+      v_tx.id,
+      (v_entry->>'ledger_account_id')::uuid,
+      upper(v_entry->>'currency_code'),
+      (v_entry->>'debit_amount')::numeric,
+      (v_entry->>'credit_amount')::numeric
+    );
+  end loop;
+
+  return v_tx;
+end;
+$;
+
 create or replace function public.avcu_post_ledger_transaction(p_transaction_id uuid)
 returns public.avcu_ledger_transactions
 language plpgsql
@@ -303,6 +403,13 @@ begin
   return v_reversal;
 end;
 $$;
+
+revoke insert, update, delete on public.avcu_ledger_transactions from service_role;
+revoke insert, update, delete on public.avcu_ledger_entries from service_role;
+grant select on public.avcu_ledger_transactions, public.avcu_ledger_entries to service_role;
+
+revoke all on function public.avcu_create_draft_ledger_transaction(text,text,text,text,timestamptz,jsonb,jsonb) from public, anon, authenticated, service_role;
+grant execute on function public.avcu_create_draft_ledger_transaction(text,text,text,text,timestamptz,jsonb,jsonb) to service_role;
 
 revoke all on function public.avcu_post_ledger_transaction(uuid) from public, anon, authenticated, service_role;
 revoke all on function public.avcu_reverse_ledger_transaction(uuid,text) from public, anon, authenticated, service_role;
