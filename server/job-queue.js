@@ -95,9 +95,10 @@ export async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKe
     WHERE EXISTS(SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active)
       AND EXISTS(SELECT 1 FROM avcu_team_runtime t WHERE t.team_id=$1 AND t.desired_state='ACTIVE')\n      AND EXISTS(SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active AND s.capabilities ? $8)
     ON CONFLICT(team_id,idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
+      WHERE avcu_jobs.service_id=EXCLUDED.service_id AND avcu_jobs.job_type=EXCLUDED.job_type AND avcu_jobs.payload=EXCLUDED.payload
     RETURNING id,team_id,status,attempts,created_at`,
    [teamId,serviceId,jobType,serialized,idempotencyKey,maxAttempts,delaySeconds,policy.capability]);
-  if(!result.rowCount) throw new Error('Service identity inactive or team not enabled.');
+  if(!result.rowCount) throw new Error('Service identity is inactive, lacks the required capability, team is not enabled, or idempotency key conflicts with a different job.');
   return result.rows[0];
 }
 
@@ -108,7 +109,7 @@ export async function claimJob({teamId,serviceId,workerId,leaseSeconds=60}) {
     lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,available_at=now()+interval '5 seconds',updated_at=now(),
     last_error_code='worker_lease_expired'
     WHERE team_id=$1 AND status='leased' AND lease_expires_at<now()
-    RETURNING id,team_id,job_type,attempts,status`,[teamId]);
+    RETURNING id,team_id,job_type,attempts,status`,[teamId,serviceId]);
   for(const job of expired.rows) {
    await client.query(`INSERT INTO avcu_job_events(job_id,event_type,attempt,detail) VALUES($1,'job.lease_expired',$2,'{"recovered":true}'::jsonb)`,[job.id,job.attempts]);
    if(job.status==='dead_letter') await client.query(
@@ -118,6 +119,7 @@ export async function claimJob({teamId,serviceId,workerId,leaseSeconds=60}) {
   const {rows}=await client.query(
    `SELECT j.* FROM avcu_jobs j JOIN avcu_team_runtime t ON t.team_id=j.team_id
     WHERE j.team_id=$1 AND j.service_id=$2 AND j.status IN ('queued','retry_wait') AND j.available_at<=now()
+      AND EXISTS (SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active)
       AND t.desired_state='ACTIVE' AND t.lifecycle_state IN ('ACTIVE','DEGRADED')
     ORDER BY j.available_at,j.created_at LIMIT 1 FOR UPDATE OF j SKIP LOCKED`,[teamId,serviceId]);
   if(!rows[0]) return null;
