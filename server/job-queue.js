@@ -20,6 +20,7 @@ const JOB_POLICY = Object.freeze({
  'member.task':{team:'member-experience',capability:'member.support'}
 });
 const MAX_PAYLOAD_BYTES = 256 * 1024;
+export function jobAllowedForTeam(teamId,jobType) { const p=JOB_POLICY[jobType]; return Boolean(p && p.team===teamId && TEAM_CAPABILITIES[teamId]?.includes(p.capability)); }
 
 export function serviceTokenEnvName(serviceId) {
   return 'AVCU_SERVICE_TOKEN_' + String(serviceId).toUpperCase().replace(/[^A-Z0-9]/g,'_');
@@ -84,7 +85,7 @@ export async function validateWorkerIdentity({teamId,serviceId,token}) {
 }
 \nexport async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKey,maxAttempts=8,delaySeconds=0}) {
   const policy=JOB_POLICY[jobType];
-  if(!TEAM_CAPABILITIES[teamId] || !policy || policy.team!==teamId) throw new Error('Job type is not permitted for this team.');
+  if(!jobAllowedForTeam(teamId,jobType)) throw new Error('Job type is not permitted for this team.');
   const serialized=JSON.stringify(payload ?? {});
   if(Buffer.byteLength(serialized)>MAX_PAYLOAD_BYTES) throw new Error('Job payload exceeds limit.');
   if(typeof idempotencyKey!=='string'||idempotencyKey.length<8||idempotencyKey.length>200) throw new Error('A stable idempotency key is required.');
@@ -173,10 +174,10 @@ export async function heartbeat({workerId,teamId,serviceId,status,activeJobId=nu
 \nexport async function teamQueueHealth() {
  const result=await query(
   `SELECT t.team_id,t.lifecycle_state,t.desired_state,t.last_heartbeat_at,
-    count(j.id) FILTER (WHERE j.status IN ('queued','retry_wait'))::int AS queued,
+    count(DISTINCT j.id) FILTER (WHERE j.status IN ('queued','retry_wait'))::int AS queued,
     count(j.id) FILTER (WHERE j.status='leased')::int AS leased,
     count(j.id) FILTER (WHERE j.status='dead_letter')::int AS dead_letter,
-    count(w.worker_id) FILTER (WHERE w.last_seen_at>now()-interval '90 seconds')::int AS live_workers
+    count(DISTINCT w.worker_id) FILTER (WHERE w.last_seen_at>now()-interval '90 seconds')::int AS live_workers
    FROM avcu_team_runtime t
    LEFT JOIN avcu_jobs j ON j.team_id=t.team_id
    LEFT JOIN avcu_worker_heartbeats w ON w.team_id=t.team_id
