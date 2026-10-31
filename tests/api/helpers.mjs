@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { startServer, shutdown } from '../../server/index.js';
-import { migrate, close as closeDatabasePool } from '../../server/db.js';
+import { migrate, close as closeDatabasePool, configurePoolForTests, configureFixturePoolForTests } from '../../server/db.js';
 import { seed, MEMBER_PASSWORD, OPERATOR_PASSWORD } from '../../server/seed.js';
 
 const ADMIN_URL = process.env.AVCU_TEST_ADMIN_URL || 'postgres://avcu:avcu@127.0.0.1:5432/avcu';
@@ -17,6 +17,7 @@ export async function startTestServer({ aiProvider, sandboxFail } = {}) {
   await admin.end();
 
   const previous = { ...process.env };
+  process.env.NODE_ENV = 'test';
   const adminDbUrl = new URL(ADMIN_URL);
   adminDbUrl.pathname = `/${dbName}`;
   const runtimeDbUrl = new URL(RUNTIME_URL);
@@ -38,6 +39,8 @@ export async function startTestServer({ aiProvider, sandboxFail } = {}) {
   await provision.query(`REVOKE CREATE ON SCHEMA public FROM avcu_app_runtime`);
   await provision.end();
   process.env.DATABASE_URL = runtimeDbUrl.toString();
+  configurePoolForTests(new pg.Pool({ connectionString: runtimeDbUrl.toString(), max: 10 }));
+  configureFixturePoolForTests(new pg.Pool({ connectionString: adminDbUrl.toString(), max: 3 }));
   const identityCheck = new pg.Client({ connectionString: runtimeDbUrl.toString() });
   await identityCheck.connect();
   const identity = await identityCheck.query(`
