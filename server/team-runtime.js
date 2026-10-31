@@ -1,4 +1,5 @@
 import { query, withTx } from './db.js';
+import { registerServiceIdentity } from './job-queue.js';
 
 export const TEAM_STATES = Object.freeze([
   'PROVISIONING','READY','ACTIVE','DEGRADED','PAUSED','DRAINING','QUARANTINED','DISABLED','FAILED'
@@ -49,6 +50,16 @@ export async function registerTeams() {
       [team.id,team.name,team.description,JSON.stringify(team.capabilities),JSON.stringify(team.providers)]
     );
   }
+}
+
+export async function registerTeamServiceIdentities() {
+ const registered=[];
+ for(const team of TEAM_DEFINITIONS) {
+  const serviceId=team.id+'-worker';
+  const result=await registerServiceIdentity({teamId:team.id,serviceId,capabilities:team.capabilities});
+  registered.push({teamId:team.id,serviceId,...result});
+ }
+ return registered;
 }
 
 export async function listTeams() {
