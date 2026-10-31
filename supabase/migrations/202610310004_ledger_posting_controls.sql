@@ -81,21 +81,45 @@ returns trigger
 language plpgsql
 set search_path = public, pg_temp
 as $$
+declare
+  v_operation text := current_setting('avcu.ledger_operation', true);
 begin
-  if old.status = 'posted' then
-    if new.status <> 'reversed'
-       or new.id <> old.id
-       or new.idempotency_key <> old.idempotency_key
-       or new.transaction_type <> old.transaction_type
-       or new.created_at <> old.created_at
-       or new.posted_at <> old.posted_at
-       or new.reversed_by is null then
-      raise exception 'Posted transaction history is immutable; use a compensating reversal' using errcode = '55000';
+  if tg_op = 'INSERT' then
+    if new.status <> 'draft' or new.posted_at is not null or new.reversed_by is not null then
+      raise exception 'Ledger transactions must be created as drafts' using errcode = '55000';
     end if;
-  elsif old.status in ('reversed','failed') then
-    raise exception 'Terminal ledger transactions cannot be modified' using errcode = '55000';
+    return new;
   end if;
-  return new;
+
+  if old.status = 'draft' and new.status = 'posted' then
+    if v_operation <> 'post'
+       or new.id is distinct from old.id
+       or new.idempotency_key is distinct from old.idempotency_key
+       or new.transaction_type is distinct from old.transaction_type
+       or new.description is distinct from old.description
+       or new.metadata is distinct from old.metadata
+       or new.created_at is distinct from old.created_at then
+      raise exception 'Draft transactions can only be posted through the controlled posting function' using errcode = '55000';
+    end if;
+    return new;
+  end if;
+
+  if old.status = 'posted' and new.status = 'reversed' then
+    if v_operation <> 'reverse'
+       or new.id is distinct from old.id
+       or new.idempotency_key is distinct from old.idempotency_key
+       or new.transaction_type is distinct from old.transaction_type
+       or new.description is distinct from old.description
+       or new.metadata is distinct from old.metadata
+       or new.created_at is distinct from old.created_at
+       or new.posted_at is distinct from old.posted_at
+       or new.reversed_by is null then
+      raise exception 'Posted transaction history is immutable; use a controlled compensating reversal' using errcode = '55000';
+    end if;
+    return new;
+  end if;
+
+  raise exception 'Invalid or prohibited ledger transaction state transition' using errcode = '55000';
 end;
 $$;
 
