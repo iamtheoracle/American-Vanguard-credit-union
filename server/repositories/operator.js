@@ -108,9 +108,9 @@ export async function updateOperator({ targetId, role, active, actor }) {
     if (subject.id === actor.id && (active === false || (role && role !== 'super_admin'))) return { kind: 'self_change' };
     if ((role && role !== 'super_admin' && subject.role === 'super_admin') || active === false) {
       const admins = await client.query(
-        `SELECT count(*)::int AS n FROM operators
-         WHERE role = 'super_admin' AND active AND id <> $1 FOR UPDATE`, [subject.id]);
-      if (Number(admins.rows[0].n) === 0) return { kind: 'last_super_admin' };
+        `SELECT id FROM operators WHERE role = 'super_admin' AND active
+         ORDER BY id FOR UPDATE`);
+      if (admins.rows.length <= 1 && subject.role === 'super_admin' && subject.active) return { kind: 'last_super_admin' };
     }
     const sets = [], params = [];
     if (role) { params.push(role); sets.push(`role = $${params.length}`); }
