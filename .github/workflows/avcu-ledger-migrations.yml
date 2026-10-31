@@ -91,7 +91,7 @@ jobs:
             FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
             CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a
             WHERE n.nspname='public'
-              AND c.relname LIKE 'avcu_%' OR (n.nspname='public' AND c.relname='member_profiles')
+              AND (c.relname LIKE 'avcu_%' OR c.relname='member_profiles')
               AND a.grantee IN (0, (SELECT oid FROM pg_roles WHERE rolname='anon'),
                 (SELECT oid FROM pg_roles WHERE rolname='authenticated'));
             IF bad_acl <> 0 THEN
@@ -113,6 +113,16 @@ jobs:
               AND grantee IN ('PUBLIC','anon','authenticated');
             IF bad_acl <> 0 THEN
               RAISE EXCEPTION 'Unexpected browser column grants remain: %', bad_acl;
+            END IF;
+            SELECT count(*) INTO bad_acl
+            FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+            CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl,acldefault('S',c.relowner))) a
+            WHERE n.nspname='public' AND c.relkind='S'
+              AND c.relname LIKE 'avcu_%'
+              AND a.grantee IN (0, (SELECT oid FROM pg_roles WHERE rolname='anon'),
+                (SELECT oid FROM pg_roles WHERE rolname='authenticated'));
+            IF bad_acl <> 0 THEN
+              RAISE EXCEPTION 'PUBLIC/browser sequence grants remain: %', bad_acl;
             END IF;
             IF has_schema_privilege('anon','public','CREATE')
                OR has_schema_privilege('authenticated','public','CREATE') THEN
