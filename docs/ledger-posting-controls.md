@@ -10,7 +10,7 @@ Migration 202610310004_ledger_posting_controls.sql adds the first controlled jou
 - Debits and credits must balance independently for every currency; an FX journal must therefore contain separately balanced currency legs.
 - The posting function locks the transaction header, validates all lines and marks the journal posted in one database transaction.
 - Retrying a post for an already-posted journal returns the existing posted header rather than posting twice.
-- Browser roles and direct service-role table writes are not granted by this migration; posting/reversal execute grants are restricted to service_role.
+- Browser roles and direct service-role journal writes are denied; the service role receives read access and narrowly scoped execute grants for draft creation, posting and reversal.
 
 ## Reversals
 
@@ -20,7 +20,7 @@ A posted journal is never edited or deleted. The reversal routine requires a rea
 
 Posting and reversal create append-only audit event rows. Journal entries can only be inserted, updated or deleted while the parent journal is draft. Posted transaction headers cannot be edited except for the controlled transition to reversed. Audit rows have no direct browser or service-role table privileges.
 
-The service-role key must never be shipped to a browser. These functions are privileged database operations and require a server-only API that authenticates the operator, validates business authorization and writes an audit trail. The database function is not a substitute for payment authorization, account balance/available-funds checks, risk screening, provider idempotency, or reconciliation.
+Draft creation is server-only and idempotent: it stores a canonical request fingerprint, rejects reuse of a key for different content, and creates the header and lines atomically. The service-role key must never be shipped to a browser. These functions are privileged database operations and require a server-only API that authenticates the operator, validates business authorization and writes an audit trail. The database function is not a substitute for payment authorization, account balance/available-funds checks, risk screening, provider idempotency, or reconciliation.
 
 ## Still required before production
 
