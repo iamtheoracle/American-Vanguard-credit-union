@@ -52,6 +52,7 @@ test('member ownership boundaries hide another member loans, money requests and 
   await query("UPDATE money_requests SET status = 'information_required' WHERE id = $1", [moneyId]);
   await query("UPDATE approvals SET status = 'info_requested' WHERE id = $1", [money.data.request.approvalId]);
 
+  const beforeMessages = await query('SELECT count(*)::int AS count FROM case_messages WHERE case_id = $1', [caseId]);
   const caseRead = await api(env.base, `/api/support/cases/${caseId}`, { cookie: otherLogin.cookie });
   assert.equal(caseRead.status, 404);
   const caseWrite = await api(env.base, `/api/support/cases/${caseId}/messages`, {
@@ -72,7 +73,7 @@ test('member ownership boundaries hide another member loans, money requests and 
   const { rows } = await query('SELECT member_id FROM support_cases WHERE id = $1', [caseId]);
   assert.notEqual(rows[0].member_id, otherMemberId);
   const { rows: messages } = await query('SELECT count(*)::int AS count FROM case_messages WHERE case_id = $1', [caseId]);
-  assert.equal(messages[0].count, 1, 'unauthorized member must not append a case message');
+  assert.equal(messages[0].count, beforeMessages.rows[0].count, 'unauthorized member must not append a case message');
 });
 
 test('password reset tokens are single-use under replay and concurrent completion', async t => {
