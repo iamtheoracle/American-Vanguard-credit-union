@@ -210,21 +210,14 @@ router.post('/operator/transactions/:id/reverse', ...guard('super_admin'), async
 router.get('/operator/members', ...guard('management', 'operator'), async (req, res, next) => {
   try {
     const search = String(req.query.search || '').slice(0, 80);
-    const params = search ? [`%${search}%`] : [];
-    const where = search ? 'WHERE (m.full_name ILIKE $1 OR m.email ILIKE $1)' : '';
-    const { rows } = await query(
-      `SELECT m.id, m.email, m.full_name AS "fullName", m.status, m.created_at AS "createdAt",
-              (SELECT coalesce(sum(a.balance_cents),0) FROM accounts a WHERE a.member_id = m.id) AS "totalCents"
-       FROM members m ${where} ORDER BY m.created_at DESC LIMIT 100`, params);
+    const { rows } = await operatorRepo.listMembers(search);
     res.json({ members: rows });
   } catch (error) { next(error); }
 });
 
 router.get('/operator/members/:id', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const { rows } = await query(
-      'SELECT id, email, full_name AS "fullName", status, created_at AS "createdAt" FROM members WHERE id = $1',
-      [req.params.id]);
+    const { rows } = await operatorRepo.getMemberProfile(req.params.id);
     if (!rows[0]) return res.status(404).json({ error: 'Member not found' });
     const member = rows[0];
     // Viewing a member's full profile is itself audited.
@@ -232,22 +225,10 @@ router.get('/operator/members/:id', ...guard('management', 'operator'), async (r
       actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
       action: 'member.viewed', entityType: 'member', entityId: member.id
     });
-    const accounts = await query(
-      `SELECT id, name, kind, suffix, balance_cents AS "balanceCents", status FROM accounts WHERE member_id = $1`, [member.id]);
-    const transactions = await query(
-      `SELECT t.reference, t.type, t.status, t.amount_cents AS "amountCents", t.created_at AS "createdAt", t.memo, t.payee
-       FROM transactions t JOIN accounts a ON (a.id = t.from_account_id OR a.id = t.to_account_id)
-       WHERE a.member_id = $1 ORDER BY t.created_at DESC LIMIT 50`, [member.id]);
-    const [loans, moneyRequests, approvals] = await Promise.all([
-      query(`SELECT reference, status, requested_amount_cents AS "amountCents", currency,
-                    created_at AS "createdAt", reviewed_at AS "reviewedAt", decision_reason AS "decisionReason"
-             FROM loan_applications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id]),
-      query(`SELECT reference, request_type AS "requestType", status, amount_cents AS "amountCents",
-                    currency, created_at AS "createdAt", reviewed_at AS "reviewedAt", decision_reason AS "decisionReason"
-             FROM money_requests WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id]),
-      query(`SELECT id, item_type AS "itemType", status, decision_reason AS "decisionReason",
-                    created_at AS "createdAt", decided_at AS "decidedAt"
-             FROM approvals WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id])
+    const [accounts, transactions, loans, moneyRequests, approvals] = await Promise.all([
+      operatorRepo.listMemberAccounts(member.id), operatorRepo.listMemberTransactions(member.id),
+      operatorRepo.listMemberLoans(member.id), operatorRepo.listMemberMoneyRequests(member.id),
+      operatorRepo.listMemberApprovals(member.id)
     ]);
     res.json({
       member, accounts: accounts.rows, transactions: transactions.rows,
@@ -305,11 +286,7 @@ router.delete('/operator/members/:id/tier/override', ...guard('management'), asy
 
 router.get('/operator/members/:id/tier/history', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT previous_tier AS "previousTier", new_tier AS "newTier", reason,
-              changed_by_type AS "changedByType", changed_by AS "changedBy", created_at AS "createdAt"
-       FROM membership_tier_history WHERE member_id = $1 ORDER BY created_at DESC LIMIT 100`,
-      [req.params.id]);
+    const { rows } = await operatorRepo.listMemberTierHistory(req.params.id);
     res.json({ history: rows });
   } catch (error) { next(error); }
 });
