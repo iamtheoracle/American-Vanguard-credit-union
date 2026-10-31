@@ -11,11 +11,13 @@ const roles = ['member', 'support', 'management', 'auditor', 'admin', 'worker', 
   .map(name => 'avcu_test_' + name);
 
 async function asRole(role, actor, fn) {
-  const client = new pg.Client({
-    connectionString: adminUrl,
-    user: role,
-    password: 'avcu-disposable-' + role + '-only'
-  });
+  // pg-connection-string parsing can override sibling config fields. Put the
+  // actor credentials in the URL itself so the test cannot silently connect
+  // as the privileged AVCU_TEST_ADMIN_URL user.
+  const actorUrl = new URL(adminUrl);
+  actorUrl.username = role;
+  actorUrl.password = 'avcu-disposable-' + role + '-only';
+  const client = new pg.Client({ connectionString: actorUrl.toString() });
   await client.connect();
   try {
     await client.query('BEGIN');
