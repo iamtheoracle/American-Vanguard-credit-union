@@ -121,3 +121,32 @@ Trulioo adapter is primary. Persona adapter must implement the same contract and
 - Confirmation of the exact Trulioo product/API version, enabled country/document/check matrix, webhook signing method, report/evidence export rights, retention terms and whether any video file is actually available to AVCU.
 - Persona sandbox tenant/credentials and equivalent coverage/retention terms before enabling fallback.
 - AVCU's approved legal entity, operating-country list, compliance owner, privacy notice and retention schedule.
+
+
+---
+
+## AVCU-owned identity governance implementation (2026-10-31)
+
+The governing architecture is AVCU-owned. External verification providers are optional evidence sources and must never be the system of record or the owner of member identity data, disclosure permissions, or audit history.
+
+### Implemented in this branch
+- Added `20261104_avcu_identity_governance.sql` for AVCU identity profiles, verification sessions/check records/decisions, source approvals, evidence manifests, scoped operator assignments, access grants, disclosure requests/fields/events, retrieval events, and retention actions.
+- Added `server/identity-governance.js` and mounted it in the API.
+- Added member-owned identity profile and disclosure-history endpoints.
+- Added operator disclosure request workflow with a strict field allowlist, named recipient person and legal entity, purpose, legal basis, authority reference, channel, expiry, reason, and two-person approval (requester cannot approve their own request).
+- Added management-only assignment and revocation endpoints with narrow scopes and expiry. Ordinary operators are restricted to assigned cases; auditor role is excluded from KYC case detail routes.
+- Disclosure approval is not release. No external transfer endpoint is enabled until private-vault retrieval, recipient authentication, step-up authentication, field-level release authorization, transfer receipts and downstream deletion controls are implemented and tested.
+
+### Explicitly not represented as complete
+- The private encrypted object-storage adapter, KMS envelope encryption, secure evidence retrieval/export, step-up authentication, actual document authenticity engine, independent liveness/anti-spoofing component, face-match attestation, and authoritative source adapters remain implementation work.
+- No proprietary biometric algorithm or government-database connection is claimed.
+- The initial country allowlist remains US by default. Additional countries require country-specific source coverage, legal and operational approval.
+- This branch does not activate live KYC, customer onboarding, account opening, cards, lending, or money movement.
+
+### Mandatory next controls
+1. Validate migration against the exact deployment schema and disposable PostgreSQL.
+2. Add route-level integration tests for member isolation, assignment scope, two-person disclosure approval, expiry, revocation, and append-only disclosure events.
+3. Implement a private encrypted evidence vault with KMS-backed envelope encryption and no public bucket/object access.
+4. Implement step-up authentication and short-lived, case-bound retrieval grants; log every preview, retrieval, export and denial.
+5. Implement the internal verification orchestration engine and source capability matrix; only claim a check is passed when supported by validated evidence.
+6. Complete security, legal, provider/source and operational approvals before production activation.
