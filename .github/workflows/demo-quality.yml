@@ -48,3 +48,5 @@ jobs:
         run: npm test
       - name: Run API integration tests
         run: npm run test:api
+      - name: Run independent-login and privilege-boundary tests
+        run: npm run test:rls
