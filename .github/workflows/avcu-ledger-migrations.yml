@@ -90,6 +90,33 @@ jobs:
             IF position('v_fingerprint' in function_body)=0 OR position('v_inserted' in function_body)=0 THEN
               RAISE EXCEPTION 'Corrected ledger draft function body was not installed';
             END IF;
+            IF has_function_privilege('service_role',
+              'public.avcu_mark_provider_event_verified(uuid,text)','EXECUTE') THEN
+              RAISE EXCEPTION 'Shared service_role must not attest provider signature verification';
+            END IF;
+            IF NOT has_function_privilege('avcu_provider_verifier',
+              'public.avcu_mark_provider_event_verified(uuid,text)','EXECUTE') THEN
+              RAISE EXCEPTION 'Dedicated provider verifier role lacks verification capability';
+            END IF;
+          END
+          $verify$;
+          SQL
+
+      - name: Verify provider replay evidence survives conflict handling
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          SELECT public.avcu_ingest_provider_event('ci-provider','event-1','payment.updated','{"amount":100}'::jsonb);
+          SELECT public.avcu_ingest_provider_event('ci-provider','event-1','payment.updated','{"amount":101}'::jsonb);
+          DO $verify$
+          DECLARE conflicts integer; event_status text;
+          BEGIN
+            SELECT count(*) INTO conflicts FROM public.avcu_provider_event_conflicts
+            WHERE provider_code='ci-provider' AND provider_event_id='event-1';
+            SELECT processing_status INTO event_status FROM public.avcu_provider_events
+            WHERE provider_code='ci-provider' AND provider_event_id='event-1';
+            IF conflicts <> 1 OR event_status <> 'quarantined' THEN
+              RAISE EXCEPTION 'Provider replay conflict evidence was not durably preserved';
+            END IF;
           END
           $verify$;
           SQL
