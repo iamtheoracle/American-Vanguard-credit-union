@@ -111,11 +111,9 @@ test('member cannot read or write another member records', async () => {
   const read = await asActor({ type: 'member', id: 'member-a' },
     c => c.query('SELECT id FROM ' + schema + '.support_cases WHERE id = $1', ['c-b']));
   assert.equal(read.rowCount, 0);
-  await assert.rejects(
-    asActor({ type: 'member', id: 'member-a' },
-      c => c.query("UPDATE " + schema + ".support_cases SET body='tampered' WHERE id='c-b'")),
-    /permission|row-level security/i
-  );
+  const crossMemberUpdate = await asActor({ type: 'member', id: 'member-a' },
+    c => c.query("UPDATE " + schema + ".support_cases SET body='tampered' WHERE id='c-b'"));
+  assert.equal(crossMemberUpdate.rowCount, 0, 'RLS should filter another member row from UPDATE');
   await assert.rejects(
     asActor({ type: 'member', id: 'member-a' },
       c => c.query("INSERT INTO " + schema + ".member_records VALUES ('forged','member-b','forged')")),
@@ -141,11 +139,9 @@ test('auditor can read audit events but cannot write support or audit records', 
       c => c.query("INSERT INTO " + schema + ".audit_events VALUES ('audit-2','operator-1','forged')")),
     /permission denied/i
   );
-  await assert.rejects(
-    asActor({ type: 'operator', id: 'operator-1', role: 'auditor' },
-      c => c.query("UPDATE " + schema + ".support_cases SET body='tampered' WHERE id='c-a'")),
-    /permission denied|row-level security/i
-  );
+  const supportUpdate = await asActor({ type: 'operator', id: 'operator-1', role: 'auditor' },
+    c => c.query("UPDATE " + schema + ".support_cases SET body='tampered' WHERE id='c-a'"));
+  assert.equal(supportUpdate.rowCount, 0, 'auditor policy should filter support rows from UPDATE');
 });
 
 test('management can access operational support rows but not member-private records', async () => {
