@@ -53,6 +53,47 @@ const TIERS = {
   super_admin: ['super_admin']
 };
 
+// Product application review is an internal workflow only. It cannot issue a card,
+ // approve credit, create a loan, or instruct a partner institution.
+router.get('/operator/product-applications', requireOperatorRole('operator', 'management', 'super_admin'), async (req, res, next) => {
+  try {
+    const status = String(req.query.status || 'pending_review');
+    if (!['pending_review','needs_information','referred_to_partner','closed','all'].includes(status)) {
+      return res.status(400).json({ error: 'Unsupported application status.' });
+    }
+    const params = [];
+    let where = '';
+    if (status !== 'all') { params.push(status); where = 'WHERE p.status = $1'; }
+    const { rows } = await query(
+      `SELECT p.id, p.product_type AS "productType", p.requested_amount_cents AS "requestedAmountCents",
+              p.purpose, p.status, p.review_note AS "reviewNote", p.created_at AS "createdAt",
+              m.id AS "memberId", m.member_number AS "memberNumber", m.full_name AS "memberName",
+              m.email AS "memberEmail", m.status AS "membershipStatus"
+       FROM product_applications p JOIN members m ON m.id = p.member_id
+       ${where} ORDER BY p.created_at ASC LIMIT 200`, params);
+    res.json({ applications: rows.map(row => ({ ...row, requestedAmountCents: row.requestedAmountCents == null ? null : Number(row.requestedAmountCents) })) });
+  } catch (error) { next(error); }
+});
+router.patch('/operator/product-applications/:id', requireOperatorRole('management', 'super_admin'), async (req, res, next) => {
+  try {
+    const status = String(req.body?.status || '');
+    if (!['needs_information','referred_to_partner','closed'].includes(status)) {
+      return res.status(400).json({ error: 'Choose needs_information, referred_to_partner, or closed.' });
+    }
+    const note = String(req.body?.note || '').trim().slice(0, 1000);
+    if (note.length < 5) return res.status(400).json({ error: 'A review note of at least five characters is required.' });
+    const { rows } = await query(
+      `UPDATE product_applications SET status = $1, reviewed_by = $2, review_note = $3, updated_at = now()
+       WHERE id = $4 RETURNING id, status, updated_at AS "updatedAt"`,
+      [status, req.operator.id, note, req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Product application not found.' });
+    await audit(null, { actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
+      action: 'product_application.reviewed', entityType: 'product_application', entityId: req.params.id,
+      metadata: { status, note } });
+    res.json({ application: rows[0] });
+  } catch (error) { next(error); }
+});
+
 // Read-only historical account dossier. It reports only records actually stored in AVCU;
 // it never synthesizes missing transactions or inserts a lifecycle/death event.
 router.get('/operator/members/:memberId/account-history', requireOperatorRole('management', 'super_admin'), async (req, res, next) => {
