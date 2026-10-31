@@ -135,11 +135,9 @@ router.get('/operator/kyc/cases', operatorAuth, requireOperatorRole('management'
     const params=[];
     const clauses=[];
     if(status){params.push(status);clauses.push('c.status = $1');}
-    if(req.operator.role==='operator'){
-      params.push(req.operator.id);
-      const operatorParam=status?'$2':'$1';
-      clauses.push("EXISTS (SELECT 1 FROM avcu_identity_profiles ip JOIN avcu_identity_case_assignments ia ON ia.identity_profile_id=ip.id WHERE ip.member_id=c.member_id AND ia.operator_id="+operatorParam+" AND ia.scope IN ('review','evidence_metadata') AND ia.revoked_at IS NULL AND (ia.expires_at IS NULL OR ia.expires_at>now()))");
-    }
+    params.push(req.operator.id);
+    const operatorParam=status?'$2':'$1';
+    clauses.push("EXISTS (SELECT 1 FROM avcu_identity_profiles ip JOIN avcu_identity_case_assignments ia ON ia.identity_profile_id=ip.id WHERE ip.member_id=c.member_id AND ia.operator_id="+operatorParam+" AND ia.scope IN ('review','evidence_metadata') AND ia.revoked_at IS NULL AND (ia.expires_at IS NULL OR ia.expires_at>now()))");
     const where=clauses.length?'WHERE '+clauses.join(' AND '):'';
     const {rows}=await query(`SELECT c.id,c.country_code AS "countryCode",c.status,c.provider_key AS provider,c.risk_level AS "riskLevel",c.created_at AS "createdAt",m.full_name AS "memberName",m.email AS "memberEmail",c.assigned_reviewer_id AS "assignedReviewerId"
       FROM kyc_cases c JOIN members m ON m.id=c.member_id ${where} ORDER BY c.created_at DESC LIMIT 100`,params);
