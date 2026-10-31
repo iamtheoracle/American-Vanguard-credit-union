@@ -44,3 +44,5 @@ jobs:
         run: npm run check && npm test
       - name: PostgreSQL API and integration tests
         run: npm run test:api
+      - name: Disposable PostgreSQL RLS isolation tests
+        run: npm run test:rls
