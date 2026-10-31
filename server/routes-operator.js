@@ -14,6 +14,7 @@ import { validateLegacyTransactions } from './migration-validation.js';
 import { listTeams, controlTeam } from './team-runtime.js';
 import { teamQueueHealth } from './job-queue.js';
 import { rolesForGuards } from './operator-roles.js';
+import * as operatorRepo from './repositories/operator.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -82,19 +83,8 @@ router.post('/operator/teams/:teamId/control', ...guard('super_admin'), async (r
 
 router.get('/operator/queue', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const [approvals, cases, aiFailed, membership, alerts, moneyRequests, health] = await Promise.all([
-      query(`SELECT count(*) FILTER (WHERE status = 'pending') AS pending,
-                    count(*) FILTER (WHERE status = 'escalated') AS escalated
-             FROM approvals`),
-      query(`SELECT count(*) FILTER (WHERE status IN ('open','in_progress')) AS open,
-                    count(*) FILTER (WHERE status = 'escalated') AS escalated
-             FROM support_cases`),
-      query(`SELECT count(*) AS failed FROM ai_tasks WHERE status = 'failed'`),
-      query(`SELECT count(*) AS pending FROM members WHERE status = 'pending'`),
-      query(`SELECT count(*) AS pending FROM operations_alerts WHERE status = 'pending' AND alert_type = 'loan_application_submitted'`),
-      query(`SELECT count(*) AS pending FROM approvals WHERE item_type = 'money_request' AND status IN ('pending','escalated','info_requested')`),
-      integrationHealth()
-    ]);
+    const [queue, health] = await Promise.all([operatorRepo.getQueueSummary(), integrationHealth()]);
+    const { approvals, cases, aiFailed, membership, alerts, moneyRequests } = queue;
     res.json({
       approvals: { pending: Number(approvals.rows[0].pending), escalated: Number(approvals.rows[0].escalated) },
       cases: { open: Number(cases.rows[0].open), escalated: Number(cases.rows[0].escalated) },
@@ -648,11 +638,7 @@ router.get('/operator/migrations/:id', ...guard('management', 'operator', 'audit
 router.get('/operator/audit', ...guard('management', 'super_admin', 'auditor'), async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
-    const { rows } = await query(
-      `SELECT id, actor_type AS "actorType", actor_id AS "actorId", actor_role AS "actorRole",
-              action, entity_type AS "entityType", entity_id AS "entityId", metadata,
-              created_at AS "createdAt"
-       FROM audit_events ORDER BY id DESC LIMIT ${limit}`);
+    const { rows } = await operatorRepo.listAuditEvents(limit);
     res.json({ events: rows });
   } catch (error) { next(error); }
 });
