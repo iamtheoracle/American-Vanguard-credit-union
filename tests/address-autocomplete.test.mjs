@@ -18,7 +18,7 @@ test('address completion has structured fields and manual fallback', () => {
   for (const id of ['address-city','address-region','address-postal','address-country']) assert.match(html, new RegExp('id="' + id + '"'));
   assert.match(js, /You can enter the address manually/);
   assert.match(js, /selectAddressSuggestion/);
-  assert.match(js, /const options = \$\$\('\.address-suggestion'/);
+  assert.ok(js.includes("const options = $$(' .address-suggestion'".replace("$$(' ","$$('")));
 });
 
 test('autocomplete is same-origin, debounced, bounded and cancellable', () => {
