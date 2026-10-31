@@ -1,12 +1,12 @@
 import pg from 'pg';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
-
 export const DATABASE_URL = process.env.DATABASE_URL || 'postgres://avcu:avcu@127.0.0.1:5432/avcu';
-
+const requestContext = new AsyncLocalStorage();
 let pool = null;
 function getPool() {
   if (!pool) pool = new pg.Pool({ connectionString: process.env.DATABASE_URL || DATABASE_URL, max: 10 });
@@ -19,56 +19,16 @@ export function configurePoolForTests(testPool) {
   if (!testPool || typeof testPool.connect !== 'function' || typeof testPool.query !== 'function') throw new TypeError('Invalid test pool');
   pool = testPool;
 }
-export const query = (text, params) => getPool().query(text, params);
-
-export async function withTx(fn) {
-  const client = await getPool().connect();
-  try {
-    await client.query('BEGIN');
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* connection already lost */ }
-    throw error;
-  } finally {
-    client.release();
-  }
+export function currentActor() { return requestContext.getStore()?.actor || null; }
+export function query(text, params) {
+  const store = requestContext.getStore();
+  return store?.client ? store.client.query(text, params) : getPool().query(text, params);
 }
 
-export async function migrate(log = () => {}) {
-  if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL must be configured explicitly in production.');
-  }
-  await query(`CREATE TABLE IF NOT EXISTS schema_migrations (
-    name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-  const applied = new Set((await query('SELECT name FROM schema_migrations')).rows.map(r => r.name));
-  const files = readdirSync(MIGRATIONS_DIR).filter(f => f.endsWith('.sql')).sort();
-  for (const file of files) {
-    if (applied.has(file)) continue;
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
-    await withTx(async client => {
-      await client.query(sql);
-      await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file]);
-    });
-    log(`applied migration ${file}`);
-  }
-}
-
-export async function close() {
-  if (pool) await pool.end();
-  pool = null;
-}
-
-// ---- audit ----------------------------------------------------------------
-export function audit(client, event) {
-  const sql = `INSERT INTO audit_events (actor_type, actor_id, actor_role, action, entity_type, entity_id, metadata)
-               VALUES ($1,$2,$3,$4,$5,$6,$7)`;
-  const params = [event.actorType, event.actorId || null, event.actorRole || null,
-    event.action, event.entityType, event.entityId || null,
-    JSON.stringify(event.metadata || {})];
-  return client ? client.query(sql, params) : query(sql, params);
-}export function bindActorContext(req, res, actor, next) {
+// Bind only after the server has validated its HttpOnly cookie against the
+// server-side session table. The transaction is held until the HTTP response
+// finishes, so every route query uses the same connection and SET LOCAL claims.
+export function bindActorContext(req, res, actor, next) {
   if (!actor || !['member','operator','system','worker'].includes(actor.type)) {
     return next(new TypeError('A trusted actor context is required'));
   }
@@ -93,7 +53,7 @@ export function audit(client, event) {
       await client.query('BEGIN');
       await client.query("SELECT set_config('app.actor_type', $1, true), set_config('app.actor_id', $2, true), set_config('app.actor_role', $3, true)",
         [actor.type, actor.id == null ? '' : String(actor.id), actor.role || '']);
-      requestContext.run({ actor: Object.freeze({ ...actor }), client }, () => {
+      requestContext.run({ actor: Object.freeze({ ...actor }), client, savepoint: 0 }, () => {
         res.once('finish', () => { void finish(true); });
         res.once('close', () => { if (!res.writableFinished) void finish(false); });
         next();
@@ -107,6 +67,19 @@ export function audit(client, event) {
 }
 
 export async function withTx(fn) {
+  const store = requestContext.getStore();
+  if (store?.client) {
+    const savepoint = `avcu_sp_${++store.savepoint}`;
+    await store.client.query(`SAVEPOINT ${savepoint}`);
+    try {
+      const result = await fn(store.client);
+      await store.client.query(`RELEASE SAVEPOINT ${savepoint}`);
+      return result;
+    } catch (error) {
+      await store.client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      throw error;
+    }
+  }
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -114,11 +87,9 @@ export async function withTx(fn) {
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* connection already lost */ }
+    try { await client.query('ROLLBACK'); } catch {}
     throw error;
-  } finally {
-    client.release();
-  }
+  } finally { client.release(); }
 }
 
 export async function migrate(log = () => {}) {
@@ -139,18 +110,14 @@ export async function migrate(log = () => {}) {
     log(`applied migration ${file}`);
   }
 }
+export async function close() { if (pool) await pool.end(); pool = null; }
 
-export async function close() {
-  if (pool) await pool.end();
-  pool = null;
-}
-
-// ---- audit ----------------------------------------------------------------
 export function audit(client, event) {
   const sql = `INSERT INTO audit_events (actor_type, actor_id, actor_role, action, entity_type, entity_id, metadata)
                VALUES ($1,$2,$3,$4,$5,$6,$7)`;
-  const params = [event.actorType, event.actorId || null, event.actorRole || null,
-    event.action, event.entityType, event.entityId || null,
+  const actor = currentActor();
+  const params = [event.actorType || actor?.type || 'system', event.actorId || actor?.id || null,
+    event.actorRole || actor?.role || null, event.action, event.entityType, event.entityId || null,
     JSON.stringify(event.metadata || {})];
   return client ? client.query(sql, params) : query(sql, params);
 }
