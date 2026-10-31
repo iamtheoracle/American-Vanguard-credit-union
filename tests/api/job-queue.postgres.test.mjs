@@ -36,7 +36,10 @@ test('PostgreSQL queue: leasing, concurrency, ack ownership, retry, dead-letter 
     };
 
     await t.test('idempotency key cannot silently alias a different payload', async () => {
-      await enqueue('idempotency');
+      const original = await enqueue('idempotency');
+      const lease = await queue.claimJob({teamId,serviceId,workerId:workerA,leaseSeconds:60});
+      assert.equal(lease.id,original.id);
+      await queue.acknowledgeJob({jobId:original.id,leaseToken:lease.lease_token,workerId:workerA,result:{ok:true}});
       await assert.rejects(
         queue.enqueueJob({teamId,serviceId,jobType:'member.task',payload:{taskType:'changed'},idempotencyKey:prefix+'-idempotency'}),
         /idempotency key conflicts/
