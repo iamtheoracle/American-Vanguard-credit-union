@@ -1,7 +1,7 @@
 import express from 'express';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate, close, audit } from './db.js';
+import { close, audit } from './db.js';
 import memberRoutes from './routes-member.js';
 import operatorRoutes from './routes-operator.js';
 import { verifyWebhookSignature, webhookSecret, integrationHealth } from './integrations/index.js';
@@ -88,7 +88,8 @@ async function webhookHandler(req, res) {
 }
 
 export async function startServer({ port = process.env.PORT || 3000 } = {}) {
-  await migrate();
+  // Schema migrations are executed only by the reviewed deployment pipeline.
+  // Application startup must never perform DDL or advance schema state.
   await registerTeams();
   await registerTeamServiceIdentities();
   startNotificationWorker();
