@@ -494,7 +494,7 @@
       addressLookup.timer = setTimeout(() => requestAddressSuggestions(query), 300);
     });
     search.addEventListener('keydown', event => {
-      const options = $('.address-suggestion', $('#address-suggestions'));
+      const options = $$('.address-suggestion', $('#address-suggestions'));
       if (!options.length) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
