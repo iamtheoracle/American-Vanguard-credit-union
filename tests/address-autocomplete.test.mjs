@@ -4,19 +4,21 @@ import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const js = await readFile(new URL('../app.js', import.meta.url), 'utf8');
-const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 const netlify = await readFile(new URL('../netlify.toml', import.meta.url), 'utf8');
 const docs = await readFile(new URL('../docs/address-autocomplete.md', import.meta.url), 'utf8');
 
-test('address suggestions are opt-in and disabled until explicitly enabled', () => {
+test('address suggestions are opt-in and manual entry remains available', () => {
   assert.match(html, /id="address-suggestions-enabled" type="checkbox"/);
-  assert.match(html, /id="address-search"/);\n  assert.doesNotMatch(html, /id="address-search"[^>]*disabled/);
+  assert.match(html, /id="address-search"/);
+  assert.doesNotMatch(html, /id="address-search"[^>]*disabled/);
+  assert.match(js, /search.disabled = false/);
 });
 
 test('address completion has structured fields and manual fallback', () => {
   for (const id of ['address-city','address-region','address-postal','address-country']) assert.match(html, new RegExp('id="' + id + '"'));
   assert.match(js, /You can enter the address manually/);
-  assert.match(js, /selectAddressSuggestion/);\n  assert.match(js, /const options = \$\$\('\.address-suggestion'/);
+  assert.match(js, /selectAddressSuggestion/);
+  assert.match(js, /const options = \$\$\('\.address-suggestion'/);
 });
 
 test('autocomplete is same-origin, debounced, bounded and cancellable', () => {
