@@ -26,8 +26,20 @@ test('member identity profile is owner-scoped and disclosure history is visible 
   profileId=created.data.profile.id;
   assert.ok(profileId);
 
-  const managerRequest=await api(app.base,'/api/operator/identity/disclosures',{
+  const requestor=await loginOperator(app.base,'teller@avcu.demo');
+  assert.equal(requestor.response.status,200);
+  const operatorRow=await db.pool.query('SELECT id FROM operators WHERE email=$1',['teller@avcu.demo']);
+  assert.equal(operatorRow.rowCount,1);
+  const assigned=await api(app.base,'/api/operator/identity/assignments',{
     method:'POST',cookie:manager.cookie,body:{
+      identityProfileId:profileId,operatorId:operatorRow.rows[0].id,
+      scope:'disclosure_prepare',expiresAt:new Date(Date.now()+86400000).toISOString(),
+      reason:'Assign a named requestor to prepare a specific disclosure.'
+    }
+  });
+  assert.equal(assigned.status,201);
+  const managerRequest=await api(app.base,'/api/operator/identity/disclosures',{
+    method:'POST',cookie:requestor.cookie,body:{
       identityProfileId:profileId,
       recipientLegalEntity:'AVCU approved receiving institution',
       recipientPerson:'Named receiving officer',
@@ -50,10 +62,10 @@ test('member identity profile is owner-scoped and disclosure history is visible 
   assert.equal(history.data.disclosures.length,1);
   assert.equal(history.data.disclosures[0].status,'pending_approval');
 
-  const selfApproval=await api(app.base,`/api/operator/identity/disclosures/${managerRequest.data.request.id}/decision`,{
-    method:'POST',cookie:manager.cookie,body:{decision:'approved',reason:'Attempted self-approval should be denied.'}
+  const unassignedApproval=await api(app.base,`/api/operator/identity/disclosures/${managerRequest.data.request.id}/decision`,{
+    method:'POST',cookie:manager.cookie,body:{decision:'approved',reason:'Approval must require a separate assigned reviewer.'}
   });
-  assert.equal(selfApproval.status,403);
+  assert.equal(unassignedApproval.status,403);
 });
 
 test('privacy notice acknowledgement is separate from optional purpose-specific consent',async()=>{
