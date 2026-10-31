@@ -12,7 +12,13 @@ const TEAM_CAPABILITIES = Object.freeze({
  'risk-compliance':['policy.evaluate','audit.read'],
  'operations':['runtime.monitor','runtime.control']
 });
-const JOB_TYPES = new Set(['notification.deliver','travel.search','ai.respond','risk.evaluate','member.task']);
+const JOB_POLICY = Object.freeze({
+ 'notification.deliver':{team:'communications',capability:'notifications.send'},
+ 'travel.search':{team:'travel',capability:'travel.search'},
+ 'ai.respond':{team:'ai-orchestration',capability:'ai.respond'},
+ 'risk.evaluate':{team:'risk-compliance',capability:'policy.evaluate'},
+ 'member.task':{team:'member-experience',capability:'member.support'}
+});
 const MAX_PAYLOAD_BYTES = 256 * 1024;
 
 export function serviceTokenEnvName(serviceId) {
@@ -77,8 +83,8 @@ export async function validateWorkerIdentity({teamId,serviceId,token}) {
  return a.length===b.length&&timingSafeEqual(a,b);
 }
 \nexport async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKey,maxAttempts=8,delaySeconds=0}) {
-  if(!TEAM_CAPABILITIES[teamId] || !JOB_TYPES.has(jobType)) throw new Error('Unknown team or job type.');
-  if(!TEAM_CAPABILITIES[teamId].some(c=>c)) throw new Error('Team has no capabilities.');
+  const policy=JOB_POLICY[jobType];
+  if(!TEAM_CAPABILITIES[teamId] || !policy || policy.team!==teamId) throw new Error('Job type is not permitted for this team.');
   const serialized=JSON.stringify(payload ?? {});
   if(Buffer.byteLength(serialized)>MAX_PAYLOAD_BYTES) throw new Error('Job payload exceeds limit.');
   if(typeof idempotencyKey!=='string'||idempotencyKey.length<8||idempotencyKey.length>200) throw new Error('A stable idempotency key is required.');
@@ -86,10 +92,10 @@ export async function validateWorkerIdentity({teamId,serviceId,token}) {
    `INSERT INTO avcu_jobs(team_id,service_id,job_type,payload,idempotency_key,max_attempts,available_at)
     SELECT $1,$2,$3,$4::jsonb,$5,$6,now()+($7*interval '1 second')
     WHERE EXISTS(SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active)
-      AND EXISTS(SELECT 1 FROM avcu_team_runtime t WHERE t.team_id=$1 AND t.desired_state='ACTIVE')\n      AND EXISTS(SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active AND s.capabilities ? $3)
+      AND EXISTS(SELECT 1 FROM avcu_team_runtime t WHERE t.team_id=$1 AND t.desired_state='ACTIVE')\n      AND EXISTS(SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active AND s.capabilities ? $8)
     ON CONFLICT(team_id,idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
     RETURNING id,team_id,status,attempts,created_at`,
-   [teamId,serviceId,jobType,serialized,idempotencyKey,maxAttempts,delaySeconds,jobType]);
+   [teamId,serviceId,jobType,serialized,idempotencyKey,maxAttempts,delaySeconds,policy.capability]);
   if(!result.rowCount) throw new Error('Service identity inactive or team not enabled.');
   return result.rows[0];
 }
