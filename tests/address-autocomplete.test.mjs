@@ -37,5 +37,5 @@ test('suggestion content is inserted as text, not provider HTML', () => {
 
 test('documentation prohibits direct third-party browser lookup and address verification claims', () => {
   assert.match(docs, /Do not call a third-party geocoding API directly from the browser/);
-  assert.match(docs, /not proof of residence, identity, or eligibility/);
+  assert.match(docs, /not treat an autocomplete match as proof of residence/);
 });
