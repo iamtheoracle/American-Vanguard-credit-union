@@ -384,7 +384,7 @@ router.post('/operator/operators', requireOperatorRole('super_admin'), async (re
   try {
     const { email, name, role, password } = req.body || {};
     if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email' });
-    if (!['super_admin', 'management', 'operator'].includes(role)) return res.status(400).json({ error: 'Unknown role' });
+    if (!['super_admin', 'management', 'operator', 'auditor'].includes(role)) return res.status(400).json({ error: 'Unknown role' });
     if (!validPassword(password)) return res.status(400).json({ error: `Password must be at least ${PASSWORD_MIN} characters` });
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Enter a name' });
     const passwordHash = await hashPassword(password);
