@@ -120,7 +120,7 @@ test('ordinary KYC operators see only actively assigned identity cases',async()=
   const visibleDetail=await api(app.base,`/api/operator/kyc/cases/${kycCaseId}`,{cookie:teller.cookie});
   assert.equal(visibleDetail.status,200);
 
-  const revoked=await api(app.base,`/api/operator/identity/assignments/${assignmentId}/revoke',{
+  const revoked=await api(app.base,`/api/operator/identity/assignments/${assignmentId}/revoke`,{
     method:'POST',cookie:manager.cookie,body:{}
   });
   assert.equal(revoked.status,200);
