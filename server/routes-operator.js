@@ -12,6 +12,7 @@ import { notifyMember } from './notifications.js';
 import { MEMBERSHIP_TIERS, recalculateMemberTier, overrideMemberTier, clearMemberTierOverride } from './membership-tiers.js';
 import { validateLegacyTransactions } from './migration-validation.js';
 import { listTeams, controlTeam } from './team-runtime.js';
+import { teamQueueHealth } from './job-queue.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -52,7 +53,7 @@ router.use('/operator', operatorAuth);
 
 // ---- independent team runtime controls ------------------------------------------
 router.get('/operator/teams', ...guard('management', 'operator', 'auditor'), async (req, res, next) => {
-  try { res.json({ teams: await listTeams() }); }
+  try { res.json({ teams: await listTeams(), queueHealth: await teamQueueHealth() }); }
   catch (error) { next(error); }
 });
 
