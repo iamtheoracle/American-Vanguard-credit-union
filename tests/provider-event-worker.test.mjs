@@ -37,8 +37,8 @@ test('service role uses narrow worker functions and cannot attest provider signa
   for (const fn of ['avcu_ingest_provider_event','avcu_claim_provider_event','avcu_complete_provider_event','avcu_retry_provider_event','avcu_quarantine_provider_event']) {
     assert.ok(sql.includes('grant execute on function public.' + fn + '('), fn + ' must have an explicit execute grant');
   }
-  assert.ok(sql.includes('grant execute on function public.avcu_mark_provider_event_verified(uuid,text) to avcu_provider_verifier'));
-  assert.equal(sql.includes('grant execute on function public.avcu_mark_provider_event_verified(uuid,text) to service_role'), false);
+  assert.ok(sql.toLowerCase().includes('grant execute on function public.avcu_mark_provider_event_verified(uuid,text) to avcu_provider_verifier'));
+  assert.equal(sql.toLowerCase().includes('grant execute on function public.avcu_mark_provider_event_verified(uuid,text) to service_role'), false);
 });
 
 test('legacy unproven verification is quarantined and payload hashes are backfilled', () => {
