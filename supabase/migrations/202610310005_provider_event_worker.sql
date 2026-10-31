@@ -152,7 +152,7 @@ declare
   v_event public.avcu_provider_events;
 begin
   if p_worker_id is null or length(trim(p_worker_id)) < 3
-     or p_lease_seconds < 10 or p_lease_seconds > 300 then
+     or p_lease_seconds is null or p_lease_seconds < 10 or p_lease_seconds > 300 then
     raise exception 'Worker ID or lease duration is invalid' using errcode = '22023';
   end if;
 
@@ -232,7 +232,7 @@ declare
   v_event public.avcu_provider_events;
 begin
   if p_error_code is null or length(trim(p_error_code)) = 0
-     or p_retry_after_seconds < 5 or p_retry_after_seconds > 86400 then
+     or p_retry_after_seconds is null or p_retry_after_seconds < 5 or p_retry_after_seconds > 86400 then
     raise exception 'Retry details are invalid' using errcode = '22023';
   end if;
 
