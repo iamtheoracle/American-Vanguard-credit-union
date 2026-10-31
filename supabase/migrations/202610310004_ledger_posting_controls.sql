@@ -92,7 +92,7 @@ begin
   end if;
 
   if old.status = 'draft' and new.status = 'posted' then
-    if v_operation <> 'post'
+    if v_operation is distinct from 'post'
        or new.id is distinct from old.id
        or new.idempotency_key is distinct from old.idempotency_key
        or new.transaction_type is distinct from old.transaction_type
@@ -105,7 +105,7 @@ begin
   end if;
 
   if old.status = 'posted' and new.status = 'reversed' then
-    if v_operation <> 'reverse'
+    if v_operation is distinct from 'reverse'
        or new.id is distinct from old.id
        or new.idempotency_key is distinct from old.idempotency_key
        or new.transaction_type is distinct from old.transaction_type
