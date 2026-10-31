@@ -1,5 +1,5 @@
 import express from 'express';
-import { query, audit } from './db.js';
+import { query, audit, withTx } from './db.js';
 import { memberAuth, operatorAuth, requireOperatorRole } from './auth.js';
 
 const router = express.Router();
@@ -16,15 +16,13 @@ const CATEGORY = {
   identity_verification_status:'verification', verification_reference:'verification',
   contact_email:'contact', contact_phone:'contact'
 };
-const ELEVATED = new Set(['management','super_admin']);
 
 async function profileForMember(memberId) {
   const result = await query('SELECT id,country_code,lifecycle_status FROM avcu_identity_profiles WHERE member_id=$1',[memberId]);
   return result.rows[0] || null;
 }
 async function canAccessProfile(operator, profileId, scope='review') {
-  if (ELEVATED.has(operator.role)) return true;
-  if (operator.role !== 'operator') return false;
+  if (!['operator','management','super_admin'].includes(operator.role)) return false;
   const result = await query(
     `SELECT 1 FROM avcu_identity_case_assignments
      WHERE identity_profile_id=$1 AND operator_id=$2 AND scope=ANY($3::text[])
@@ -133,21 +131,24 @@ router.post('/operator/identity/disclosures',operatorAuth,requireOperatorRole('m
     if(!profile.rowCount)return res.status(404).json({error:'Identity profile not found'});
     if(!await canAccessProfile(req.operator,profileId,'disclosure_prepare'))return res.status(403).json({error:'This identity case is not assigned to you.'});
     if(legalBasis==='other_approved_basis'&&!authorityReference)return res.status(422).json({error:'An authority reference is required for this legal basis.'});
-    const created=await query(
-      `INSERT INTO avcu_data_disclosure_requests
-       (identity_profile_id,recipient_legal_entity,recipient_person,recipient_role,recipient_identifier,purpose,legal_basis,authority_reference,channel,requested_by,expires_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,status,created_at`,
-      [profileId,recipientLegalEntity,recipientPerson,recipientRole,recipientIdentifier,purpose,legalBasis,authorityReference,channel,req.operator.id,expiresAt.toISOString()]);
-    for(const field of fields) await query(
-      'INSERT INTO avcu_data_disclosure_fields(disclosure_request_id,field_key,data_category) VALUES($1,$2,$3)',
-      [created.rows[0].id,field,CATEGORY[field]]);
-    await query(
-      `INSERT INTO avcu_data_disclosure_events(disclosure_request_id,event_type,actor_type,actor_id,reason,channel,recipient_snapshot,fields_snapshot,authority_snapshot)
-       VALUES($1,'requested','operator',$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb)`,
-      [created.rows[0].id,String(req.operator.id),reason,channel,
-       JSON.stringify({legalEntity:recipientLegalEntity,person:recipientPerson,role:recipientRole,identifier:recipientIdentifier}),
-       JSON.stringify(fields),JSON.stringify({legalBasis,authorityReference,purpose,expiresAt:expiresAt.toISOString()})]);
-    await audit(null,{actorType:'operator',actorId:req.operator.id,actorRole:req.operator.role,action:'identity.disclosure.requested',entityType:'disclosure_request',entityId:created.rows[0].id,metadata:{fieldCount:fields.length,legalBasis,channel}});
+    const created=await withTx(async client=>{
+      const request=await client.query(
+        `INSERT INTO avcu_data_disclosure_requests
+         (identity_profile_id,recipient_legal_entity,recipient_person,recipient_role,recipient_identifier,purpose,legal_basis,authority_reference,channel,requested_by,expires_at)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,status,created_at`,
+        [profileId,recipientLegalEntity,recipientPerson,recipientRole,recipientIdentifier,purpose,legalBasis,authorityReference,channel,req.operator.id,expiresAt.toISOString()]);
+      for(const field of fields) await client.query(
+        'INSERT INTO avcu_data_disclosure_fields(disclosure_request_id,field_key,data_category) VALUES($1,$2,$3)',
+        [request.rows[0].id,field,CATEGORY[field]]);
+      await client.query(
+        `INSERT INTO avcu_data_disclosure_events(disclosure_request_id,event_type,actor_type,actor_id,reason,channel,recipient_snapshot,fields_snapshot,authority_snapshot)
+         VALUES($1,'requested','operator',$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb)`,
+        [request.rows[0].id,String(req.operator.id),reason,channel,
+         JSON.stringify({legalEntity:recipientLegalEntity,person:recipientPerson,role:recipientRole,identifier:recipientIdentifier}),
+         JSON.stringify(fields),JSON.stringify({legalBasis,authorityReference,purpose,expiresAt:expiresAt.toISOString()})]);
+      await audit(client,{actorType:'operator',actorId:req.operator.id,actorRole:req.operator.role,action:'identity.disclosure.requested',entityType:'disclosure_request',entityId:request.rows[0].id,metadata:{fieldCount:fields.length,legalBasis,channel}});
+      return request;
+    });
     res.status(201).json({request:created.rows[0],releaseStatus:'not_released',message:'A separate authorised reviewer must approve this request. No information has been disclosed.'});
   }catch(error){next(error);}
 });
@@ -157,23 +158,35 @@ router.post('/operator/identity/disclosures/:requestId/decision',operatorAuth,re
     const decision=String(req.body?.decision||'');
     const reason=String(req.body?.reason||'').trim().slice(0,500);
     if(!['approved','denied'].includes(decision)||reason.length<10)return res.status(422).json({error:'Provide an approval or denial and a meaningful reason.'});
-    const current=await query('SELECT id,identity_profile_id,requested_by,status,expires_at FROM avcu_data_disclosure_requests WHERE id=$1',[req.params.requestId]);
-    if(!current.rowCount)return res.status(404).json({error:'Disclosure request not found'});
-    const item=current.rows[0];
-    if(item.requested_by===req.operator.id)return res.status(403).json({error:'The requester cannot approve their own disclosure.'});
-    if(item.status!=='pending_approval'||new Date(item.expires_at)<=new Date())return res.status(409).json({error:'This disclosure request is no longer pending or has expired.'});
-    const changed=await query(
-      `UPDATE avcu_data_disclosure_requests SET status=$2,approved_by=$3,approved_at=now()
-       WHERE id=$1 AND status='pending_approval' RETURNING id,status,approved_at`,
-      [item.id,decision,req.operator.id]);
-    if(!changed.rowCount)return res.status(409).json({error:'Disclosure request changed concurrently.'});
-    const fields=await query('SELECT field_key,data_category FROM avcu_data_disclosure_fields WHERE disclosure_request_id=$1 ORDER BY field_key',[item.id]);
-    await query(
-      `INSERT INTO avcu_data_disclosure_events(disclosure_request_id,event_type,actor_type,actor_id,reason,fields_snapshot,authority_snapshot)
-       VALUES($1,$2,'operator',$3,$4,$5::jsonb,$6::jsonb)`,
-      [item.id,decision,String(req.operator.id),reason,JSON.stringify(fields.rows),JSON.stringify({approvedBy:req.operator.id,decision})]);
-    await audit(null,{actorType:'operator',actorId:req.operator.id,actorRole:req.operator.role,action:'identity.disclosure.'+decision,entityType:'disclosure_request',entityId:item.id,metadata:{requester:item.requested_by}});
-    res.json({request:changed.rows[0],releaseStatus:'not_released',message:'Approval records permission only. Data transfer remains disabled until the secure vault, recipient authentication and release receipt controls are implemented and tested.'});
+    const result=await withTx(async client=>{
+      const current=await client.query('SELECT id,identity_profile_id,requested_by,status,expires_at FROM avcu_data_disclosure_requests WHERE id=$1 FOR UPDATE',[req.params.requestId]);
+      if(!current.rowCount)return {error:'not_found'};
+      const item=current.rows[0];
+      if(String(item.requested_by)===String(req.operator.id))return {error:'self_approval'};
+      if(item.status!=='pending_approval'||new Date(item.expires_at)<=new Date())return {error:'not_pending'};
+      const assigned=await client.query(
+        `SELECT 1 FROM avcu_identity_case_assignments WHERE identity_profile_id=$1 AND operator_id=$2
+         AND scope IN ('review','evidence_metadata') AND revoked_at IS NULL
+         AND (expires_at IS NULL OR expires_at>now()) LIMIT 1`,[item.identity_profile_id,req.operator.id]);
+      if(!assigned.rowCount)return {error:'not_assigned'};
+      const changed=await client.query(
+        `UPDATE avcu_data_disclosure_requests SET status=$2,approved_by=$3,approved_at=now()
+         WHERE id=$1 AND status='pending_approval' RETURNING id,status,approved_at`,
+        [item.id,decision,req.operator.id]);
+      if(!changed.rowCount)return {error:'not_pending'};
+      const fields=await client.query('SELECT field_key,data_category FROM avcu_data_disclosure_fields WHERE disclosure_request_id=$1 ORDER BY field_key',[item.id]);
+      await client.query(
+        `INSERT INTO avcu_data_disclosure_events(disclosure_request_id,event_type,actor_type,actor_id,reason,fields_snapshot,authority_snapshot)
+         VALUES($1,$2,'operator',$3,$4,$5::jsonb,$6::jsonb)`,
+        [item.id,decision,String(req.operator.id),reason,JSON.stringify(fields.rows),JSON.stringify({approvedBy:req.operator.id,decision})]);
+      await audit(client,{actorType:'operator',actorId:req.operator.id,actorRole:req.operator.role,action:'identity.disclosure.'+decision,entityType:'disclosure_request',entityId:item.id,metadata:{requester:item.requested_by}});
+      return {request:changed.rows[0]};
+    });
+    if(result.error==='not_found')return res.status(404).json({error:'Disclosure request not found'});
+    if(result.error==='self_approval')return res.status(403).json({error:'The requester cannot approve their own disclosure.'});
+    if(result.error==='not_assigned')return res.status(403).json({error:'A separate reviewer must be assigned to this identity case.'});
+    if(result.error==='not_pending')return res.status(409).json({error:'This disclosure request is no longer pending or has expired.'});
+    res.json({request:result.request,releaseStatus:'not_released',message:'Approval records permission only. Data transfer remains disabled until the secure vault, recipient authentication and release receipt controls are implemented and tested.'});
   }catch(error){next(error);}
 });
 
