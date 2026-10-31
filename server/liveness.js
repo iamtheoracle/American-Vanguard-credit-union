@@ -27,7 +27,7 @@ router.get('/liveness/policy', memberAuth, async (req,res,next) => {
       `SELECT country_code AS "countryCode", enabled_checks AS "enabledChecks",
         minimum_assurance AS "minimumAssurance", effective_from AS "effectiveFrom"
        FROM avcu_liveness_policy_versions
-       WHERE country_code=(SELECT country_code FROM members WHERE id=$1)
+       WHERE country_code=(SELECT country_code FROM avcu_identity_profiles WHERE member_id=$1)
          AND effective_from IS NOT NULL AND effective_from<=now()
        ORDER BY effective_from DESC LIMIT 1`, [req.member.id]);
     res.json({
@@ -50,7 +50,7 @@ router.post('/kyc/cases/:caseId/liveness', memberAuth, async (req,res,next) => {
     const item = owned.rows[0];
     const consent = await query(
       `SELECT 1 FROM kyc_consents WHERE kyc_case_id=$1 AND purpose='biometric_liveness'
-       AND consented=true AND withdrawal_at IS NULL LIMIT 1`, [item.id]);
+       AND consented=true AND withdrawn_at IS NULL LIMIT 1`, [item.id]);
     if (!consent.rowCount) return res.status(403).json({error:'The required biometric-processing permission or other applicable lawful processing authorisation has not been recorded. Contact AVCU support for alternatives.'});
     const approved = await query(
       `SELECT id,source_key FROM avcu_identity_sources
