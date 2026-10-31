@@ -66,3 +66,15 @@ Before the Supabase change, inventory every public table, view, function, trigge
 ## Important limitation
 
 The actor settings are trusted server context, not proof that RLS is active. The current application database connection may still use a privileged/bypass role. Do not create RLS policies that trust these settings until the exact runtime database role, role grants, SQL injection boundary, and transaction behavior have been independently reviewed. Production Supabase has not been changed.
+
+
+## Repository extraction progress (2026-10-31)
+
+The first repository extraction pass now includes:
+- Member: notification and support-case access; account listing; transaction listing with bounded filters/pagination; card lookup; loan-application listing.
+- Operator: queue summary and audit listing; member directory; member profile, account, transaction, loan, money-request, approval and membership-tier-history reads.
+- Authentication: member/operator session lifecycle and member/operator identity lookup.
+
+The routes continue to use the request-scoped database query boundary for remaining SQL, but that is an interim containment mechanism, not a substitute for named repository methods. Sensitive write paths and remaining operator workflows still require extraction, especially approval assignment/decisions, support-case mutations, operator provisioning/role changes, loan and money-request submissions/responses, password-reset transactions, migration staging, and alert acknowledgements.
+
+No RLS policy or production grant change is included in this work. Disposable-database least-privilege enforcement tests remain blocked until repository extraction and its PostgreSQL integration suite are complete.
