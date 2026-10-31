@@ -51,6 +51,40 @@ router.post('/identity/profile', memberAuth, async(req,res,next)=>{
   } catch(error){next(error);}
 });
 
+
+router.post('/operator/identity/assignments',operatorAuth,requireOperatorRole('management','super_admin'),async(req,res,next)=>{
+  try{
+    const profileId=String(req.body?.identityProfileId||'');
+    const operatorId=String(req.body?.operatorId||'');
+    const scope=String(req.body?.scope||'');
+    const reason=String(req.body?.reason||'').trim().slice(0,500);
+    const expiresAt=req.body?.expiresAt?new Date(req.body.expiresAt):null;
+    if(!profileId||!operatorId||!['review','evidence_metadata','disclosure_prepare'].includes(scope)||reason.length<10||
+      (expiresAt&&Number.isNaN(expiresAt.getTime()))||(expiresAt&&expiresAt<=new Date())||
+      (expiresAt&&expiresAt>new Date(Date.now()+30*86400000)))return res.status(422).json({error:'Provide a valid case, operator, narrowly scoped permission, reason and optional expiry within 30 days.'});
+    const result=await query(
+      `INSERT INTO avcu_identity_case_assignments(identity_profile_id,operator_id,assigned_by,scope,expires_at,reason)
+       SELECT $1,$2,$3,$4,$5,$6 WHERE EXISTS(SELECT 1 FROM avcu_identity_profiles WHERE id=$1)
+       RETURNING id,identity_profile_id AS "identityProfileId",operator_id AS "operatorId",scope,assigned_at AS "assignedAt",expires_at AS "expiresAt"`,
+      [profileId,operatorId,req.operator.id,scope,expiresAt?.toISOString()||null,reason]);
+    if(!result.rowCount)return res.status(404).json({error:'Identity profile not found'});
+    await audit(null,{actorType:'operator',actorId:req.operator.id,actorRole:req.operator.role,action:'identity.case.assigned',entityType:'identity_profile',entityId:profileId,metadata:{operatorId,scope,expiresAt:expiresAt?.toISOString()||null}});
+    res.status(201).json({assignment:result.rows[0]});
+  }catch(error){next(error);}
+});
+
+router.post('/operator/identity/assignments/:assignmentId/revoke',operatorAuth,requireOperatorRole('management','super_admin'),async(req,res,next)=>{
+  try{
+    const result=await query(
+      `UPDATE avcu_identity_case_assignments SET revoked_at=now()
+       WHERE id=$1 AND revoked_at IS NULL RETURNING id,identity_profile_id AS "identityProfileId",operator_id AS "operatorId",scope,revoked_at AS "revokedAt"`,
+      [req.params.assignmentId]);
+    if(!result.rowCount)return res.status(404).json({error:'Active assignment not found'});
+    await audit(null,{actorType:'operator',actorId:req.operator.id,actorRole:req.operator.role,action:'identity.case.assignment_revoked',entityType:'identity_assignment',entityId:req.params.assignmentId});
+    res.json({assignment:result.rows[0]});
+  }catch(error){next(error);}
+});
+
 router.get('/identity/disclosures', memberAuth, async(req,res,next)=>{
   try {
     const profile=await profileForMember(req.member.id);
