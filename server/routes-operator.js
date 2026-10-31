@@ -468,51 +468,8 @@ router.post('/operator/migrations/validate', ...guard('management', 'operator'),
       ? { ...row, sourceSystem } : row);
     const result = validateLegacyTransactions(normalizedInput, sourceSystem);
     const payloadHash = createHash('sha256').update(JSON.stringify({ sourceSystem, sourceFileName, rows: normalizedInput })).digest('hex');
-    const status = result.exceptionCount ? 'blocked' : 'validated';
-    const batch = await withTx(async client => {
-      const inserted = await client.query(
-        `INSERT INTO migration_batches
-          (source_system, source_file_name, source_payload_sha256, created_by, status,
-           source_count, accepted_count, exception_count, source_totals, exception_summary, validated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()) RETURNING id, created_at`,
-        [sourceSystem, sourceFileName || 'authorized-export.json', payloadHash, req.operator.id, status,
-          result.sourceCount, result.acceptedCount, result.exceptionCount,
-          JSON.stringify(result.totals), JSON.stringify(result.exceptions)]);
-      const batchId = inserted.rows[0].id;
-      const acceptedByRow = new Map(result.accepted.map(item => [item.rowNumber, item]));
-      const exceptionByRow = new Map(result.exceptions.map(item => [item.rowNumber, item]));
-      for (let index = 0; index < normalizedInput.length; index += 1) {
-        const rowNumber = index + 1;
-        const raw = normalizedInput[index];
-        const row = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-        const accepted = acceptedByRow.get(rowNumber);
-        const exception = exceptionByRow.get(rowNumber);
-        await client.query(
-          `INSERT INTO migration_staged_transactions
-            (batch_id, row_number, source_system, source_transaction_id, source_account_id,
-             occurred_at, original_timestamp, amount_minor, currency, status, description, reference,
-             validation_status, exception_code, exception_fields, raw_record)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-          [batchId, rowNumber, sourceSystem,
-            typeof row.sourceTransactionId === 'string' ? row.sourceTransactionId.slice(0, 250) : null,
-            typeof row.sourceAccountId === 'string' ? row.sourceAccountId.slice(0, 250) : null,
-            accepted ? accepted.occurredAt : null,
-            typeof row.occurredAt === 'string' ? row.occurredAt.slice(0, 100) : null,
-            Number.isSafeInteger(row.amountMinor) ? row.amountMinor : null,
-            typeof row.currency === 'string' && /^[A-Z]{3}$/.test(row.currency) ? row.currency : null,
-            typeof row.status === 'string' && ['pending','posted','settled','failed','reversed'].includes(row.status) ? row.status : null,
-            typeof row.description === 'string' ? row.description.slice(0, 2000) : '',
-            typeof row.reference === 'string' ? row.reference.slice(0, 250) : null,
-            accepted ? 'accepted' : 'exception', accepted ? null : (exception?.code || 'unknown_exception'),
-            JSON.stringify(exception?.fields || []), JSON.stringify(raw ?? null)]);
-      }
-      await audit(client, {
-        actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
-        action: 'migration.batch_validated', entityType: 'migration_batch', entityId: batchId,
-        metadata: { sourceSystem, payloadSha256: payloadHash, sourceCount: result.sourceCount,
-          acceptedCount: result.acceptedCount, exceptionCount: result.exceptionCount, status }
-      });
-      return { id: batchId, createdAt: inserted.rows[0].created_at };
+    const batch = await operatorRepo.stageValidatedMigrationBatch({
+      sourceSystem, sourceFileName, payloadHash, validation: result, normalizedInput, operator: req.operator
     });
     res.status(201).json({
       batch: { ...batch, sourceSystem, sourceFileName, sourcePayloadSha256: payloadHash,
