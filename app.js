@@ -471,7 +471,7 @@
     const search = $('#address-search');
     if (!enabled || !search) return;
     enabled.addEventListener('change', () => {
-      search.disabled = !enabled.checked;
+      search.disabled = false;
       if (!enabled.checked) {
         clearTimeout(addressLookup.timer);
         if (addressLookup.controller) addressLookup.controller.abort();
