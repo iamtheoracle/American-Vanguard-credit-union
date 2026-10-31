@@ -194,9 +194,7 @@ router.get('/membership-tier', memberAuth, async (req, res, next) => {
 // ---- accounts & transactions ------------------------------------------------
 router.get('/accounts', memberAuth, async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT id, kind, name, suffix, balance_cents AS "balanceCents", status
-       FROM accounts WHERE member_id = $1 AND status = 'open' ORDER BY created_at`, [req.member.id]);
+    const { rows } = await memberRepo.listAccounts(req.member.id);
     res.json({ accounts: rows.map(row => ({ ...row, balanceCents: Number(row.balanceCents) })) });
   } catch (error) { next(error); }
 });
@@ -206,23 +204,7 @@ router.get('/transactions', memberAuth, async (req, res, next) => {
     const { search, type, limit = '50', offset = '0' } = req.query;
     const capped = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
     const start = Math.min(Math.max(parseInt(offset, 10) || 0, 0), 100000);
-    const params = [req.member.id];
-    let where = 'a.member_id = $1';
-    if (type) { params.push(String(type)); where += ` AND t.type = $${params.length}`; }
-    if (search) {
-      params.push(`%${String(search).slice(0, 80)}%`);
-      where += ` AND (t.memo ILIKE $${params.length} OR t.payee ILIKE $${params.length} OR t.reference ILIKE $${params.length})`;
-    }
-    const { rows } = await query(
-      `SELECT DISTINCT t.id, t.reference, t.type, t.status, t.amount_cents AS "amountCents",
-              t.memo, t.payee, t.created_at AS "createdAt",
-              fa.name AS "fromAccountName", ta.name AS "toAccountName"
-       FROM transactions t
-       JOIN accounts a ON (a.id = t.from_account_id OR a.id = t.to_account_id)
-       LEFT JOIN accounts fa ON fa.id = t.from_account_id
-       LEFT JOIN accounts ta ON ta.id = t.to_account_id
-       WHERE ${where}
-       ORDER BY t.created_at DESC LIMIT ${capped + 1} OFFSET ${start}`, params);
+    const { rows } = await memberRepo.listTransactions(req.member.id, { type, search, limit: capped, offset: start });
     const hasMore = rows.length > capped;
     const transactions = rows.slice(0, capped).map(row => ({ ...row, amountCents: Number(row.amountCents) }));
     res.json({ transactions, pagination: { limit: capped, offset: start, hasMore, nextOffset: hasMore ? start + transactions.length : null } });
@@ -280,8 +262,7 @@ router.post('/deposits', memberAuth, async (req, res, next) => {
 // ---- card -------------------------------------------------------------------
 router.get('/card', memberAuth, async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT id, last4 AS "last4", status, expires FROM cards WHERE member_id = $1`, [req.member.id]);
+    const { rows } = await memberRepo.getMemberCard(req.member.id);
     res.json({ card: rows[0] || null });
   } catch (error) { next(error); }
 });
@@ -313,13 +294,7 @@ router.post('/card/test-purchase', memberAuth, async (req, res, next) => {
 // ---- loan applications ------------------------------------------------------
 router.get('/loans/applications', memberAuth, async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT id, reference, requested_amount_cents AS "requestedAmountCents",
-              currency, requested_term_months AS "requestedTermMonths", purpose, status,
-              decision_reason AS "decisionReason", information_requested AS "informationRequested", submitted_at AS "submittedAt",
-              reviewed_at AS "reviewedAt", created_at AS "createdAt"
-       FROM loan_applications WHERE member_id = $1
-       ORDER BY created_at DESC LIMIT 50`, [req.member.id]);
+    const { rows } = await memberRepo.listLoanApplications(req.member.id);
     res.json({ applications: rows.map(row => ({ ...row, requestedAmountCents: Number(row.requestedAmountCents) })) });
   } catch (error) { next(error); }
 });
