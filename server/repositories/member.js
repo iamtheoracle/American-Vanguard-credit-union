@@ -96,9 +96,21 @@ export async function createPasswordReset({ member, tokenHash, resetUrl }) {
 }
 export async function completePasswordReset({ tokenHash, passwordHash }) {
   return withTx(async client => {
+    // Resolve the owner first, then lock in the same member -> token order
+    // used by createPasswordReset. This avoids deadlocks between reset request
+    // and completion while still rechecking expiry/use under the row lock.
+    const owner = await client.query(
+      'SELECT member_id FROM password_reset_tokens WHERE token_hash = $1', [tokenHash]);
+    if (!owner.rowCount) {
+      const error = new Error('The reset link is invalid or expired');
+      error.status = 400;
+      throw error;
+    }
+    await client.query('SELECT id FROM members WHERE id = $1 FOR UPDATE', [owner.rows[0].member_id]);
     const { rows } = await client.query(
       `SELECT id, member_id FROM password_reset_tokens
-       WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() FOR UPDATE`, [tokenHash]);
+       WHERE token_hash = $1 AND member_id = $2 AND used_at IS NULL AND expires_at > now()
+       FOR UPDATE`, [tokenHash, owner.rows[0].member_id]);
     const reset = rows[0];
     if (!reset) {
       const error = new Error('The reset link is invalid or expired');
