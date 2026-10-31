@@ -60,6 +60,7 @@ router.post('/operator/identity/assignments',operatorAuth,requireOperatorRole('m
     if(!profileId||!operatorId||!['review','evidence_metadata','disclosure_prepare'].includes(scope)||reason.length<10||
       (expiresAt&&Number.isNaN(expiresAt.getTime()))||(expiresAt&&expiresAt<=new Date())||
       (expiresAt&&expiresAt>new Date(Date.now()+30*86400000)))return res.status(422).json({error:'Provide a valid case, operator, narrowly scoped permission, reason and optional expiry within 30 days.'});
+    if(operatorId===String(req.operator.id))return res.status(422).json({error:'A manager cannot grant a case assignment to themselves.'});
     const result=await query(
       `INSERT INTO avcu_identity_case_assignments(identity_profile_id,operator_id,assigned_by,scope,expires_at,reason)
        SELECT $1,$2,$3,$4,$5,$6 WHERE EXISTS(SELECT 1 FROM avcu_identity_profiles WHERE id=$1)
