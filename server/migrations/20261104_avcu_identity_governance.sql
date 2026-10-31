@@ -191,3 +191,24 @@ CREATE TABLE IF NOT EXISTS avcu_identity_retention_actions (
 COMMENT ON TABLE avcu_identity_profiles IS 'AVCU-owned identity record. External verification sources are evidence inputs only, never the system of record.';
 COMMENT ON TABLE avcu_identity_evidence_manifest IS 'Evidence metadata only; object bytes must live in an approved private encrypted vault, never PostgreSQL.';
 COMMENT ON TABLE avcu_data_disclosure_events IS 'Append-only accountability ledger of disclosure requests, approvals, releases, revocations and deletion confirmations.';
+
+-- Append-only accountability records. Runtime roles may insert but cannot rewrite history.
+CREATE OR REPLACE FUNCTION avcu_prevent_identity_event_mutation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'AVCU identity accountability records are append-only'
+    USING ERRCODE = '55000';
+END;
+$$;
+DROP TRIGGER IF EXISTS avcu_disclosure_events_append_only ON avcu_data_disclosure_events;
+CREATE TRIGGER avcu_disclosure_events_append_only
+  BEFORE UPDATE OR DELETE ON avcu_data_disclosure_events
+  FOR EACH ROW EXECUTE FUNCTION avcu_prevent_identity_event_mutation();
+DROP TRIGGER IF EXISTS avcu_retrieval_events_append_only ON avcu_identity_retrieval_events;
+CREATE TRIGGER avcu_retrieval_events_append_only
+  BEFORE UPDATE OR DELETE ON avcu_identity_retrieval_events
+  FOR EACH ROW EXECUTE FUNCTION avcu_prevent_identity_event_mutation();
+DROP TRIGGER IF EXISTS avcu_retention_actions_append_only ON avcu_identity_retention_actions;
+CREATE TRIGGER avcu_retention_actions_append_only
+  BEFORE UPDATE OR DELETE ON avcu_identity_retention_actions
+  FOR EACH ROW EXECUTE FUNCTION avcu_prevent_identity_event_mutation();
