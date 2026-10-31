@@ -118,7 +118,7 @@ test('ownership and role membership do not leak DDL or escalation to runtime act
   await assert.rejects(actor('avcu_test_member', `ALTER TABLE ${schema}.owner_probe ADD COLUMN forbidden text`), /must be owner|permission denied/i);
   await assert.rejects(actor('avcu_test_support', 'SET ROLE avcu_test_admin'), /permission denied/i);
   const ddl = await actor('avcu_test_migration', `CREATE TABLE ${schema}.migration_owned_probe(id integer)`);
-  assert.equal(ddl.command, 'CREATE TABLE');
+  assert.equal(ddl.command, 'CREATE');
   await assert.rejects(actor('avcu_test_worker', `CREATE TABLE ${schema}.worker_ddl_probe(id integer)`), /permission denied/i);
 });
 
