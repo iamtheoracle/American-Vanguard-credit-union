@@ -13,6 +13,7 @@ import { MEMBERSHIP_TIERS, recalculateMemberTier, overrideMemberTier, clearMembe
 import { validateLegacyTransactions } from './migration-validation.js';
 import { listTeams, controlTeam } from './team-runtime.js';
 import { teamQueueHealth } from './job-queue.js';
+import { rolesForGuards } from './operator-roles.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -50,13 +51,6 @@ router.get('/auth/operator/me', operatorAuth, (req, res) => {
 
 // Everything below requires an operator session.
 router.use('/operator', operatorAuth);
-
-const TIERS = {
-  operator: ['operator'],
-  management: ['management', 'super_admin'],
-  super_admin: ['super_admin'],
-  auditor: ['auditor']
-};
 
 // ---- independent team runtime controls ------------------------------------------
 router.get('/operator/teams', ...guard('management', 'operator', 'auditor'), async (req, res, next) => {
@@ -665,7 +659,7 @@ router.get('/operator/audit', ...guard('management', 'super_admin', 'auditor'), 
 
 function guard(...minTiers) {
   return [operatorAuth, (req, res, next) => {
-    const allowed = minTiers.flatMap(t => TIERS[t]);
+    const allowed = rolesForGuards(...minTiers);
     if (!allowed.includes(req.operator.role)) {
       audit(null, {
         actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
