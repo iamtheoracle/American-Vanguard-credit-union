@@ -32,6 +32,7 @@ jobs:
     env:
       DATABASE_URL: postgres://avcu:avcu@127.0.0.1:5432/avcu
       AVCU_TEST_ADMIN_URL: postgres://avcu:avcu@127.0.0.1:5432/avcu
+      AVCU_TEST_RUNTIME_URL: postgres://avcu_app_runtime:runtime-only-ci-password@127.0.0.1:5432/avcu
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -42,6 +43,10 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Provision restricted application database identity
+        run: |
+          psql "$AVCU_TEST_ADMIN_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE avcu_app_runtime LOGIN PASSWORD 'runtime-only-ci-password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS"
+          psql "$AVCU_TEST_ADMIN_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE avcu TO avcu_app_runtime"
       - name: Check JavaScript syntax
         run: npm run check
       - name: Run demo smoke tests
