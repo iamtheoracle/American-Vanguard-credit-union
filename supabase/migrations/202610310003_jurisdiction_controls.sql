@@ -132,6 +132,7 @@ revoke all on public.avcu_provider_routes from anon, authenticated;
 -- A positive result requires a currently approved country/product/customer-scope
 -- authorization AND a currently approved provider route. Missing data fails closed.
 create or replace function public.avcu_capability_is_enabled(
+  p_operating_entity_code text,
   p_country_code text,
   p_customer_type text,
   p_capability_code text,
@@ -147,7 +148,8 @@ as $$
     from public.avcu_product_authorizations a
     join public.avcu_provider_routes r on r.authorization_id = a.id
     join public.avcu_jurisdictions j on j.country_code = a.country_code
-    where a.country_code = upper(p_country_code)
+    where a.operating_entity_code = p_operating_entity_code
+      and a.country_code = upper(p_country_code)
       and a.customer_type = p_customer_type
       and a.capability_code = p_capability_code
       and a.approval_status = 'approved'
@@ -162,7 +164,7 @@ as $$
   );
 $$;
 
-revoke all on function public.avcu_capability_is_enabled(text,text,text,text,text) from public, anon, authenticated;
+revoke all on function public.avcu_capability_is_enabled(text,text,text,text,text,text) from public, anon, authenticated;
 
 comment on table public.avcu_jurisdictions is
   'Country and regional classification only; it does not grant regulatory permission.';
@@ -170,8 +172,8 @@ comment on table public.avcu_product_authorizations is
   'Evidence-backed, scoped approvals. No row means no permission.';
 comment on table public.avcu_provider_routes is
   'Provider routing is disabled by default and requires a matching approved authorization.';
-comment on function public.avcu_capability_is_enabled(text,text,text,text,text) is
+comment on function public.avcu_capability_is_enabled(text,text,text,text,text,text) is
   'Fail-closed capability check; callable only by trusted server-side roles after explicit grants.';
 
 -- Trusted backend checks only; browser roles remain denied.
-grant execute on function public.avcu_capability_is_enabled(text,text,text,text,text) to service_role;
+grant execute on function public.avcu_capability_is_enabled(text,text,text,text,text,text) to service_role;
