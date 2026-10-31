@@ -152,10 +152,8 @@ router.get('/operator/kyc/cases/:caseId', operatorAuth, requireOperatorRole('man
   try{
     const params=[req.params.caseId];
     let scopeSql='';
-    if(req.operator.role==='operator'){
-      params.push(req.operator.id);
-      scopeSql=" AND EXISTS (SELECT 1 FROM avcu_identity_profiles ip JOIN avcu_identity_case_assignments ia ON ia.identity_profile_id=ip.id WHERE ip.member_id=c.member_id AND ia.operator_id=$2 AND ia.scope IN ('review','evidence_metadata') AND ia.revoked_at IS NULL AND (ia.expires_at IS NULL OR ia.expires_at>now()))";
-    }
+    params.push(req.operator.id);
+    scopeSql=" AND EXISTS (SELECT 1 FROM avcu_identity_profiles ip JOIN avcu_identity_case_assignments ia ON ia.identity_profile_id=ip.id WHERE ip.member_id=c.member_id AND ia.operator_id=$2 AND ia.scope IN ('review','evidence_metadata') AND ia.revoked_at IS NULL AND (ia.expires_at IS NULL OR ia.expires_at>now()))";
     const {rows}=await query(`SELECT c.id,c.country_code AS "countryCode",c.status,c.provider_key AS provider,c.risk_level AS "riskLevel",c.created_at AS "createdAt",c.updated_at AS "updatedAt",m.full_name AS "memberName",m.email AS "memberEmail"
       FROM kyc_cases c JOIN members m ON m.id=c.member_id WHERE c.id=$1${scopeSql}`,params);
     if(!rows.length)return res.status(404).json({error:'KYC case not found'});
@@ -179,7 +177,7 @@ router.post('/operator/kyc/cases/:caseId/review', operatorAuth, requireOperatorR
     const notes=String(req.body?.notes||'').trim().slice(0,2000);
     if(!['verified','rejected','review_required','request_information'].includes(decision)||reasonCode.length<2||notes.length<10)
       return res.status(422).json({error:'Select a valid review outcome and provide a reason code and meaningful notes.'});
-    const current=await query('SELECT status,member_id FROM kyc_cases WHERE id=$1',[req.params.caseId]);
+    const current=await query(`SELECT c.status,c.member_id FROM kyc_cases c WHERE c.id=$1 AND EXISTS (SELECT 1 FROM avcu_identity_profiles ip JOIN avcu_identity_case_assignments ia ON ia.identity_profile_id=ip.id WHERE ip.member_id=c.member_id AND ia.operator_id=$2 AND ia.scope='review' AND ia.revoked_at IS NULL AND (ia.expires_at IS NULL OR ia.expires_at>now()))`,[req.params.caseId,req.operator.id]);
     if(!current.rowCount)return res.status(404).json({error:'KYC case not found'});
     if(['verified','rejected'].includes(current.rows[0].status))return res.status(409).json({error:'A completed case cannot be manually overwritten.'});
     if(decision==='verified' && current.rows[0].status!=='review_required')return res.status(409).json({error:'Manual verification is permitted only after a provider result explicitly requires human review.'});
