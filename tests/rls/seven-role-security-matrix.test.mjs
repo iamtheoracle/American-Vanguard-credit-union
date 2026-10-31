@@ -118,8 +118,7 @@ test('member identity sees and mutates only its own rows', async () => {
 test('support can work support cases but cannot read member or audit records', async () => {
   const cases=await asRole('avcu_test_support',{type:'operator',id:'support-1',role:'support'},c=>c.query(`SELECT id FROM ${schema}.support_cases ORDER BY id`));
   assert.equal(cases.rowCount,2);
-  const members=await asRole('avcu_test_support',{type:'operator',id:'support-1',role:'support'},c=>c.query(`SELECT id FROM ${schema}.member_records`));
-  assert.equal(members.rowCount,0);
+  await assert.rejects(asRole('avcu_test_support',{type:'operator',id:'support-1',role:'support'},c=>c.query(`SELECT id FROM ${schema}.member_records`)),/permission denied/i);
   await assert.rejects(asRole('avcu_test_support',{type:'operator',id:'support-1',role:'support'},c=>c.query(`SELECT * FROM ${schema}.audit_events`)),/permission denied/i);
 });
 
