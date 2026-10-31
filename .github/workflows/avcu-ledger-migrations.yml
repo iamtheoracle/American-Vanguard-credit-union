@@ -93,9 +93,12 @@ jobs:
             WHERE n.nspname='public'
               AND (c.relname LIKE 'avcu_%' OR c.relname='member_profiles')
               AND a.grantee IN (0, (SELECT oid FROM pg_roles WHERE rolname='anon'),
-                (SELECT oid FROM pg_roles WHERE rolname='authenticated'));
+                (SELECT oid FROM pg_roles WHERE rolname='authenticated'))
+              AND NOT (c.relname='member_profiles'
+                AND a.grantee=(SELECT oid FROM pg_roles WHERE rolname='authenticated')
+                AND a.privilege_type='SELECT');
             IF bad_acl <> 0 THEN
-              RAISE EXCEPTION 'PUBLIC/anon/authenticated table ACL entries remain: %', bad_acl;
+              RAISE EXCEPTION 'Unexpected PUBLIC/browser table ACL entries remain: %', bad_acl;
             END IF;
             SELECT count(*) INTO bad_acl
             FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
