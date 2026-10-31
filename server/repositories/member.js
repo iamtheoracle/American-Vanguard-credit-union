@@ -20,3 +20,28 @@ export const listCaseMessages = caseId => query(
 export const createCaseMessage = (caseId, memberId, body) => query(
   `INSERT INTO case_messages (case_id, author_type, author_id, body)
    VALUES ($1,'member',$2,$3) RETURNING *`, [caseId, memberId, body]);
+
+
+// Account, transaction, card and loan-application reads are member-scoped here.
+export const listAccounts = memberId => query(
+  `SELECT id, kind, name, suffix, balance_cents AS "balanceCents", status
+   FROM accounts WHERE member_id = $1 AND status = 'open' ORDER BY created_at`, [memberId]);
+export const listTransactions = (memberId, { type, search, limit, offset }) => {
+  const params = [memberId];
+  let where = 'a.member_id = $1';
+  if (type) { params.push(String(type)); where += ` AND t.type = $${params.length}`; }
+  if (search) { params.push(`%${String(search).slice(0, 80)}%`); where += ` AND (t.memo ILIKE $${params.length} OR t.payee ILIKE $${params.length} OR t.reference ILIKE $${params.length})`; }
+  return query(`SELECT DISTINCT t.id, t.reference, t.type, t.status, t.amount_cents AS "amountCents",
+    t.memo, t.payee, t.created_at AS "createdAt", fa.name AS "fromAccountName", ta.name AS "toAccountName"
+    FROM transactions t JOIN accounts a ON (a.id = t.from_account_id OR a.id = t.to_account_id)
+    LEFT JOIN accounts fa ON fa.id = t.from_account_id LEFT JOIN accounts ta ON ta.id = t.to_account_id
+    WHERE ${where} ORDER BY t.created_at DESC LIMIT ${limit + 1} OFFSET ${offset}`, params);
+};
+export const getMemberCard = memberId => query(
+  'SELECT id, last4 AS "last4", status, expires FROM cards WHERE member_id = $1', [memberId]);
+export const listLoanApplications = memberId => query(
+  `SELECT id, reference, requested_amount_cents AS "requestedAmountCents", currency,
+    requested_term_months AS "requestedTermMonths", purpose, status,
+    decision_reason AS "decisionReason", information_requested AS "informationRequested",
+    submitted_at AS "submittedAt", reviewed_at AS "reviewedAt", created_at AS "createdAt"
+   FROM loan_applications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [memberId]);
