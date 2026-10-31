@@ -29,7 +29,7 @@ async function canAccessProfile(operator, profileId, scope='review') {
     `SELECT 1 FROM avcu_identity_case_assignments
      WHERE identity_profile_id=$1 AND operator_id=$2 AND scope=ANY($3::text[])
        AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now()) LIMIT 1`,
-    [profileId,operator.id,[scope,'review','evidence_metadata']]);
+    [profileId,operator.id,scope==='review'?['review','evidence_metadata']:[scope]]);
   return result.rowCount>0;
 }
 
