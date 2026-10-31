@@ -1,7 +1,7 @@
 import express from 'express';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate, close, audit } from './db.js';
+import { close, audit } from './db.js';
 import memberRoutes from './routes-member.js';
 import operatorRoutes from './routes-operator.js';
 import { verifyWebhookSignature, webhookSecret, integrationHealth } from './integrations/index.js';
@@ -24,16 +24,28 @@ export function createApp() {
   app.use('/api', memberRoutes);
   app.use('/api', operatorRoutes);
 
-  app.get('/api/health', async (req, res) => {
+  // Liveness is process-only: dependency outages must not trigger restart loops.
+  app.get('/api/health/live', (req, res) => {
+    res.status(200).json({ ok: true, service: 'avcu-api', time: new Date().toISOString() });
+  });
+
+  // Readiness checks dependencies and returns 503 when this instance cannot serve.
+  const readinessHandler = async (req, res) => {
     try {
       await query('SELECT 1');
       const integrations = await integrationHealth();
       const teams = await listTeams();
-      res.json({ ok: true, service: 'avcu-api', time: new Date().toISOString(), integrations, teams });
+      const degraded = Array.isArray(integrations) && integrations.some(item => item.required && item.status !== 'healthy');
+      res.status(degraded ? 503 : 200).json({
+        ok: !degraded, service: 'avcu-api', time: new Date().toISOString(), integrations, teams
+      });
     } catch (error) {
-      res.status(500).json({ ok: false, error: 'Database unavailable' });
+      res.status(503).json({ ok: false, error: 'Dependencies unavailable' });
     }
-  });
+  };
+  app.get('/api/health/ready', readinessHandler);
+  // Backwards-compatible alias; orchestrators should use /live and /ready explicitly.
+  app.get('/api/health', readinessHandler);
 
   // Static front end (existing AVCU experience + operator portal + login).
   app.use(express.static(ROOT, { index: 'index.html', extensions: ['html'] }));
@@ -88,7 +100,8 @@ async function webhookHandler(req, res) {
 }
 
 export async function startServer({ port = process.env.PORT || 3000 } = {}) {
-  await migrate();
+  // Schema migrations are executed only by the reviewed deployment pipeline.
+  // Application startup must never perform DDL or advance schema state.
   await registerTeams();
   await registerTeamServiceIdentities();
   startNotificationWorker();

@@ -13,6 +13,8 @@ import { MEMBERSHIP_TIERS, recalculateMemberTier, overrideMemberTier, clearMembe
 import { validateLegacyTransactions } from './migration-validation.js';
 import { listTeams, controlTeam } from './team-runtime.js';
 import { teamQueueHealth } from './job-queue.js';
+import { rolesForGuards } from './operator-roles.js';
+import * as operatorRepo from './repositories/operator.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -51,13 +53,6 @@ router.get('/auth/operator/me', operatorAuth, (req, res) => {
 // Everything below requires an operator session.
 router.use('/operator', operatorAuth);
 
-const TIERS = {
-  operator: ['operator'],
-  management: ['management', 'super_admin'],
-  super_admin: ['super_admin'],
-  auditor: ['auditor']
-};
-
 // ---- independent team runtime controls ------------------------------------------
 router.get('/operator/teams', ...guard('management', 'operator', 'auditor'), async (req, res, next) => {
   try { res.json({ teams: await listTeams(), queueHealth: await teamQueueHealth() }); }
@@ -88,19 +83,8 @@ router.post('/operator/teams/:teamId/control', ...guard('super_admin'), async (r
 
 router.get('/operator/queue', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const [approvals, cases, aiFailed, membership, alerts, moneyRequests, health] = await Promise.all([
-      query(`SELECT count(*) FILTER (WHERE status = 'pending') AS pending,
-                    count(*) FILTER (WHERE status = 'escalated') AS escalated
-             FROM approvals`),
-      query(`SELECT count(*) FILTER (WHERE status IN ('open','in_progress')) AS open,
-                    count(*) FILTER (WHERE status = 'escalated') AS escalated
-             FROM support_cases`),
-      query(`SELECT count(*) AS failed FROM ai_tasks WHERE status = 'failed'`),
-      query(`SELECT count(*) AS pending FROM members WHERE status = 'pending'`),
-      query(`SELECT count(*) AS pending FROM operations_alerts WHERE status = 'pending' AND alert_type = 'loan_application_submitted'`),
-      query(`SELECT count(*) AS pending FROM approvals WHERE item_type = 'money_request' AND status IN ('pending','escalated','info_requested')`),
-      integrationHealth()
-    ]);
+    const [queue, health] = await Promise.all([operatorRepo.getQueueSummary(), integrationHealth()]);
+    const { approvals, cases, aiFailed, membership, alerts, moneyRequests } = queue;
     res.json({
       approvals: { pending: Number(approvals.rows[0].pending), escalated: Number(approvals.rows[0].escalated) },
       cases: { open: Number(cases.rows[0].open), escalated: Number(cases.rows[0].escalated) },
@@ -197,20 +181,11 @@ router.post('/operator/approvals/:id/decide', ...guard('management', 'operator')
 router.post('/operator/approvals/:id/assign', ...guard('management', 'super_admin'), async (req, res, next) => {
   try {
     const { operatorId } = req.body || {};
-    const { rows } = await query(
-      `UPDATE approvals SET assigned_to = $1, updated_at = now()
-       WHERE id = $2 AND status IN ('pending','escalated') RETURNING id`,
-      [operatorId || req.operator.id, req.params.id]);
+    const { rows } = await operatorRepo.assignApproval({ approvalId: req.params.id, operatorId: operatorId || req.operator.id });
     if (!rows[0]) return res.status(404).json({ error: 'Approval not found or already decided' });
-    await audit(null, {
-      actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
-      action: 'approval.assigned', entityType: 'approval', entityId: req.params.id,
-      metadata: { assignedTo: operatorId || req.operator.id }
-    });
     res.json({ ok: true });
   } catch (error) { next(error); }
 });
-
 router.post('/operator/transactions/:id/reverse', ...guard('super_admin'), async (req, res, next) => {
   try {
     const reversal = await reversePostedTransaction({
@@ -226,21 +201,14 @@ router.post('/operator/transactions/:id/reverse', ...guard('super_admin'), async
 router.get('/operator/members', ...guard('management', 'operator'), async (req, res, next) => {
   try {
     const search = String(req.query.search || '').slice(0, 80);
-    const params = search ? [`%${search}%`] : [];
-    const where = search ? 'WHERE (m.full_name ILIKE $1 OR m.email ILIKE $1)' : '';
-    const { rows } = await query(
-      `SELECT m.id, m.email, m.full_name AS "fullName", m.status, m.created_at AS "createdAt",
-              (SELECT coalesce(sum(a.balance_cents),0) FROM accounts a WHERE a.member_id = m.id) AS "totalCents"
-       FROM members m ${where} ORDER BY m.created_at DESC LIMIT 100`, params);
+    const { rows } = await operatorRepo.listMembers(search);
     res.json({ members: rows });
   } catch (error) { next(error); }
 });
 
 router.get('/operator/members/:id', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const { rows } = await query(
-      'SELECT id, email, full_name AS "fullName", status, created_at AS "createdAt" FROM members WHERE id = $1',
-      [req.params.id]);
+    const { rows } = await operatorRepo.getMemberProfile(req.params.id);
     if (!rows[0]) return res.status(404).json({ error: 'Member not found' });
     const member = rows[0];
     // Viewing a member's full profile is itself audited.
@@ -248,22 +216,10 @@ router.get('/operator/members/:id', ...guard('management', 'operator'), async (r
       actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
       action: 'member.viewed', entityType: 'member', entityId: member.id
     });
-    const accounts = await query(
-      `SELECT id, name, kind, suffix, balance_cents AS "balanceCents", status FROM accounts WHERE member_id = $1`, [member.id]);
-    const transactions = await query(
-      `SELECT t.reference, t.type, t.status, t.amount_cents AS "amountCents", t.created_at AS "createdAt", t.memo, t.payee
-       FROM transactions t JOIN accounts a ON (a.id = t.from_account_id OR a.id = t.to_account_id)
-       WHERE a.member_id = $1 ORDER BY t.created_at DESC LIMIT 50`, [member.id]);
-    const [loans, moneyRequests, approvals] = await Promise.all([
-      query(`SELECT reference, status, requested_amount_cents AS "amountCents", currency,
-                    created_at AS "createdAt", reviewed_at AS "reviewedAt", decision_reason AS "decisionReason"
-             FROM loan_applications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id]),
-      query(`SELECT reference, request_type AS "requestType", status, amount_cents AS "amountCents",
-                    currency, created_at AS "createdAt", reviewed_at AS "reviewedAt", decision_reason AS "decisionReason"
-             FROM money_requests WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id]),
-      query(`SELECT id, item_type AS "itemType", status, decision_reason AS "decisionReason",
-                    created_at AS "createdAt", decided_at AS "decidedAt"
-             FROM approvals WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [member.id])
+    const [accounts, transactions, loans, moneyRequests, approvals] = await Promise.all([
+      operatorRepo.listMemberAccounts(member.id), operatorRepo.listMemberTransactions(member.id),
+      operatorRepo.listMemberLoans(member.id), operatorRepo.listMemberMoneyRequests(member.id),
+      operatorRepo.listMemberApprovals(member.id)
     ]);
     res.json({
       member, accounts: accounts.rows, transactions: transactions.rows,
@@ -321,11 +277,7 @@ router.delete('/operator/members/:id/tier/override', ...guard('management'), asy
 
 router.get('/operator/members/:id/tier/history', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT previous_tier AS "previousTier", new_tier AS "newTier", reason,
-              changed_by_type AS "changedByType", changed_by AS "changedBy", created_at AS "createdAt"
-       FROM membership_tier_history WHERE member_id = $1 ORDER BY created_at DESC LIMIT 100`,
-      [req.params.id]);
+    const { rows } = await operatorRepo.listMemberTierHistory(req.params.id);
     res.json({ history: rows });
   } catch (error) { next(error); }
 });
@@ -377,35 +329,24 @@ router.post('/operator/cases/:id/messages', ...guard('management', 'operator'), 
   try {
     const body = String(req.body?.body || '').trim().slice(0, 2000);
     if (!body) return res.status(400).json({ error: 'Message cannot be empty' });
-    const { rows } = await query(
-      `INSERT INTO case_messages (case_id, author_type, author_id, body)
-       VALUES ($1,'operator',$2,$3) RETURNING *`, [req.params.id, req.operator.id, body]);
-    await query(`UPDATE support_cases SET status = 'in_progress', updated_at = now()
-                 WHERE id = $1 AND status = 'open'`, [req.params.id]);
-    res.status(201).json({ message: rows[0] });
+    const message = await operatorRepo.createOperatorCaseMessage({ caseId: req.params.id, operatorId: req.operator.id, body });
+    if (!message) return res.status(404).json({ error: 'Case not found' });
+    res.status(201).json({ message });
   } catch (error) { next(error); }
 });
-
 router.post('/operator/cases/:id/status', ...guard('management', 'operator'), async (req, res, next) => {
   try {
     const status = String(req.body?.status || '');
     if (!['open', 'in_progress', 'escalated', 'resolved'].includes(status)) {
       return res.status(400).json({ error: 'Unknown case status' });
     }
-    if (status === 'escalated' && req.operator.role === 'operator') {
-      // Normal operators escalate; management decides.
-      const { rows } = await query(
-        `UPDATE support_cases SET status = 'escalated', priority = 'high', updated_at = now()
-         WHERE id = $1 RETURNING id`, [req.params.id]);
-      if (!rows[0]) return res.status(404).json({ error: 'Case not found' });
-      return res.json({ ok: true, status: 'escalated' });
+    if (status === 'escalated' && req.operator.role !== 'operator') {
+      return res.status(400).json({ error: 'Management cannot re-escalate a case; use resolve or another status' });
     }
-    if (status === 'escalated') return res.status(400).json({ error: 'Case is already escalated or use resolve' });
-    const { rows } = await query(
-      `UPDATE support_cases SET status = $1, updated_at = now() WHERE id = $2 RETURNING id`,
-      [status, req.params.id]);
-    if (!rows[0]) return res.status(404).json({ error: 'Case not found' });
-    return res.json({ ok: true, status });
+    const result = await operatorRepo.updateSupportCaseStatus({ caseId: req.params.id, status, operator: req.operator });
+    if (result.kind === 'not_found') return res.status(404).json({ error: 'Case not found' });
+    if (result.kind === 'invalid_transition') return res.status(400).json({ error: 'Case is already escalated or use resolve' });
+    res.json({ ok: true, status });
   } catch (error) { next(error); }
 });
 
@@ -443,19 +384,12 @@ router.post('/operator/operators', requireOperatorRole('super_admin'), async (re
   try {
     const { email, name, role, password } = req.body || {};
     if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email' });
-    if (!['super_admin', 'management', 'operator'].includes(role)) return res.status(400).json({ error: 'Unknown role' });
+    if (!['super_admin', 'management', 'operator', 'auditor'].includes(role)) return res.status(400).json({ error: 'Unknown role' });
     if (!validPassword(password)) return res.status(400).json({ error: `Password must be at least ${PASSWORD_MIN} characters` });
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Enter a name' });
-    const hash = await hashPassword(password);
-    const { rows } = await query(
-      `INSERT INTO operators (email, password_hash, name, role) VALUES (lower($1),$2,$3,$4)
-       RETURNING id, email, name, role`, [email, hash, String(name).trim(), role]);
-    await audit(null, {
-      actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
-      action: 'operator.created', entityType: 'operator', entityId: rows[0].id,
-      metadata: { role }
-    });
-    res.status(201).json({ operator: rows[0] });
+    const passwordHash = await hashPassword(password);
+    const operator = await operatorRepo.createOperator({ email, passwordHash, name: String(name).trim(), role, actor: req.operator });
+    res.status(201).json({ operator });
   } catch (error) {
     if (error.code === '23505') return res.status(409).json({ error: 'An operator with this email exists' });
     next(error);
@@ -465,40 +399,16 @@ router.post('/operator/operators', requireOperatorRole('super_admin'), async (re
 router.patch('/operator/operators/:id', requireOperatorRole('super_admin'), async (req, res, next) => {
   try {
     const { role, active } = req.body || {};
-    const { rows: target } = await query('SELECT * FROM operators WHERE id = $1', [req.params.id]);
-    const subject = target[0];
-    if (!subject) return res.status(404).json({ error: 'Operator not found' });
-    if (role && !['super_admin', 'management', 'operator'].includes(role)) {
-      return res.status(400).json({ error: 'Unknown role' });
-    }
-    // Never allow removing the last active super admin.
-    if ((role && role !== 'super_admin' && subject.role === 'super_admin') || active === false) {
-      const { rows: admins } = await query(
-        `SELECT count(*) AS n FROM operators WHERE role = 'super_admin' AND active AND id <> $1`, [subject.id]);
-      if (Number(admins[0].n) === 0) {
-        return res.status(409).json({ error: 'Cannot demote or deactivate the last active super admin' });
-      }
-    }
-    if (subject.id === req.operator.id && (active === false || (role && role !== 'super_admin'))) {
-      return res.status(409).json({ error: 'You cannot demote or deactivate your own account' });
-    }
-    const sets = [];
-    const params = [];
-    if (role) { params.push(role); sets.push(`role = $${params.length}`); }
-    if (typeof active === 'boolean') { params.push(active); sets.push(`active = $${params.length}`); }
-    const { rows } = await query(
-      `UPDATE operators SET ${sets.join(', ')} WHERE id = $${params.length + 1}
-       RETURNING id, email, name, role, active`, [...params, req.params.id]);
-    await audit(null, {
-      actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
-      action: 'operator.updated', entityType: 'operator', entityId: req.params.id,
-      metadata: { role, active }
-    });
-    res.json({ operator: rows[0] });
+    if (role && !['super_admin', 'management', 'operator', 'auditor'].includes(role)) return res.status(400).json({ error: 'Unknown role' });
+    if (typeof active !== 'boolean' && !role) return res.status(400).json({ error: 'Provide a role or active state' });
+    const result = await operatorRepo.updateOperator({ targetId: req.params.id, role, active, actor: req.operator });
+    if (result.kind === 'not_found') return res.status(404).json({ error: 'Operator not found' });
+    if (result.kind === 'self_change') return res.status(409).json({ error: 'You cannot demote or deactivate your own account' });
+    if (result.kind === 'last_super_admin') return res.status(409).json({ error: 'Cannot demote or deactivate the last active super admin' });
+    res.json({ operator: result.operator || null });
   } catch (error) { next(error); }
 });
 
-// ---- loan application operations alerts -------------------------------------
 router.get('/operator/loan-alerts', ...guard('management', 'operator'), async (req, res, next) => {
   try {
     const status = ['pending','acknowledged','resolved'].includes(req.query.status) ? req.query.status : null;
@@ -526,23 +436,11 @@ router.get('/operator/loan-alerts', ...guard('management', 'operator'), async (r
 
 router.post('/operator/loan-alerts/:id/acknowledge', ...guard('management', 'operator'), async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `UPDATE operations_alerts
-       SET status = 'acknowledged', acknowledged_at = now(), acknowledged_by = $1
-       WHERE id = $2 AND status = 'pending'
-       RETURNING id, alert_type AS "alertType", status, acknowledged_at AS "acknowledgedAt"`,
-      [req.operator.id, req.params.id]);
-    if (!rows[0]) return res.status(404).json({ error: 'Pending operations alert not found' });
-    await audit(null, {
-      actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
-      action: 'loan.alert.acknowledged', entityType: 'operations_alert', entityId: rows[0].id,
-      metadata: { alertType: rows[0].alertType }
-    });
-    res.json({ alert: rows[0] });
+    const alert = await operatorRepo.acknowledgeOperationsAlert({ alertId: req.params.id, operator: req.operator });
+    if (!alert) return res.status(404).json({ error: 'Pending operations alert not found' });
+    res.json({ alert });
   } catch (error) { next(error); }
 });
-
-// ---- legacy migration staging -------------------------------------------------
 router.get('/operator/migrations', ...guard('management', 'operator', 'auditor'), async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 100);
@@ -570,55 +468,12 @@ router.post('/operator/migrations/validate', ...guard('management', 'operator'),
       ? { ...row, sourceSystem } : row);
     const result = validateLegacyTransactions(normalizedInput, sourceSystem);
     const payloadHash = createHash('sha256').update(JSON.stringify({ sourceSystem, sourceFileName, rows: normalizedInput })).digest('hex');
-    const status = result.exceptionCount ? 'blocked' : 'validated';
-    const batch = await withTx(async client => {
-      const inserted = await client.query(
-        `INSERT INTO migration_batches
-          (source_system, source_file_name, source_payload_sha256, created_by, status,
-           source_count, accepted_count, exception_count, source_totals, exception_summary, validated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()) RETURNING id, created_at`,
-        [sourceSystem, sourceFileName || 'authorized-export.json', payloadHash, req.operator.id, status,
-          result.sourceCount, result.acceptedCount, result.exceptionCount,
-          JSON.stringify(result.totals), JSON.stringify(result.exceptions)]);
-      const batchId = inserted.rows[0].id;
-      const acceptedByRow = new Map(result.accepted.map(item => [item.rowNumber, item]));
-      const exceptionByRow = new Map(result.exceptions.map(item => [item.rowNumber, item]));
-      for (let index = 0; index < normalizedInput.length; index += 1) {
-        const rowNumber = index + 1;
-        const raw = normalizedInput[index];
-        const row = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-        const accepted = acceptedByRow.get(rowNumber);
-        const exception = exceptionByRow.get(rowNumber);
-        await client.query(
-          `INSERT INTO migration_staged_transactions
-            (batch_id, row_number, source_system, source_transaction_id, source_account_id,
-             occurred_at, original_timestamp, amount_minor, currency, status, description, reference,
-             validation_status, exception_code, exception_fields, raw_record)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-          [batchId, rowNumber, sourceSystem,
-            typeof row.sourceTransactionId === 'string' ? row.sourceTransactionId.slice(0, 250) : null,
-            typeof row.sourceAccountId === 'string' ? row.sourceAccountId.slice(0, 250) : null,
-            accepted ? accepted.occurredAt : null,
-            typeof row.occurredAt === 'string' ? row.occurredAt.slice(0, 100) : null,
-            Number.isSafeInteger(row.amountMinor) ? row.amountMinor : null,
-            typeof row.currency === 'string' && /^[A-Z]{3}$/.test(row.currency) ? row.currency : null,
-            typeof row.status === 'string' && ['pending','posted','settled','failed','reversed'].includes(row.status) ? row.status : null,
-            typeof row.description === 'string' ? row.description.slice(0, 2000) : '',
-            typeof row.reference === 'string' ? row.reference.slice(0, 250) : null,
-            accepted ? 'accepted' : 'exception', accepted ? null : (exception?.code || 'unknown_exception'),
-            JSON.stringify(exception?.fields || []), JSON.stringify(raw ?? null)]);
-      }
-      await audit(client, {
-        actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
-        action: 'migration.batch_validated', entityType: 'migration_batch', entityId: batchId,
-        metadata: { sourceSystem, payloadSha256: payloadHash, sourceCount: result.sourceCount,
-          acceptedCount: result.acceptedCount, exceptionCount: result.exceptionCount, status }
-      });
-      return { id: batchId, createdAt: inserted.rows[0].created_at };
+    const batch = await operatorRepo.stageValidatedMigrationBatch({
+      sourceSystem, sourceFileName, payloadHash, validation: result, normalizedInput, operator: req.operator
     });
     res.status(201).json({
       batch: { ...batch, sourceSystem, sourceFileName, sourcePayloadSha256: payloadHash,
-        status, sourceCount: result.sourceCount, acceptedCount: result.acceptedCount,
+        status: batch.status, sourceCount: result.sourceCount, acceptedCount: result.acceptedCount,
         exceptionCount: result.exceptionCount, totals: result.totals, exceptions: result.exceptions },
       cutoverAllowed: false,
       message: 'Records are staged only. Reconciliation, authorized approval, and a verified source export are still required before any import or cutover.'
@@ -654,18 +509,14 @@ router.get('/operator/migrations/:id', ...guard('management', 'operator', 'audit
 router.get('/operator/audit', ...guard('management', 'super_admin', 'auditor'), async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
-    const { rows } = await query(
-      `SELECT id, actor_type AS "actorType", actor_id AS "actorId", actor_role AS "actorRole",
-              action, entity_type AS "entityType", entity_id AS "entityId", metadata,
-              created_at AS "createdAt"
-       FROM audit_events ORDER BY id DESC LIMIT ${limit}`);
+    const { rows } = await operatorRepo.listAuditEvents(limit);
     res.json({ events: rows });
   } catch (error) { next(error); }
 });
 
 function guard(...minTiers) {
   return [operatorAuth, (req, res, next) => {
-    const allowed = minTiers.flatMap(t => TIERS[t]);
+    const allowed = rolesForGuards(...minTiers);
     if (!allowed.includes(req.operator.role)) {
       audit(null, {
         actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,

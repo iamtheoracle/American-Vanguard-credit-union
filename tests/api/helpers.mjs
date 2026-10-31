@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { startServer, shutdown } from '../../server/index.js';
+import { migrate, close as closeDatabasePool, configurePoolForTests, configureFixturePoolForTests } from '../../server/db.js';
 import { seed, MEMBER_PASSWORD, OPERATOR_PASSWORD } from '../../server/seed.js';
 
 const ADMIN_URL = process.env.AVCU_TEST_ADMIN_URL || 'postgres://avcu:avcu@127.0.0.1:5432/avcu';
+const RUNTIME_URL = process.env.AVCU_TEST_RUNTIME_URL || ADMIN_URL;
 
 export { MEMBER_PASSWORD, OPERATOR_PASSWORD };
 
@@ -15,11 +17,44 @@ export async function startTestServer({ aiProvider, sandboxFail } = {}) {
   await admin.end();
 
   const previous = { ...process.env };
-  process.env.DATABASE_URL = `${ADMIN_URL.replace(/\/[^/]+$/, '')}/${dbName}`;
+  process.env.NODE_ENV = 'test';
+  const adminDbUrl = new URL(ADMIN_URL);
+  adminDbUrl.pathname = `/${dbName}`;
+  const runtimeDbUrl = new URL(RUNTIME_URL);
+  runtimeDbUrl.pathname = `/${dbName}`;
+  process.env.DATABASE_URL = adminDbUrl.toString();
   if (aiProvider) process.env.AVCU_AI_PROVIDER = aiProvider; else delete process.env.AVCU_AI_PROVIDER;
   if (sandboxFail) process.env.AVCU_SANDBOX_FAIL = sandboxFail; else delete process.env.AVCU_SANDBOX_FAIL;
 
-  const server = await startServer({ port: 0 }); // runs migrations
+  // Migrations use the isolated database owner. HTTP requests use a separate
+  // non-owner login with no schema DDL privileges.
+  await migrate();
+  await closeDatabasePool();
+  const provision = new pg.Client({ connectionString: ADMIN_URL });
+  await provision.connect();
+  await provision.query(`GRANT CONNECT ON DATABASE ${dbName} TO avcu_app_runtime`);
+  await provision.query(`GRANT USAGE ON SCHEMA public TO avcu_app_runtime`);
+  await provision.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO avcu_app_runtime`);
+  await provision.query(`GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO avcu_app_runtime`);
+  await provision.query(`REVOKE CREATE ON SCHEMA public FROM avcu_app_runtime`);
+  await provision.end();
+  process.env.DATABASE_URL = runtimeDbUrl.toString();
+  configurePoolForTests(new pg.Pool({ connectionString: runtimeDbUrl.toString(), max: 10 }));
+  configureFixturePoolForTests(new pg.Pool({ connectionString: adminDbUrl.toString(), max: 3 }));
+  const identityCheck = new pg.Client({ connectionString: runtimeDbUrl.toString() });
+  await identityCheck.connect();
+  const identity = await identityCheck.query(`
+    SELECT r.rolsuper, r.rolbypassrls, r.rolcreatedb, r.rolcreaterole,
+           has_schema_privilege(current_user,'public','CREATE') AS can_create
+    FROM pg_roles r WHERE r.rolname = session_user
+  `);
+  await identityCheck.end();
+  if (identity.rowCount !== 1 || identity.rows[0].rolsuper ||
+      identity.rows[0].rolbypassrls || identity.rows[0].rolcreatedb ||
+      identity.rows[0].rolcreaterole || identity.rows[0].can_create) {
+    throw new Error('Application journey database identity is not least-privilege');
+  }
+  const server = await startServer({ port: 0 });
   await seed({ log: () => {} });
   const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -27,7 +62,10 @@ export async function startTestServer({ aiProvider, sandboxFail } = {}) {
     base,
     close: async () => {
       await shutdown(server);
-      for (const [k, v] of Object.entries(previous)) process.env[k] = v;
+      await closeDatabasePool();
+      for (const [k, v] of Object.entries(previous)) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
       const admin2 = new pg.Client({ connectionString: ADMIN_URL });
       await admin2.connect();
       await admin2.query(`DROP DATABASE IF EXISTS ${dbName}`);
