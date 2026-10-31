@@ -49,13 +49,12 @@ before(async () => {
     GRANT EXECUTE ON FUNCTION ${schema}.worker_probe() TO avcu_test_worker;
 
     CREATE TABLE ${schema}.owner_probe(id integer primary key);
-    REVOKE ALL ON ALL TABLES IN SCHEMA ${schema} FROM PUBLIC, anon, authenticated;
+    REVOKE ALL ON ALL TABLES IN SCHEMA ${schema} FROM PUBLIC;
   `);
 });
 
 after(async () => {
   await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
-  await admin.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} REVOKE ALL ON TABLES FROM avcu_test_member`);
   await admin.end();
 });
 
@@ -86,9 +85,11 @@ test('column grants expose only approved columns, not the whole row', async () =
 test('sequence grants distinguish USAGE, SELECT and UPDATE capabilities', async () => {
   const worker = await actor('avcu_test_worker', `SELECT has_sequence_privilege(current_user,$1,'USAGE') u, has_sequence_privilege(current_user,$1,'SELECT') s, has_sequence_privilege(current_user,$1,'UPDATE') w`, [`${schema}.worker_sequence`]);
   assert.deepEqual(worker.rows[0], {u:true,s:true,w:false});
+  const next = await actor('avcu_test_worker', `SELECT nextval('${schema}.worker_sequence') AS value`);
+  assert.equal(Number(next.rows[0].value), 1);
   const member = await actor('avcu_test_member', `SELECT has_sequence_privilege(current_user,$1,'USAGE') u`, [`${schema}.worker_sequence`]);
   assert.equal(member.rows[0].u, false);
-  await assert.rejects(actor('avcu_test_worker', `SELECT nextval('${schema}.worker_sequence')`), /permission denied/i);
+  await assert.rejects(actor('avcu_test_member', `SELECT nextval('${schema}.worker_sequence')`), /permission denied/i);
 });
 
 test('function EXECUTE is revoked from PUBLIC and limited to the worker identity', async () => {
