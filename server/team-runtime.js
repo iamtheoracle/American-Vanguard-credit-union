@@ -85,7 +85,7 @@ export async function controlTeam({ teamId, desiredState, reason, actor, correla
       throw error;
     }
     const updated = await client.query(
-      `UPDATE avcu_team_runtime SET desired_state=$2, lifecycle_state=$2, version=version+1, updated_at=now()
+      `UPDATE avcu_team_runtime SET desired_state=$2, version=version+1, updated_at=now()
        WHERE team_id=$1 RETURNING team_id,lifecycle_state,desired_state,version,updated_at`,
       [teamId,desiredState]
     );
