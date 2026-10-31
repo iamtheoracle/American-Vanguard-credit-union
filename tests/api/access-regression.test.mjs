@@ -104,24 +104,22 @@ test('password reset tokens are single-use under replay and concurrent completio
 test('concurrent administrator demotions cannot remove the last active super-admin', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
-  const { rows } = await query("SELECT id, email FROM operators WHERE email = 'super@avcu.demo'");
-  const actor = { id: rows[0].id, role: 'super_admin' };
+  const seeded = await query("SELECT id, email FROM operators WHERE email IN ('super@avcu.demo','manager@avcu.demo')");
+  const superAdmin = seeded.find(row => row.email === 'super@avcu.demo');
+  const manager = seeded.find(row => row.email === 'manager@avcu.demo');
+  const actor = { id: manager.id, role: 'management' };
   const adminA = await operatorRepo.createOperator({
     email: 'regression-admin-a@avcu.demo', passwordHash: 'not-used-in-this-test', name: 'Admin A', role: 'super_admin', actor
   });
-  const adminB = await operatorRepo.createOperator({
-    email: 'regression-admin-b@avcu.demo', passwordHash: 'not-used-in-this-test', name: 'Admin B', role: 'super_admin', actor
-  });
   const outcomes = await Promise.all([
-    operatorRepo.updateOperator({ targetId: adminA.id, role: 'management', actor }),
-    operatorRepo.updateOperator({ targetId: adminB.id, role: 'management', actor })
+    operatorRepo.updateOperator({ targetId: superAdmin.id, role: 'management', actor }),
+    operatorRepo.updateOperator({ targetId: adminA.id, active: false, actor })
   ]);
   assert.equal(outcomes.filter(result => result.kind === 'updated').length, 1);
   assert.equal(outcomes.filter(result => result.kind === 'last_super_admin').length, 1);
   const remaining = await query("SELECT count(*)::int AS count FROM operators WHERE role = 'super_admin' AND active = TRUE");
-  assert.ok(remaining.rows[0].count >= 2, 'the seeded super-admin and one protected admin remain active');
+  assert.equal(remaining.rows[0].count, 1, 'exactly one protected super-admin remains active');
 });
-
 test('multi-step loan submission rolls back when its audit write fails', async t => {
   const env = await startTestServer();
   t.after(async () => {
