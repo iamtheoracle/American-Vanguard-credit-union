@@ -168,7 +168,7 @@ router.post('/operator/identity/disclosures/:requestId/decision',operatorAuth,re
       if(item.status!=='pending_approval'||new Date(item.expires_at)<=new Date())return {error:'not_pending'};
       const assigned=await client.query(
         `SELECT 1 FROM avcu_identity_case_assignments WHERE identity_profile_id=$1 AND operator_id=$2
-         AND scope IN ('review','evidence_metadata') AND revoked_at IS NULL
+         AND scope='review' AND revoked_at IS NULL
          AND (expires_at IS NULL OR expires_at>now()) LIMIT 1`,[item.identity_profile_id,req.operator.id]);
       if(!assigned.rowCount)return {error:'not_assigned'};
       const changed=await client.query(
