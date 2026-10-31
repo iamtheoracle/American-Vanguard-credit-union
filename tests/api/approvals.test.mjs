@@ -157,3 +157,32 @@ test('membership applications flow through the approval queue', async t => {
   const accounts = await getAccounts(env.base, memberCookie);
   assert.equal(accounts.length, 2);
 });
+
+
+test('terminal approvals reject all subsequent state transitions', async t => {
+  const env = await startTestServer();
+  t.after(() => env.close());
+  const { approvalId } = await submitLargeTransfer(env);
+  const { cookie: manager } = await loginOperator(env.base, 'manager@avcu.demo');
+  const rejected = await api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
+    method: 'POST', cookie: manager, body: { action: 'reject', reason: 'Regression terminal-state test' }
+  });
+  assert.equal(rejected.status, 200);
+  assert.equal(rejected.data.approval.status, 'rejected');
+
+  const [approveAgain, escalateAgain, requestInfoAgain] = await Promise.all([
+    api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
+      method: 'POST', cookie: manager, body: { action: 'approve' }
+    }),
+    api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
+      method: 'POST', cookie: manager, body: { action: 'escalate', reason: 'Should not reopen' }
+    }),
+    api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
+      method: 'POST', cookie: manager, body: { action: 'request_info', reason: 'Should not reopen' }
+    })
+  ]);
+  for (const response of [approveAgain, escalateAgain, requestInfoAgain]) {
+    assert.equal(response.status, 409);
+    assert.equal(response.data.code, 'already_decided');
+  }
+});
