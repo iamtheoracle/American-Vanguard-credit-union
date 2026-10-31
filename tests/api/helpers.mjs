@@ -38,6 +38,19 @@ export async function startTestServer({ aiProvider, sandboxFail } = {}) {
   await provision.query(`REVOKE CREATE ON SCHEMA public FROM avcu_app_runtime`);
   await provision.end();
   process.env.DATABASE_URL = runtimeDbUrl.toString();
+  const identityCheck = new pg.Client({ connectionString: runtimeDbUrl.toString() });
+  await identityCheck.connect();
+  const identity = await identityCheck.query(`
+    SELECT r.rolsuper, r.rolbypassrls, r.rolcreatedb, r.rolcreaterole,
+           has_schema_privilege(current_user,'public','CREATE') AS can_create
+    FROM pg_roles r WHERE r.rolname = session_user
+  `);
+  await identityCheck.end();
+  if (identity.rowCount !== 1 || identity.rows[0].rolsuper ||
+      identity.rows[0].rolbypassrls || identity.rows[0].rolcreatedb ||
+      identity.rows[0].rolcreaterole || identity.rows[0].can_create) {
+    throw new Error('Application journey database identity is not least-privilege');
+  }
   const server = await startServer({ port: 0 });
   await seed({ log: () => {} });
   const base = `http://127.0.0.1:${server.address().port}`;
