@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestServer, api, loginMember, loginOperator, getAccounts } from './helpers.mjs';
+import { createOperatorSession } from '../../server/auth.js';
+import { COOKIE_OPERATOR } from '../../server/util.js';
 
 async function submitLargeTransfer(env) {
   const { cookie } = await loginMember(env.base);
@@ -36,7 +38,7 @@ test('high-value transfers require approval and approvals execute the posting', 
 
   const { cookie: manager } = await loginOperator(env.base, 'manager@avcu.demo');
   const approved = await api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
-    method: 'POST', cookie: manager, body: { action: 'approve' }
+    method: 'POST', cookie: managerCookie, body: { action: 'approve' }
   });
   assert.equal(approved.status, 200);
   assert.equal(approved.data.approval.status, 'approved');
@@ -163,9 +165,12 @@ test('terminal approvals reject all subsequent state transitions', async t => {
   const env = await startTestServer();
   t.after(() => env.close());
   const { approvalId } = await submitLargeTransfer(env);
-  const { cookie: manager } = await loginOperator(env.base, 'manager@avcu.demo');
+  const { rows: managers } = await (await import('../../server/db.js')).query(
+    "SELECT id FROM operators WHERE email = 'manager@avcu.demo'");
+  const session = await createOperatorSession(managers[0].id);
+  const managerCookie = `${COOKIE_OPERATOR}=${session.token}`;
   const rejected = await api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
-    method: 'POST', cookie: manager, body: { action: 'reject', reason: 'Regression terminal-state test' }
+    method: 'POST', cookie: managerCookie, body: { action: 'reject', reason: 'Regression terminal-state test' }
   });
   assert.equal(rejected.status, 200);
   assert.equal(rejected.data.approval.status, 'rejected');
@@ -175,10 +180,10 @@ test('terminal approvals reject all subsequent state transitions', async t => {
       method: 'POST', cookie: manager, body: { action: 'approve' }
     }),
     api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
-      method: 'POST', cookie: manager, body: { action: 'escalate', reason: 'Should not reopen' }
+      method: 'POST', cookie: managerCookie, body: { action: 'escalate', reason: 'Should not reopen' }
     }),
     api(env.base, `/api/operator/approvals/${approvalId}/decide`, {
-      method: 'POST', cookie: manager, body: { action: 'request_info', reason: 'Should not reopen' }
+      method: 'POST', cookie: managerCookie, body: { action: 'request_info', reason: 'Should not reopen' }
     })
   ]);
   for (const response of [approveAgain, escalateAgain, requestInfoAgain]) {
