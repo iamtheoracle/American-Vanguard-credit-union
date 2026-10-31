@@ -60,6 +60,13 @@ test('member ownership boundaries hide another member loans, money requests and 
   });
   assert.equal(caseWrite.status, 404);
 
+  const loanList = await api(env.base, '/api/loans/applications', { cookie: otherLogin.cookie });
+  assert.equal(loanList.status, 200);
+  assert.equal(loanList.data.applications.some(item => item.id === loanId), false);
+  const moneyList = await api(env.base, '/api/money-requests', { cookie: otherLogin.cookie });
+  assert.equal(moneyList.status, 200);
+  assert.equal(moneyList.data.requests.some(item => item.id === moneyId), false);
+
   const loanWrite = await api(env.base, `/api/loans/applications/${loanId}/information`, {
     method: 'POST', cookie: otherLogin.cookie, body: { response: 'Unauthorized loan information submission' }
   });
@@ -100,6 +107,17 @@ test('password reset tokens are single-use under replay and concurrent completio
   assert.equal(replay.status, 400);
   const tokenRow = await query('SELECT used_at FROM password_reset_tokens WHERE token_hash = $1', [tokenHash]);
   assert.ok(tokenRow.rows[0].used_at);
+
+  const tokenA = sha('concurrent-reset-a');
+  const tokenB = sha('concurrent-reset-b');
+  await Promise.all([
+    memberRepo.createPasswordReset({ member, tokenHash: tokenA, resetUrl: new URL('https://example.invalid/reset?a') }),
+    memberRepo.createPasswordReset({ member, tokenHash: tokenB, resetUrl: new URL('https://example.invalid/reset?b') })
+  ]);
+  const activeTokens = await query(
+    'SELECT token_hash FROM password_reset_tokens WHERE member_id = $1 AND used_at IS NULL', [member.id]);
+  assert.equal(activeTokens.rowCount, 1, 'concurrent reset requests must leave only the newest token usable');
+  assert.ok([tokenA, tokenB].includes(activeTokens.rows[0].token_hash.trim()));
 });
 
 test('concurrent administrator demotions cannot remove the last active super-admin', async t => {
@@ -143,4 +161,6 @@ test('multi-step loan submission rolls back when its audit write fails', async t
   assert.equal(after.rows[0].count, before.rows[0].count, 'loan row must roll back');
   const approvals = await query("SELECT count(*)::int AS count FROM approvals WHERE member_id = $1 AND item_type = 'loan'", [memberId]);
   assert.equal(approvals.rows[0].count, 0, 'approval row must roll back with the loan');
+  const alerts = await query('SELECT count(*)::int AS count FROM operations_alerts WHERE loan_application_id IN (SELECT id FROM loan_applications WHERE member_id = $1)', [memberId]);
+  assert.equal(alerts.rows[0].count, 0, 'operations alert must not be orphaned');
 });
