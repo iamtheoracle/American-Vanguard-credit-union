@@ -6,7 +6,7 @@ const sql = await readFile(new URL('../supabase/migrations/202610310005_provider
 const baseSchema = await readFile(new URL('../supabase/migrations/202610310002_banking_foundation.sql', import.meta.url), 'utf8');
 
 test('provider event ingestion deduplicates IDs and detects payload conflicts', () => {
-  assert.match(sql, /unique \(provider_code, provider_event_id\)/);
+  assert.match(baseSchema, /unique \(provider_code, provider_event_id\)/);
   assert.match(sql, /payload_sha256/);
   assert.match(sql, /Provider event ID was replayed with a different payload/);
   assert.match(sql, /avcu_provider_event_conflicts/);
