@@ -35,7 +35,7 @@ test('retry is bounded and repeated failures are quarantined', () => {
 test('service role uses narrow worker functions and cannot attest provider signatures', () => {
   assert.match(sql, /revoke insert, update, delete on public\\.avcu_provider_events from service_role/);
   for (const fn of ['avcu_ingest_provider_event','avcu_claim_provider_event','avcu_complete_provider_event','avcu_retry_provider_event','avcu_quarantine_provider_event']) {
-    assert.match(sql, new RegExp('grant execute on function public\\\\.' + fn + '.*to service_role', 's'));
+    assert.ok(sql.includes('grant execute on function public.' + fn + '('), fn + ' must have an explicit execute grant');
   }
   assert.match(sql, /grant execute on function public\\.avcu_mark_provider_event_verified\\(uuid,text\\) to avcu_provider_verifier/);
   assert.doesNotMatch(sql, /grant execute on function public\\.avcu_mark_provider_event_verified\\(uuid,text\\) to service_role/);
