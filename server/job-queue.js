@@ -96,10 +96,18 @@ export async function validateWorkerIdentity({teamId,serviceId,token}) {
 
 export async function claimJob({teamId,workerId,leaseSeconds=60}) {
  return withTx(async client=>{
-  await client.query(
+  const expired=await client.query(
    `UPDATE avcu_jobs SET status=CASE WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'retry_wait' END,
-    lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,available_at=now()+interval '5 seconds',updated_at=now()
-    WHERE team_id=$1 AND status='leased' AND lease_expires_at<now()`,[teamId]);
+    lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,available_at=now()+interval '5 seconds',updated_at=now(),
+    last_error_code='worker_lease_expired'
+    WHERE team_id=$1 AND status='leased' AND lease_expires_at<now()
+    RETURNING id,team_id,job_type,attempts,status`,[teamId]);
+  for(const job of expired.rows) {
+   await client.query(`INSERT INTO avcu_job_events(job_id,event_type,attempt,detail) VALUES($1,'job.lease_expired',$2,'{"recovered":true}'::jsonb)`,[job.id,job.attempts]);
+   if(job.status==='dead_letter') await client.query(
+    `INSERT INTO avcu_job_dead_letters(job_id,team_id,job_type,final_error_code,attempts) VALUES($1,$2,$3,'worker_lease_expired',$4) ON CONFLICT(job_id) DO NOTHING`,
+    [job.id,job.team_id,job.job_type,job.attempts]);
+  }
   const {rows}=await client.query(
    `SELECT j.* FROM avcu_jobs j JOIN avcu_team_runtime t ON t.team_id=j.team_id
     WHERE j.team_id=$1 AND j.status IN ('queued','retry_wait') AND j.available_at<=now()
@@ -139,4 +147,13 @@ export async function failJob({jobId,leaseToken,workerId,errorCode,retryable=tru
 export async function heartbeat({workerId,teamId,serviceId,status,activeJobId=null}) {
  await query(`INSERT INTO avcu_worker_heartbeats(worker_id,team_id,service_id,status,active_job_id,last_seen_at)
  VALUES($1,$2,$3,$4,$5,now()) ON CONFLICT(worker_id) DO UPDATE SET status=EXCLUDED.status,active_job_id=EXCLUDED.active_job_id,last_seen_at=now()`,[workerId,teamId,serviceId,status,activeJobId]);
+ await query(`UPDATE avcu_team_runtime SET lifecycle_state=CASE
+   WHEN desired_state='ACTIVE' AND $2 IN ('healthy','degraded') THEN CASE WHEN $2='healthy' THEN 'ACTIVE' ELSE 'DEGRADED' END
+   WHEN desired_state='PAUSED' THEN 'PAUSED'
+   WHEN desired_state='DRAINING' THEN 'DRAINING'
+   WHEN desired_state='QUARANTINED' THEN 'QUARANTINED'
+   WHEN desired_state='DISABLED' THEN 'DISABLED'
+   ELSE lifecycle_state END,
+   last_heartbeat_at=now(),health=jsonb_build_object('workerId',$3,'status',$2,'activeJobId',$4),updated_at=now()
+   WHERE team_id=$1`,[teamId,status,workerId,activeJobId]);
 }
