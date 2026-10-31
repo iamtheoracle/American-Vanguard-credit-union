@@ -11,6 +11,7 @@ import { integrationHealth } from './integrations/index.js';
 import { notifyMember } from './notifications.js';
 import { MEMBERSHIP_TIERS, recalculateMemberTier, overrideMemberTier, clearMemberTierOverride } from './membership-tiers.js';
 import { validateLegacyTransactions } from './migration-validation.js';
+import { listTeams, controlTeam } from './team-runtime.js';
 
 const router = express.Router();
 const loginLimiter = rateLimiter({ windowMs: 60_000, max: 8 });
@@ -48,6 +49,33 @@ router.get('/auth/operator/me', operatorAuth, (req, res) => {
 
 // Everything below requires an operator session.
 router.use('/operator', operatorAuth);
+
+// ---- independent team runtime controls ------------------------------------------
+router.get('/operator/teams', ...guard('management', 'operator', 'auditor'), async (req, res, next) => {
+  try { res.json({ teams: await listTeams() }); }
+  catch (error) { next(error); }
+});
+
+router.post('/operator/teams/:teamId/control', ...guard('super_admin'), async (req, res, next) => {
+  try {
+    const result = await controlTeam({
+      teamId: req.params.teamId,
+      desiredState: req.body?.desiredState,
+      reason: req.body?.reason,
+      actor: { type: 'operator', id: req.operator.id, role: req.operator.role },
+      correlationId: String(req.header('X-Correlation-Id') || '').slice(0, 120) || null
+    });
+    await audit(null, {
+      actorType: 'operator', actorId: req.operator.id, actorRole: req.operator.role,
+      action: 'team.control.requested', entityType: 'team', entityId: req.params.teamId,
+      metadata: { desiredState: result.desired_state, version: result.version }
+    });
+    res.json({ ok: true, team: result, note: 'Desired state recorded. A worker must acknowledge the command before runtime state is considered changed.' });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
 
 const TIERS = {
   operator: ['operator'],
