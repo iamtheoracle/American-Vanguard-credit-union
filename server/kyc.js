@@ -61,7 +61,6 @@ export async function handleTruliooWebhook(req, res) {
   }
   const providerStatus = event.event?.status || event.event?.type || event.event?.state;
   const outcome = normalizeOutcome(providerStatus);
-  await query('BEGIN').catch(() => {}); // Request transaction is managed by the DB actor context when present.
   await query('UPDATE kyc_cases SET status=$2,updated_at=now(),completed_at=CASE WHEN $2 IN (\'verified\',\'rejected\',\'expired\',\'cancelled\') THEN now() ELSE completed_at END WHERE id=$1',
     [caseId, outcome === 'pending' ? 'provider_pending' : outcome]);
   await query('INSERT INTO kyc_results(kyc_case_id,provider_key,outcome,reason_codes,checks_json,provider_report_ref) VALUES($1,\'trulioo\',$2,$3::jsonb,$4::jsonb,$5)',
