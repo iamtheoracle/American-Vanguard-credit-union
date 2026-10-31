@@ -22,7 +22,7 @@ async function run(){
  if(!await validateWorkerIdentity({teamId,serviceId,token})) throw Object.assign(new Error('Worker service identity is not registered for this team.'),{code:'service_identity_invalid'});
  await heartbeat({workerId,teamId,serviceId,status:'healthy'});
  while(!stopping){
-  active=await claimJob({teamId,workerId});
+  active=await claimJob({teamId,serviceId,workerId});
   if(!active){await heartbeat({workerId,teamId,serviceId,status:'healthy'});await sleep(1500);continue;}
   let leaseTimer=null;
   try{
