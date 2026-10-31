@@ -82,8 +82,12 @@ router.post('/kyc/cases', memberAuth, async (req,res,next) => {
     const country = String(req.body?.countryCode || '').toUpperCase();
     if (!/^[A-Z]{2}$/.test(country) || !ALLOWED_COUNTRIES.has(country)) return res.status(422).json({ error:'KYC is not currently enabled for this country. Contact AVCU support.' });
     const existing = await query(`SELECT id,status,country_code,created_at FROM kyc_cases WHERE member_id=$1 AND status NOT IN ('verified','rejected','expired','cancelled') ORDER BY created_at DESC LIMIT 1`,[req.member.id]);
-    if (existing.rowCount) return res.json({ case: existing.rows[0], noticeVersion: NOTICE_VERSION, noticeText: NOTICE_TEXT, noticeHash: NOTICE_HASH });
+    if (existing.rowCount) {
+      await query('INSERT INTO avcu_identity_profiles(member_id,country_code) VALUES($1,$2) ON CONFLICT(member_id) DO NOTHING',[req.member.id,country]);
+      return res.json({ case: existing.rows[0], noticeVersion: NOTICE_VERSION, noticeText: NOTICE_TEXT, noticeHash: NOTICE_HASH });
+    }
     const created = await query('INSERT INTO kyc_cases(member_id,country_code) VALUES($1,$2) RETURNING id,status,country_code,created_at',[req.member.id,country]);
+    await query('INSERT INTO avcu_identity_profiles(member_id,country_code) VALUES($1,$2) ON CONFLICT(member_id) DO NOTHING',[req.member.id,country]);
     res.status(201).json({ case:created.rows[0], noticeVersion:NOTICE_VERSION, noticeText:NOTICE_TEXT, noticeHash:NOTICE_HASH, providerStatus:'not_configured' });
   } catch(error){next(error);}
 });
