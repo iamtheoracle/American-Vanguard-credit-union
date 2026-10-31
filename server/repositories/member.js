@@ -1,4 +1,5 @@
-import { query } from '../db.js';
+import { query, withTx, audit } from '../db.js';
+import { queueMemberNotification } from '../notifications.js';
 
 // Every member-owned query requires the member ID taken from the validated cookie session.
 export const listNotifications = memberId => query(
@@ -45,3 +46,80 @@ export const listLoanApplications = memberId => query(
     decision_reason AS "decisionReason", information_requested AS "informationRequested",
     submitted_at AS "submittedAt", reviewed_at AS "reviewedAt", created_at AS "createdAt"
    FROM loan_applications WHERE member_id = $1 ORDER BY created_at DESC LIMIT 50`, [memberId]);
+
+
+// Authentication recovery and onboarding are repository-owned transactions.
+// Reset tokens are single-use: row lock + used_at transition prevents replay.
+export async function registerMember({ username, email, passwordHash, fullName }) {
+  return withTx(async client => {
+    const { rows } = await client.query(
+      `INSERT INTO members (username, email, password_hash, full_name, status, application)
+       VALUES ($1,lower($2),$3,$4,'pending',$5)
+       RETURNING id, member_number AS "memberNumber", username, email, full_name, status, created_at`,
+      [username, email, passwordHash, fullName, JSON.stringify({ channel: 'web', submittedAt: new Date().toISOString() })]);
+    const created = rows[0];
+    await client.query(
+      `INSERT INTO approvals (item_type, member_id, payload, status, required_role, submitted_by, submitted_by_type)
+       VALUES ('membership', $1, $2, 'pending', 'management', $1, 'member')`,
+      [created.id, JSON.stringify({ memberId: created.id, username: created.username, email: created.email, fullName: created.full_name })]);
+    await queueMemberNotification(client, { memberId: created.id,
+      eventType: 'membership.application_received', eventKey: `membership-application:${created.id}:received`,
+      title: 'Membership application received',
+      body: 'Your membership application has been received and is awaiting review.',
+      subject: 'We received your AVCU membership application' });
+    return created;
+  });
+}
+export async function createPasswordReset({ member, tokenHash, resetUrl }) {
+  return withTx(async client => {
+    // Serialize requests per member to ensure only the newest token remains usable.
+    await client.query('SELECT id FROM members WHERE id = $1 FOR UPDATE', [member.id]);
+    await client.query(
+      `UPDATE password_reset_tokens SET used_at = now()
+       WHERE member_id = $1 AND used_at IS NULL`, [member.id]);
+    const { rows } = await client.query(
+      `INSERT INTO password_reset_tokens (member_id, token_hash, expires_at)
+       VALUES ($1,$2,now() + interval '30 minutes') RETURNING id, expires_at`,
+      [member.id, tokenHash]);
+    await client.query(
+      `INSERT INTO notification_outbox
+       (event_key, member_id, event_type, recipient, title, body, email_subject, email_text)
+       VALUES ($1,$2,'auth.password_reset',$3,'Password reset instructions',$4,'AVCU password reset instructions',$4)
+       ON CONFLICT (event_key) DO NOTHING`,
+      [`password-reset:${rows[0].id}`, member.id, member.email,
+       `Use this link within 30 minutes to reset your AVCU password: ${resetUrl.toString()}\nIf you did not request this, ignore this email. No funds or account details are included in this message.`]);
+    await audit(client, { actorType: 'system', actorId: member.id,
+      action: 'auth.password_reset_requested', entityType: 'member', entityId: member.id,
+      metadata: { resetTokenId: rows[0].id, expiresAt: rows[0].expires_at } });
+  });
+}
+export async function completePasswordReset({ tokenHash, passwordHash }) {
+  return withTx(async client => {
+    const { rows } = await client.query(
+      `SELECT id, member_id FROM password_reset_tokens
+       WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() FOR UPDATE`, [tokenHash]);
+    const reset = rows[0];
+    if (!reset) {
+      const error = new Error('The reset link is invalid or expired');
+      error.status = 400;
+      throw error;
+    }
+    const updated = await client.query(
+      'UPDATE members SET password_hash = $1, updated_at = now() WHERE id = $2 RETURNING id',
+      [passwordHash, reset.member_id]);
+    if (!updated.rowCount) {
+      const error = new Error('The reset link is invalid or expired');
+      error.status = 400;
+      throw error;
+    }
+    await client.query('UPDATE password_reset_tokens SET used_at = now() WHERE id = $1 AND used_at IS NULL', [reset.id]);
+    await client.query("UPDATE notification_outbox SET body = '', email_text = '' WHERE event_key = $1", [`password-reset:${reset.id}`]);
+    await client.query('DELETE FROM member_sessions WHERE member_id = $1', [reset.member_id]);
+    await client.query(
+      `UPDATE password_reset_tokens SET used_at = now()
+       WHERE member_id = $1 AND id <> $2 AND used_at IS NULL`, [reset.member_id, reset.id]);
+    await audit(client, { actorType: 'system', actorId: reset.member_id,
+      action: 'auth.password_reset_completed', entityType: 'member', entityId: reset.member_id });
+    return { memberId: reset.member_id };
+  });
+}
