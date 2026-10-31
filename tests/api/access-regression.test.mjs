@@ -106,8 +106,8 @@ test('concurrent administrator demotions cannot remove the last active super-adm
   const env = await startTestServer();
   t.after(() => env.close());
   const seeded = await query("SELECT id, email FROM operators WHERE email IN ('super@avcu.demo','manager@avcu.demo')");
-  const superAdmin = seeded.find(row => row.email === 'super@avcu.demo');
-  const manager = seeded.find(row => row.email === 'manager@avcu.demo');
+  const superAdmin = seeded.rows.find(row => row.email === 'super@avcu.demo');
+  const manager = seeded.rows.find(row => row.email === 'manager@avcu.demo');
   const actor = { id: manager.id, role: 'management' };
   const adminA = await operatorRepo.createOperator({
     email: 'regression-admin-a@avcu.demo', passwordHash: 'not-used-in-this-test', name: 'Admin A', role: 'super_admin', actor
