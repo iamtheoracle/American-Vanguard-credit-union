@@ -8,12 +8,18 @@ const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations
 export const DATABASE_URL = process.env.DATABASE_URL || 'postgres://avcu:avcu@127.0.0.1:5432/avcu';
 const requestContext = new AsyncLocalStorage();
 let pool = null;
+let fixturePool = null;
 function getPool() {
   if (!pool) pool = new pg.Pool({ connectionString: process.env.DATABASE_URL || DATABASE_URL, max: 10 });
   return pool;
 }
 export default { get pool() { return getPool(); } };
 
+export function configureFixturePoolForTests(testPool) {
+  if (process.env.NODE_ENV !== 'test') throw new Error('Test fixture pool injection is disabled outside NODE_ENV=test');
+  if (!testPool || typeof testPool.connect !== 'function' || typeof testPool.query !== 'function') throw new TypeError('Invalid test fixture pool');
+  fixturePool = testPool;
+}
 export function configurePoolForTests(testPool) {
   if (process.env.NODE_ENV !== 'test') throw new Error('Test pool injection is disabled outside NODE_ENV=test');
   if (!testPool || typeof testPool.connect !== 'function' || typeof testPool.query !== 'function') throw new TypeError('Invalid test pool');
@@ -22,7 +28,8 @@ export function configurePoolForTests(testPool) {
 export function currentActor() { return requestContext.getStore()?.actor || null; }
 export function query(text, params) {
   const store = requestContext.getStore();
-  return store?.client ? store.client.query(text, params) : getPool().query(text, params);
+  return store?.client ? store.client.query(text, params) :
+    (process.env.NODE_ENV === 'test' && fixturePool ? fixturePool : getPool()).query(text, params);
 }
 
 // Bind only after the server has validated its HttpOnly cookie against the
@@ -118,7 +125,8 @@ export async function withTx(fn) {
       throw error;
     }
   }
-  const client = await getPool().connect();
+  const txPool = process.env.NODE_ENV === 'test' && fixturePool ? fixturePool : getPool();
+  const client = await txPool.connect();
   try {
     await client.query('BEGIN');
     const result = await fn(client);
@@ -148,7 +156,12 @@ export async function migrate(log = () => {}) {
     log(`applied migration ${file}`);
   }
 }
-export async function close() { if (pool) await pool.end(); pool = null; }
+export async function close() {
+  if (pool) await pool.end();
+  if (fixturePool && fixturePool !== pool) await fixturePool.end();
+  pool = null;
+  fixturePool = null;
+}
 
 export function audit(client, event) {
   const sql = `INSERT INTO audit_events (actor_type, actor_id, actor_role, action, entity_type, entity_id, metadata)
