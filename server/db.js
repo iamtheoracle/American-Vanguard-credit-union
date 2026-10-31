@@ -64,26 +64,32 @@ export function bindActorContext(req, res, actor, next) {
         // Commit before ending the HTTP response. A finish-event commit races
         // the next request: clients can receive the response and retry while
         // the prior transaction is still invisible to other connections.
-        const originalEnd = res.end.bind(res);
         let endStarted = false;
-        res.end = (...args) => {
-          if (endStarted) return res;
-          endStarted = true;
-          void finish(true).then(
-            () => originalEnd(...args),
-            error => {
-              console.error('[avcu] request transaction commit failed:', error.code || error.name);
-              if (!res.headersSent) {
-                res.statusCode = 500;
-                res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                originalEnd(JSON.stringify({ error: 'Request could not be committed. Please retry.' }));
-              } else {
-                originalEnd();
+        if (typeof res.end === 'function') {
+          const originalEnd = res.end.bind(res);
+          res.end = (...args) => {
+            if (endStarted) return res;
+            endStarted = true;
+            void finish(true).then(
+              () => originalEnd(...args),
+              error => {
+                console.error('[avcu] request transaction commit failed:', error.code || error.name);
+                if (!res.headersSent) {
+                  res.statusCode = 500;
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  originalEnd(JSON.stringify({ error: 'Request could not be committed. Please retry.' }));
+                } else {
+                  originalEnd();
+                }
               }
-            }
-          );
-          return res;
-        };
+            );
+            return res;
+          };
+        } else {
+          // Minimal response doubles used by unit tests do not implement end().
+          res.once('finish', () => { void finish(true).catch(error =>
+            console.error('[avcu] request transaction commit failed:', error.code || error.name)); });
+        }
         res.once('close', () => {
           if (!res.writableFinished && !endStarted) void finish(false).catch(error =>
             console.error('[avcu] request rollback failed:', error.code || error.name));
