@@ -1,11 +1,15 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestServer, api, loginMember, loginOperator } from './helpers.mjs';
+import db from '../../server/db.js';
 
 let app;
 let member;
 let manager;
 let profileId;
+let kycCaseId;
+let assignmentId;
+let teller;
 
 before(async()=>{
   app=await startTestServer();
@@ -56,6 +60,7 @@ test('privacy notice acknowledgement is separate from optional purpose-specific 
   const created=await api(app.base,'/api/kyc/cases',{method:'POST',cookie:member.cookie,body:{countryCode:'US'}});
   assert.equal(created.status,201);
   const caseId=created.data.case.id;
+  kycCaseId=caseId;
   const acknowledged=await api(app.base,`/api/kyc/cases/${caseId}/consent`,{
     method:'POST',cookie:member.cookie,body:{noticeAcknowledged:true,consents:[],locale:'en'}
   });
@@ -74,4 +79,36 @@ test('identity and disclosure endpoints reject unauthenticated requests',async()
   assert.equal((await api(app.base,'/api/identity/profile')).status,401);
   assert.equal((await api(app.base,'/api/operator/identity/assignments',{method:'POST',body:{}})).status,401);
   assert.equal((await api(app.base,'/api/operator/identity/disclosures',{method:'POST',body:{}})).status,401);
+});
+
+test('ordinary KYC operators see only actively assigned identity cases',async()=>{
+  teller=await loginOperator(app.base,'teller@avcu.demo');
+  assert.equal(teller.response.status,200);
+  const before=await api(app.base,'/api/operator/kyc/cases',{cookie:teller.cookie});
+  assert.equal(before.status,200);
+  assert.equal(before.data.cases.length,0);
+
+  const operatorRow=await db.pool.query('SELECT id FROM operators WHERE email=$1',['teller@avcu.demo']);
+  assert.equal(operatorRow.rowCount,1);
+  const assigned=await api(app.base,'/api/operator/identity/assignments',{
+    method:'POST',cookie:manager.cookie,body:{
+      identityProfileId:profileId,operatorId:operatorRow.rows[0].id,
+      scope:'review',expiresAt:new Date(Date.now()+86400000).toISOString(),
+      reason:'Assign this identity case for a controlled review.'
+    }
+  });
+  assert.equal(assigned.status,201);
+  assignmentId=assigned.data.assignment.id;
+
+  const after=await api(app.base,'/api/operator/kyc/cases',{cookie:teller.cookie});
+  assert.equal(after.status,200);
+  assert.equal(after.data.cases.some(item=>item.id===kycCaseId),true);
+
+  const revoked=await api(app.base,`/api/operator/identity/assignments/${assignmentId}/revoke',{
+    method:'POST',cookie:manager.cookie,body:{}
+  });
+  assert.equal(revoked.status,200);
+  const afterRevoke=await api(app.base,'/api/operator/kyc/cases',{cookie:teller.cookie});
+  assert.equal(afterRevoke.status,200);
+  assert.equal(afterRevoke.data.cases.length,0);
 });
