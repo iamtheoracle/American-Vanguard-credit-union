@@ -184,7 +184,7 @@
     $('product-form-description').textContent = loan
       ? 'Submit a loan request for an initial review. This is not a credit decision or funding commitment.'
       : 'Submit a card request for eligibility and issuer review. A request does not mean a card has been issued.';
-    $('product-amount').closest('label').hidden = !loan;
+    $('product-amount-label').hidden = !loan;
     $('product-amount').hidden = !loan;
     $('product-application-form').classList.remove('hidden');
     showMessage('product-application-message', '');
@@ -231,7 +231,8 @@
     const agePoints = age === 0 ? 3 : age === 1 ? 7 : age === 3 ? 11 : age === 6 ? 13 : 15;
     const mixPoints = mix === 0 ? 2 : mix === 1 ? 5 : mix === 2 ? 8 : 10;
     const inquiryPoints = inquiries === 0 ? 10 : inquiries === 1 ? 8 : inquiries === 2 ? 5 : 2;
-    const score = Math.max(300, Math.min(850, Math.round(300 + payment * .35 + utilizationPoints + agePoints + mixPoints + inquiryPoints)));
+    const weighted = (payment / 100) * .35 + (utilizationPoints / 30) * .30 + (agePoints / 15) * .15 + (mixPoints / 10) * .10 + (inquiryPoints / 10) * .10;
+    const score = Math.max(300, Math.min(850, Math.round(300 + weighted * 550)));
     const band = score >= 760 ? 'Strong estimated readiness' : score >= 700 ? 'Positive estimated readiness' : score >= 640 ? 'Developing estimated readiness' : 'Needs attention';
     $('credit-result').innerHTML = '<strong>' + score + '</strong><span>' + band + ' · Educational estimate only</span>';
   });
