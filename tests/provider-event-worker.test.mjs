@@ -8,7 +8,8 @@ const baseSchema = await readFile(new URL('../supabase/migrations/202610310002_b
 test('provider event ingestion deduplicates IDs and detects payload conflicts', () => {
   assert.match(baseSchema, /unique \(provider_code, provider_event_id\)/);
   assert.match(sql, /payload_sha256/);
-  assert.match(sql, /Provider event ID was replayed with a different payload/);
+  assert.match(sql, /payload_hash_conflict/);
+  assert.match(sql, /Do not raise here: an exception would roll back this audit evidence/);
   assert.match(sql, /avcu_provider_event_conflicts/);
 });
 
@@ -31,11 +32,13 @@ test('retry is bounded and repeated failures are quarantined', () => {
   assert.match(sql, /p_retry_after_seconds > 86400/);
 });
 
-test('service role uses narrow worker functions rather than direct event writes', () => {
-  assert.match(sql, /revoke insert, update, delete on public\.avcu_provider_events from service_role/);
-  for (const fn of ['avcu_ingest_provider_event','avcu_mark_provider_event_verified','avcu_claim_provider_event','avcu_complete_provider_event','avcu_retry_provider_event','avcu_quarantine_provider_event']) {
-    assert.match(sql, new RegExp('grant execute on function public\\.' + fn));
+test('service role uses narrow worker functions and cannot attest provider signatures', () => {
+  assert.match(sql, /revoke insert, update, delete on public\\.avcu_provider_events from service_role/);
+  for (const fn of ['avcu_ingest_provider_event','avcu_claim_provider_event','avcu_complete_provider_event','avcu_retry_provider_event','avcu_quarantine_provider_event']) {
+    assert.match(sql, new RegExp('grant execute on function public\\\\.' + fn + '.*to service_role', 's'));
   }
+  assert.match(sql, /grant execute on function public\\.avcu_mark_provider_event_verified\\(uuid,text\\) to avcu_provider_verifier/);
+  assert.doesNotMatch(sql, /grant execute on function public\\.avcu_mark_provider_event_verified\\(uuid,text\\) to service_role/);
 });
 
 test('legacy unproven verification is quarantined and payload hashes are backfilled', () => {
