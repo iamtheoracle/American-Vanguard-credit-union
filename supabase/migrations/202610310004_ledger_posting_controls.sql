@@ -125,7 +125,7 @@ $$;
 
 drop trigger if exists avcu_ledger_transaction_update_guard on public.avcu_ledger_transactions;
 create trigger avcu_ledger_transaction_update_guard
-before update on public.avcu_ledger_transactions
+before insert or update on public.avcu_ledger_transactions
 for each row execute function public.avcu_guard_ledger_transaction_update();
 
 create or replace function public.avcu_post_ledger_transaction(p_transaction_id uuid)
@@ -198,6 +198,8 @@ begin
     raise exception 'Journal entry currency does not match its ledger account'
       using errcode = '23514';
   end if;
+
+  perform set_config('avcu.ledger_operation','post',true);
 
   update public.avcu_ledger_transactions
   set status = 'posted',
@@ -280,6 +282,8 @@ begin
     from public.avcu_ledger_transactions
     where id = v_reversal.id;
   end if;
+
+  perform set_config('avcu.ledger_operation','reverse',true);
 
   update public.avcu_ledger_transactions
   set status = 'reversed', reversed_by = v_reversal.id
