@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+<title id="title">AVCU premium banking card collection</title><desc id="desc">Three elegant navy, forest green, and ivory AVCU payment card concepts with gold details.</desc>
+<defs>
+ <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#173b68"/><stop offset=".55" stop-color="#0b2344"/><stop offset="1" stop-color="#06162d"/></linearGradient>
+ <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#39765a"/><stop offset="1" stop-color="#0d382c"/></linearGradient>
+ <linearGradient id="ivory" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffdf7"/><stop offset="1" stop-color="#d9d5c9"/></linearGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f0d38e"/><stop offset="1" stop-color="#b58b42"/></linearGradient>
+ <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#06172b" flood-opacity=".22"/></filter>
+</defs>
+<g filter="url(#shadow)" transform="translate(36 72) rotate(-5 300 190)">
+ <rect width="570" height="350" rx="28" fill="url(#navy)"/>
+ <path d="M-20 250C130 130 250 320 590 90M-20 300C180 170 300 370 590 160" fill="none" stroke="#c8a66a" stroke-opacity=".42" stroke-width="2"/>
+ <path d="M34 36h48v48H34z" rx="12" fill="none" stroke="#f7f1e5" stroke-width="3"/><path d="M43 68 58 48l15 20M49 68v-8h18v8" fill="none" stroke="#f7f1e5" stroke-width="3"/>
+ <text x="100" y="59" fill="#f7f1e5" font-family="Georgia,serif" font-size="27">AVCU</text><text x="100" y="82" fill="#d9cba9" font-family="Arial,sans-serif" font-size="11" letter-spacing="3">ATCHISON VILLAGE</text>
+ <rect x="38" y="130" width="76" height="56" rx="10" fill="url(#gold)"/><path d="M76 130v56M38 158h76M57 130v56M95 130v56" stroke="#896c39" stroke-opacity=".65" fill="none"/>
+ <text x="38" y="294" fill="#e7c77f" font-family="Georgia,serif" font-size="31" letter-spacing="7">•••• 4821</text><text x="442" y="294" fill="#f7f1e5" font-family="Arial,sans-serif" font-size="18" font-weight="700">VISA</text>
+</g>
+<g filter="url(#shadow)" transform="translate(600 22) rotate(5 280 170)">
+ <rect width="540" height="330" rx="28" fill="url(#green)"/>
+ <path d="M-10 240C150 100 290 300 560 70M-10 285C170 160 310 345 560 145" fill="none" stroke="#d8bd7b" stroke-opacity=".4" stroke-width="2"/>
+ <path d="M34 34h48v48H34z" fill="none" stroke="#f7f1e5" stroke-width="3"/><path d="M43 66 58 46l15 20M49 66v-8h18v8" fill="none" stroke="#f7f1e5" stroke-width="3"/>
+ <text x="100" y="58" fill="#f7f1e5" font-family="Georgia,serif" font-size="27">AVCU</text><text x="100" y="81" fill="#d8e6dc" font-family="Arial,sans-serif" font-size="11" letter-spacing="3">PREMIUM CREDIT</text>
+ <rect x="38" y="126" width="76" height="56" rx="10" fill="url(#gold)"/><path d="M76 126v56M38 154h76M57 126v56M95 126v56" stroke="#896c39" stroke-opacity=".65" fill="none"/>
+ <text x="38" y="280" fill="#e7c77f" font-family="Georgia,serif" font-size="30" letter-spacing="7">•••• 6724</text><text x="408" y="280" fill="#f7f1e5" font-family="Arial,sans-serif" font-size="17" font-weight="700">CARD</text>
+</g>
+<g filter="url(#shadow)" transform="translate(360 345) rotate(-1 240 90)">
+ <rect width="480" height="185" rx="22" fill="url(#ivory)" stroke="#c9c3b5" stroke-width="2"/>
+ <path d="M-10 130C120 25 250 190 500 48M-10 160C130 70 280 210 500 88" fill="none" stroke="#b7a16f" stroke-opacity=".45" stroke-width="2"/>
+ <path d="M26 25h38v38H26z" fill="none" stroke="#102344" stroke-width="3"/><path d="M32 54 45 37l13 17M38 54v-7h15v7" fill="none" stroke="#102344" stroke-width="2.5"/>
+ <text x="80" y="51" fill="#102344" font-family="Georgia,serif" font-size="24">AVCU</text><text x="80" y="70" fill="#6d6b63" font-family="Arial,sans-serif" font-size="10" letter-spacing="2">BUSINESS</text>
+ <rect x="28" y="95" width="60" height="44" rx="8" fill="url(#gold)"/><text x="28" y="166" fill="#102344" font-family="Georgia,serif" font-size="22" letter-spacing="5">•••• 9031</text>
+</g>
+</svg>
