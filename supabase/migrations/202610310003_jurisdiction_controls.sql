@@ -172,3 +172,6 @@ comment on table public.avcu_provider_routes is
   'Provider routing is disabled by default and requires a matching approved authorization.';
 comment on function public.avcu_capability_is_enabled(text,text,text,text,text) is
   'Fail-closed capability check; callable only by trusted server-side roles after explicit grants.';
+
+-- Trusted backend checks only; browser roles remain denied.
+grant execute on function public.avcu_capability_is_enabled(text,text,text,text,text) to service_role;
