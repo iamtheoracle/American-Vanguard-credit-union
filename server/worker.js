@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { close, query } from './db.js';
-import { heartbeat, claimJob, acknowledgeJob, failJob, validateWorkerIdentity, serviceSecret } from './job-queue.js';
+import { heartbeat, claimJob, acknowledgeJob, failJob, renewJobLease, validateWorkerIdentity, serviceSecret } from './job-queue.js';
 
 const teamId=process.env.AVCU_WORKER_TEAM;
 const serviceId=process.env.AVCU_WORKER_SERVICE_ID;
@@ -24,7 +24,10 @@ async function run(){
  while(!stopping){
   active=await claimJob({teamId,workerId});
   if(!active){await heartbeat({workerId,teamId,serviceId,status:'healthy'});await sleep(1500);continue;}
+  let leaseTimer=null;
   try{
+   leaseTimer=setInterval(()=>{void renewJobLease({jobId:active.id,leaseToken:active.lease_token,workerId}).then(ok=>{if(!ok) console.error('[avcu-worker] lease renewal rejected');}).catch(()=>{});},20000);
+   leaseTimer.unref?.();
    if(!await validateWorkerIdentity({teamId,serviceId,token})) throw Object.assign(new Error('Service identity rejected.'),{code:'service_identity_invalid',retryable:false});
    const handler=handlers.get(active.job_type);
    if(!handler) throw Object.assign(new Error('No handler registered for job type.'),{code:'handler_missing',retryable:false});
@@ -32,7 +35,7 @@ async function run(){
    await acknowledgeJob({jobId:active.id,leaseToken:active.lease_token,workerId,result});
   }catch(error){
    await failJob({jobId:active.id,leaseToken:active.lease_token,workerId,errorCode:error.code||'handler_error',retryable:Boolean(error.retryable)});
-  }finally{active=null;}
+  }finally{if(leaseTimer) clearInterval(leaseTimer);active=null;}
  }
 }
 async function shutdown(){
