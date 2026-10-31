@@ -48,7 +48,9 @@ test('member-facing navigation supports desktop and mobile layouts', () => {
 });
 
 test('the demo does not connect to external services or use remote fonts', () => {
-  assert.match(js, /fetch\(\`\$\{endpoint\}\?q=/);\n  assert.match(js, /credentials: 'same-origin'/);\n  assert.doesNotMatch(js, /https?:\/\//);
+  assert.match(js, /fetch\(\`\$\{endpoint\}\?q=/);
+  assert.match(js, /credentials: 'same-origin'/);
+  assert.doesNotMatch(js, /https?:\\/\\//);
   assert.doesNotMatch(html, /https?:\/\//);
   assert.doesNotMatch(css, /@import\s+url\s*\(/i);
   assert.match(netlify, /connect-src 'self'/);
