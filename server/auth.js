@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
-import { query, withTx, audit } from './db.js';
+import { query, audit, bindActorContext } from './db.js';
+import * as authRepo from './repositories/auth.js';
 import { COOKIE_MEMBER, COOKIE_OPERATOR, parseCookies, setSessionCookie, clearSessionCookie, newToken } from './util.js';
 
 export const MEMBER_SESSION_TTL_MS = 12 * 60 * 60 * 1000;      // 12h
@@ -19,26 +20,22 @@ function expiry(ttl) {
 
 export async function createMemberSession(memberId) {
   const token = newToken();
-  await query('INSERT INTO member_sessions (token, member_id, expires_at) VALUES ($1,$2,$3)',
-    [token, memberId, expiry(MEMBER_SESSION_TTL_MS)]);
+  await authRepo.createMemberSession(token, memberId, expiry(MEMBER_SESSION_TTL_MS));
   return { token, ttlSeconds: Math.floor(MEMBER_SESSION_TTL_MS / 1000) };
 }
 
 export async function createOperatorSession(operatorId) {
   const token = newToken();
-  await query('INSERT INTO operator_sessions (token, operator_id, expires_at) VALUES ($1,$2,$3)',
-    [token, operatorId, expiry(OPERATOR_SESSION_TTL_MS)]);
+  await authRepo.createOperatorSession(token, operatorId, expiry(OPERATOR_SESSION_TTL_MS));
   return { token, ttlSeconds: Math.floor(OPERATOR_SESSION_TTL_MS / 1000) };
 }
 
 export async function destroySession(kind, token) {
-  if (kind === 'member') await query('DELETE FROM member_sessions WHERE token = $1', [token]);
-  else await query('DELETE FROM operator_sessions WHERE token = $1', [token]);
+  await authRepo.destroySession(kind, token);
 }
 
 export async function destroyAllSessions(kind, subjectId) {
-  if (kind === 'member') await query('DELETE FROM member_sessions WHERE member_id = $1', [subjectId]);
-  else await query('DELETE FROM operator_sessions WHERE operator_id = $1', [subjectId]);
+  await authRepo.destroyAllSessions(kind, subjectId);
 }
 
 const MEMBER_SELECT = `SELECT m.id, m.member_number, m.email, m.full_name, m.status, s.token, s.expires_at
@@ -49,28 +46,28 @@ const OPERATOR_SELECT = `SELECT o.id, o.email, o.name, o.role, o.active, s.token
 export function memberAuth(req, res, next) {
   const token = parseCookies(req.headers.cookie)[COOKIE_MEMBER];
   if (!token) return res.status(401).json({ error: 'Authentication required' });
-  query(MEMBER_SELECT, [token]).then(({ rows }) => {
+  authRepo.findMemberSession(token).then(({ rows }) => {
     const row = rows[0];
     if (!row || new Date(row.expires_at) <= new Date()) {
       return res.status(401).json({ error: 'Session expired or invalid' });
     }
     req.member = { id: row.id, memberNumber: String(row.member_number), email: row.email, fullName: row.full_name, status: row.status };
     req.sessionToken = token;
-    next();
+    bindActorContext(req, res, { type: 'member', id: row.id, role: 'member' }, next);
   }).catch(next);
 }
 
 export function operatorAuth(req, res, next) {
   const token = parseCookies(req.headers.cookie)[COOKIE_OPERATOR];
   if (!token) return res.status(401).json({ error: 'Operator authentication required' });
-  query(OPERATOR_SELECT, [token]).then(({ rows }) => {
+  authRepo.findOperatorSession(token).then(({ rows }) => {
     const row = rows[0];
     if (!row || !row.active || new Date(row.expires_at) <= new Date()) {
       return res.status(401).json({ error: 'Operator session expired or invalid' });
     }
     req.operator = { id: row.id, email: row.email, name: row.name || row.full_name, role: row.role };
     req.sessionToken = token;
-    next();
+    bindActorContext(req, res, { type: 'operator', id: row.id, role: row.role }, next);
   }).catch(next);
 }
 
@@ -101,18 +98,17 @@ export function clearAuthCookie(req, res, kind) {
 }
 
 export async function findMemberByEmail(email) {
-  const { rows } = await query('SELECT * FROM members WHERE lower(email) = lower($1)', [email]);
+  const { rows } = await authRepo.findMemberByEmail(email);
   return rows[0] || null;
 }
 
 export async function findMemberByLogin(identifier) {
   const value = String(identifier || '').trim();
-  const { rows } = await query(
-    'SELECT * FROM members WHERE lower(email) = lower($1) OR member_number::text = $1 OR lower(username) = lower($1) LIMIT 1', [value]);
+  const { rows } = await authRepo.findMemberByLogin(value);
   return rows[0] || null;
 }
 
 export async function findOperatorByEmail(email) {
-  const { rows } = await query('SELECT * FROM operators WHERE lower(email) = lower($1) AND active', [email]);
+  const { rows } = await authRepo.findOperatorByEmail(email);
   return rows[0] || null;
 }
