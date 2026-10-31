@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { close, query } from './db.js';
-import { heartbeat, claimJob, acknowledgeJob, failJob, verifyServiceIdentity, serviceSecret } from './job-queue.js';
+import { heartbeat, claimJob, acknowledgeJob, failJob, validateWorkerIdentity, serviceSecret } from './job-queue.js';
 
 const teamId=process.env.AVCU_WORKER_TEAM;
 const serviceId=process.env.AVCU_WORKER_SERVICE_ID;
@@ -19,12 +19,13 @@ let stopping=false,active=null;
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function run(){
  await query('SELECT 1');
+ if(!await validateWorkerIdentity({teamId,serviceId,token})) throw Object.assign(new Error('Worker service identity is not registered for this team.'),{code:'service_identity_invalid'});
  await heartbeat({workerId,teamId,serviceId,status:'healthy'});
  while(!stopping){
   active=await claimJob({teamId,workerId});
   if(!active){await heartbeat({workerId,teamId,serviceId,status:'healthy'});await sleep(1500);continue;}
   try{
-   if(!verifyServiceIdentity(serviceId,token)) throw Object.assign(new Error('Service identity rejected.'),{code:'service_identity_invalid',retryable:false});
+   if(!await validateWorkerIdentity({teamId,serviceId,token})) throw Object.assign(new Error('Service identity rejected.'),{code:'service_identity_invalid',retryable:false});
    const handler=handlers.get(active.job_type);
    if(!handler) throw Object.assign(new Error('No handler registered for job type.'),{code:'handler_missing',retryable:false});
    const result=await handler(active.payload);
