@@ -1,0 +1,120 @@
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { query, withTx } from './db.js';
+
+const TEAM_CAPABILITIES = Object.freeze({
+ 'member-experience':['member.read','member.support'],
+ 'identity-trust':['identity.verify','risk.signal'],
+ 'payments-ledger':['ledger.read','payment.propose'],
+ 'cards-lending':['cards.request','loans.apply'],
+ 'communications':['notifications.send'],
+ 'travel':['travel.search'],
+ 'ai-orchestration':['ai.respond'],
+ 'risk-compliance':['policy.evaluate','audit.read'],
+ 'operations':['runtime.monitor','runtime.control']
+});
+const JOB_TYPES = new Set(['notification.deliver','travel.search','ai.respond','risk.evaluate','member.task']);
+const MAX_PAYLOAD_BYTES = 256 * 1024;
+
+export function serviceTokenEnvName(serviceId) {
+  return 'AVCU_SERVICE_TOKEN_' + String(serviceId).toUpperCase().replace(/[^A-Z0-9]/g,'_');
+}
+export function serviceSecret(serviceId) {
+  const value = process.env[serviceTokenEnvName(serviceId)];
+  if (!value || value.length < 32) return null;
+  return value;
+}
+export function verifyServiceIdentity(serviceId, presentedToken) {
+  const expected=serviceSecret(serviceId);
+  if (!expected || typeof presentedToken!=='string') return false;
+  const a=Buffer.from(createHash('sha256').update(expected).digest());
+  const b=Buffer.from(createHash('sha256').update(presentedToken).digest());
+  return a.length===b.length && timingSafeEqual(a,b);
+}
+export function providerSecret(provider, key) {
+  const name='AVCU_PROVIDER_'+String(provider).toUpperCase().replace(/[^A-Z0-9]/g,'_')+'_'+String(key).toUpperCase().replace(/[^A-Z0-9]/g,'_');
+  const value=process.env[name];
+  return typeof value==='string' && value.length ? value : null;
+}
+export function providerAdapter(provider, {baseUrl,allowedHosts,tokenEnv,timeoutMs=8000}={}) {
+  const url=new URL(baseUrl);
+  if(url.protocol!=='https:' || !Array.isArray(allowedHosts) || !allowedHosts.includes(url.hostname)) throw new Error('Provider URL must use HTTPS and an explicitly allowed hostname.');
+  return Object.freeze({
+    name:provider,
+    async request(path,{method='GET',body,idempotencyKey}={}) {
+      if(typeof path!=='string' || !path.startsWith('/') || path.startsWith('//')) throw new Error('Provider path must be an absolute path on the configured host.');
+      const target=new URL(path,url);
+      if(target.origin!==url.origin) throw new Error('Provider request escaped its configured origin.');
+      const token=process.env[tokenEnv];
+      if(!token) { const e=new Error('Provider credential is not configured.'); e.code='provider_not_configured'; throw e; }
+      const response=await fetch(target,{method,headers:{Authorization:'Bearer '+token,'Accept':'application/json','Content-Type':'application/json',...(idempotencyKey?{'Idempotency-Key':idempotencyKey}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(timeoutMs)});
+      const data=await response.json().catch(()=>null);
+      if(!response.ok){const e=new Error('Provider request failed with HTTP '+response.status);e.code='provider_http_'+response.status;e.retryable=response.status===408||response.status===429||response.status>=500;throw e;}
+      return data;
+    }
+  });
+}
+
+export async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKey,maxAttempts=8,delaySeconds=0}) {
+  if(!TEAM_CAPABILITIES[teamId] || !JOB_TYPES.has(jobType)) throw new Error('Unknown team or job type.');
+  if(!TEAM_CAPABILITIES[teamId].some(c=>c)) throw new Error('Team has no capabilities.');
+  const serialized=JSON.stringify(payload ?? {});
+  if(Buffer.byteLength(serialized)>MAX_PAYLOAD_BYTES) throw new Error('Job payload exceeds limit.');
+  if(typeof idempotencyKey!=='string'||idempotencyKey.length<8||idempotencyKey.length>200) throw new Error('A stable idempotency key is required.');
+  const result=await query(
+   `INSERT INTO avcu_jobs(team_id,service_id,job_type,payload,idempotency_key,max_attempts,available_at)
+    SELECT $1,$2,$3,$4::jsonb,$5,$6,now()+($7*interval '1 second')
+    WHERE EXISTS(SELECT 1 FROM avcu_service_identities s WHERE s.service_id=$2 AND s.team_id=$1 AND s.active)
+      AND EXISTS(SELECT 1 FROM avcu_team_runtime t WHERE t.team_id=$1 AND t.desired_state='ACTIVE')
+    ON CONFLICT(team_id,idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
+    RETURNING id,team_id,status,attempts,created_at`,
+   [teamId,serviceId,jobType,serialized,idempotencyKey,maxAttempts,delaySeconds]);
+  if(!result.rowCount) throw new Error('Service identity inactive or team not enabled.');
+  return result.rows[0];
+}
+
+export async function claimJob({teamId,workerId,leaseSeconds=60}) {
+ return withTx(async client=>{
+  await client.query(
+   `UPDATE avcu_jobs SET status=CASE WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'retry_wait' END,
+    lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,available_at=now()+interval '5 seconds',updated_at=now()
+    WHERE team_id=$1 AND status='leased' AND lease_expires_at<now()`,[teamId]);
+  const {rows}=await client.query(
+   `SELECT j.* FROM avcu_jobs j JOIN avcu_team_runtime t ON t.team_id=j.team_id
+    WHERE j.team_id=$1 AND j.status IN ('queued','retry_wait') AND j.available_at<=now()
+      AND t.desired_state='ACTIVE' AND t.lifecycle_state IN ('ACTIVE','DEGRADED')
+    ORDER BY j.available_at,j.created_at LIMIT 1 FOR UPDATE OF j SKIP LOCKED`,[teamId]);
+  if(!rows[0]) return null;
+  const row=rows[0],token=randomUUID();
+  const updated=await client.query(
+   `UPDATE avcu_jobs SET status='leased',attempts=attempts+1,lease_owner=$2,lease_token=$3,
+    lease_expires_at=now()+($4*interval '1 second'),updated_at=now()
+    WHERE id=$1 RETURNING *`,[row.id,workerId,token,leaseSeconds]);
+  await client.query(`INSERT INTO avcu_job_events(job_id,event_type,worker_id,attempt) VALUES($1,'job.leased',$2,$3)`,[row.id,workerId,updated.rows[0].attempts]);
+  return updated.rows[0];
+ });
+}
+export async function acknowledgeJob({jobId,leaseToken,workerId,result}) {
+ return withTx(async client=>{
+  const row=await client.query(`SELECT * FROM avcu_jobs WHERE id=$1 AND status='leased' AND lease_token=$2 AND lease_owner=$3 FOR UPDATE`,[jobId,leaseToken,workerId]);
+  if(!row.rows[0]) {const e=new Error('Lease is stale or does not belong to this worker.');e.status=409;throw e;}
+  const updated=await client.query(`UPDATE avcu_jobs SET status='succeeded',result=$2::jsonb,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,completed_at=now(),updated_at=now() WHERE id=$1 RETURNING id,status,attempts`,[jobId,JSON.stringify(result??{})]);
+  await client.query(`INSERT INTO avcu_job_events(job_id,event_type,worker_id,attempt) VALUES($1,'job.acknowledged',$2,$3)`,[jobId,workerId,row.rows[0].attempts]);
+  return updated.rows[0];
+ });
+}
+export async function failJob({jobId,leaseToken,workerId,errorCode,retryable=true}) {
+ return withTx(async client=>{
+  const row=await client.query(`SELECT * FROM avcu_jobs WHERE id=$1 AND status='leased' AND lease_token=$2 AND lease_owner=$3 FOR UPDATE`,[jobId,leaseToken,workerId]);
+  if(!row.rows[0]) {const e=new Error('Lease is stale or does not belong to this worker.');e.status=409;throw e;}
+  const j=row.rows[0],dead=!retryable||j.attempts>=j.max_attempts;
+  const delay=Math.min(3600,Math.pow(2,Math.max(0,j.attempts-1))*5);
+  await client.query(`UPDATE avcu_jobs SET status=$2,available_at=now()+($3*interval '1 second'),last_error_code=$4,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=$1`,[jobId,dead?'dead_letter':'retry_wait',delay,String(errorCode||'worker_error').slice(0,100)]);
+  await client.query(`INSERT INTO avcu_job_events(job_id,event_type,worker_id,attempt,detail) VALUES($1,$2,$3,$4,$5::jsonb)`,[jobId,dead?'job.dead_lettered':'job.retry_scheduled',workerId,j.attempts,JSON.stringify({errorCode,retryable,delaySeconds:dead?0:delay})]);
+  if(dead) await client.query(`INSERT INTO avcu_job_dead_letters(job_id,team_id,job_type,final_error_code,attempts) VALUES($1,$2,$3,$4,$5) ON CONFLICT(job_id) DO NOTHING`,[jobId,j.team_id,j.job_type,errorCode,j.attempts]);
+  return {id:jobId,status:dead?'dead_letter':'retry_wait',attempts:j.attempts,nextDelaySeconds:dead?0:delay};
+ });
+}
+export async function heartbeat({workerId,teamId,serviceId,status,activeJobId=null}) {
+ await query(`INSERT INTO avcu_worker_heartbeats(worker_id,team_id,service_id,status,active_job_id,last_seen_at)
+ VALUES($1,$2,$3,$4,$5,now()) ON CONFLICT(worker_id) DO UPDATE SET status=EXCLUDED.status,active_job_id=EXCLUDED.active_job_id,last_seen_at=now()`,[workerId,teamId,serviceId,status,activeJobId]);
+}
