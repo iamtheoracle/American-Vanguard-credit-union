@@ -51,6 +51,13 @@ router.get('/auth/operator/me', operatorAuth, (req, res) => {
 // Everything below requires an operator session.
 router.use('/operator', operatorAuth);
 
+const TIERS = {
+  operator: ['operator'],
+  management: ['management', 'super_admin'],
+  super_admin: ['super_admin'],
+  auditor: ['auditor']
+};
+
 // ---- independent team runtime controls ------------------------------------------
 router.get('/operator/teams', ...guard('management', 'operator', 'auditor'), async (req, res, next) => {
   try { res.json({ teams: await listTeams(), queueHealth: await teamQueueHealth() }); }
@@ -78,12 +85,6 @@ router.post('/operator/teams/:teamId/control', ...guard('super_admin'), async (r
   }
 });
 
-const TIERS = {
-  operator: ['operator'],
-  management: ['management', 'super_admin'],
-  super_admin: ['super_admin'],
-  auditor: ['auditor']
-};
 
 router.get('/operator/queue', ...guard('management', 'operator'), async (req, res, next) => {
   try {
