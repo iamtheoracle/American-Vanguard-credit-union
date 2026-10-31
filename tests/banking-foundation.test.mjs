@@ -39,7 +39,7 @@ test('financial tables enable RLS and deny direct browser-role access', () => {
 test('journal lines require exactly one positive debit or credit', () => {
   assert.match(migration, /debit_amount > 0 and credit_amount = 0/);
   assert.match(migration, /credit_amount > 0 and debit_amount = 0/);
-  assert.match(architecture, /balance separately by currency/i);
+  assert.match(architecture, /balanced separately by currency/i);
 });
 
 test('provider events are deduplicated by provider and provider event ID', () => {
