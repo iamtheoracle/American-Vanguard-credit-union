@@ -170,3 +170,17 @@ export async function heartbeat({workerId,teamId,serviceId,status,activeJobId=nu
    last_heartbeat_at=now(),health=jsonb_build_object('workerId',$3,'status',$2,'activeJobId',$4),updated_at=now()
    WHERE team_id=$1`,[teamId,status,workerId,activeJobId]);
 }
+\nexport async function teamQueueHealth() {
+ const result=await query(
+  `SELECT t.team_id,t.lifecycle_state,t.desired_state,t.last_heartbeat_at,
+    count(j.id) FILTER (WHERE j.status IN ('queued','retry_wait'))::int AS queued,
+    count(j.id) FILTER (WHERE j.status='leased')::int AS leased,
+    count(j.id) FILTER (WHERE j.status='dead_letter')::int AS dead_letter,
+    count(w.worker_id) FILTER (WHERE w.last_seen_at>now()-interval '90 seconds')::int AS live_workers
+   FROM avcu_team_runtime t
+   LEFT JOIN avcu_jobs j ON j.team_id=t.team_id
+   LEFT JOIN avcu_worker_heartbeats w ON w.team_id=t.team_id
+   GROUP BY t.team_id,t.lifecycle_state,t.desired_state,t.last_heartbeat_at
+   ORDER BY t.team_id`);
+ return result.rows;
+}
