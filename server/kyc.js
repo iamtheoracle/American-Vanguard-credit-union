@@ -5,7 +5,7 @@ import { memberAuth, operatorAuth, requireOperatorRole } from './auth.js';
 
 const router = express.Router();
 const NOTICE_VERSION = process.env.AVCU_KYC_NOTICE_VERSION || '2026-10-31-v1';
-const NOTICE_TEXT = process.env.AVCU_KYC_NOTICE_TEXT || 'AVCU uses an approved identity verification provider to verify identity and, where required, biometric liveness. Data may be processed outside your country. Your information is used only for identity, fraud prevention and legal compliance purposes, subject to applicable law and the published retention schedule.';
+const NOTICE_TEXT = process.env.AVCU_KYC_NOTICE_TEXT || 'AVCU operates its own identity verification and information-governance system. AVCU determines verification workflows, access permissions, purposes, retention and disclosures. Where required and lawfully approved, AVCU may use specialist technology or external authoritative sources as evidence inputs; those sources do not own your AVCU identity record. The applicable privacy notice explains the information used, purposes, lawful basis, recipients, cross-border transfers, retention and your rights.';
 const NOTICE_HASH = createHash('sha256').update(NOTICE_TEXT).digest('hex');
 const ALLOWED_COUNTRIES = new Set((process.env.AVCU_KYC_COUNTRIES || 'US').split(',').map(x => x.trim().toUpperCase()).filter(x => /^[A-Z]{2}$/.test(x)));
 const PURPOSES = ['identity_verification', 'biometric_liveness', 'cross_border_processing'];
@@ -83,21 +83,28 @@ router.post('/kyc/cases', memberAuth, async (req,res,next) => {
 router.post('/kyc/cases/:caseId/consent', memberAuth, async (req,res,next) => {
   try {
     const { caseId } = req.params;
-    const owned = await query('SELECT id,status FROM kyc_cases WHERE id=$1 AND member_id=$2',[caseId,req.member.id]);
+    const owned = await query('SELECT id,status,country_code FROM kyc_cases WHERE id=$1 AND member_id=$2',[caseId,req.member.id]);
     if (!owned.rowCount) return res.status(404).json({error:'KYC case not found'});
-    const consents = req.body?.consents;
-    if (!Array.isArray(consents) || PURPOSES.some(p => !consents.some(c => c?.purpose===p && c?.consented===true))) {
-      return res.status(422).json({error:'All required verification, biometric liveness and cross-border processing consents must be recorded before starting verification.'});
+    if (req.body?.noticeAcknowledged !== true) {
+      return res.status(422).json({error:'Review the AVCU privacy notice and acknowledge that it was presented before continuing.'});
     }
-    for (const purpose of PURPOSES) await query(
+    const consents = Array.isArray(req.body?.consents) ? req.body.consents : [];
+    const allowedPurposes = new Set(['identity_verification','biometric_liveness','cross_border_processing']);
+    if(consents.some(c=>!allowedPurposes.has(c?.purpose)||c?.consented!==true)) {
+      return res.status(422).json({error:'Only explicit, purpose-specific consent choices can be recorded. A notice acknowledgement is not consent.'});
+    }
+    await query(
+      `INSERT INTO kyc_notice_acknowledgements(kyc_case_id,notice_version,notice_hash,locale,presented_categories)
+       VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(kyc_case_id,notice_version) DO NOTHING`,
+      [caseId,NOTICE_VERSION,NOTICE_HASH,String(req.body?.locale||'en').slice(0,12),
+       JSON.stringify(['identity_data','verification_checks','lawful_sources','recipients','retention','rights','cross_border_transfers'])]);
+    for (const item of consents) await query(
       `INSERT INTO kyc_consents(kyc_case_id,notice_version,purpose,consented,locale,notice_hash)
        VALUES($1,$2,$3,true,$4,$5) ON CONFLICT(kyc_case_id,purpose,notice_version) DO NOTHING`,
-      [caseId,NOTICE_VERSION,purpose,String(req.body?.locale||'en').slice(0,12),NOTICE_HASH]);
+      [caseId,NOTICE_VERSION,item.purpose,String(req.body?.locale||'en').slice(0,12),NOTICE_HASH]);
     await query("UPDATE kyc_cases SET status='ready',updated_at=now() WHERE id=$1 AND status='awaiting_consent'",[caseId]);
-    // Provider creation intentionally fails closed until AVCU has a configured tenant,
-    // approved country/check matrix and a product-specific capture template.
-    const configured = Boolean(process.env.AVCU_TRULIOO_API_TOKEN && process.env.AVCU_TRULIOO_TRANSACTION_CONFIG_JSON);
-    res.json({ok:true,caseId,providerStatus:configured?'configuration_present_provider_adapter_pending':'not_configured',message:'Consent recorded. Provider transaction creation remains disabled until the selected Trulioo product configuration and country capability matrix are verified.'});
+    res.json({ok:true,caseId,noticeAcknowledged:true,explicitConsentsRecorded:consents.map(c=>c.purpose),
+      providerStatus:'disabled',message:'Notice acknowledgement and any separately selected consents are recorded. AVCU must determine the applicable lawful basis for each processing purpose; no consent is presumed. Verification and external data transfer remain disabled until the approved AVCU-owned workflow is ready.'});
   } catch(error){next(error);}
 });
 
