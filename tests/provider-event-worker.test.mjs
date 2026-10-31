@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const sql = await readFile(new URL('../supabase/migrations/202610310005_provider_event_worker.sql', import.meta.url), 'utf8');
+const baseSchema = await readFile(new URL('../supabase/migrations/202610310002_banking_foundation.sql', import.meta.url), 'utf8');
 
 test('provider event ingestion deduplicates IDs and detects payload conflicts', () => {
   assert.match(sql, /unique \(provider_code, provider_event_id\)/);
