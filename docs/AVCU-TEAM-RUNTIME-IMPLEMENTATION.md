@@ -37,3 +37,46 @@ Before activating teams, implement and test:
 7. Operator approval and two-person release gates for high-impact configuration.
 
 Financial, identity-proofing, card issuance, lending decisions, account opening and money movement remain disabled until institutional authority, applicable approvals, production partner access, security/compliance review and explicit release approval are evidenced. No live credentials are stored in this repository.
+
+## Durable queue and worker implementation
+
+The follow-on implementation adds:
+- PostgreSQL jobs with idempotency keys, attempt limits, scheduled retries and explicit states.
+- SKIP LOCKED leasing so multiple workers can safely claim different jobs.
+- Lease tokens and owner checks for acknowledgements, failure reports and lease renewal.
+- Lease-expiry recovery, bounded exponential backoff and dead-letter records.
+- Append-only job events and per-team queue/worker health metrics.
+- An independently runnable npm run worker process, scoped to one team and one service identity.
+- A provider adapter boundary that requires HTTPS and an explicit hostname allowlist.
+
+Worker configuration is injected at deployment time; do not commit values:
+- DATABASE_URL
+- AVCU_WORKER_TEAM
+- AVCU_WORKER_SERVICE_ID (for example, travel-worker)
+- AVCU_SERVICE_TOKEN_<SERVICE_ID> (minimum 32 characters; use a distinct randomly generated value for each identity)
+- AVCU_WORKER_ID (optional stable instance identifier)
+
+The API registers a service identity only when its corresponding token is supplied. The database stores a SHA-256 digest, not the plaintext token. A worker must match the registered service id, team and token digest before it starts. Jobs are additionally restricted to the service id and its declared capability.
+
+## Secret handling and provider onboarding
+
+The current adapter contract reads credentials injected into the process environment by the hosting platform. This is a secret-injection interface, not a built-in cloud secrets manager. Production deployment must use the hosting platform's encrypted secret store or an approved external secret manager, restrict secret access to the relevant service, rotate credentials, and prevent secrets from appearing in logs, build artifacts or CI output. Do not use committed .env files.
+
+Each production provider must be onboarded individually:
+1. Confirm the real provider account, legal entity, production agreement, approved scopes and permitted geography.
+2. Configure the provider's exact HTTPS origin and hostname allowlist.
+3. Inject a provider-specific credential only into the service that needs it.
+4. Verify authentication, scope, webhook signature, replay protection, rate limits and provider status in a non-financial production-read-only test.
+5. Record provider owner, data classification, retention, outage/fallback behaviour and revocation procedure.
+6. Enable a customer-facing function only after end-to-end evidence and release approval.
+
+No real provider is declared connected by this change. A configured URL or credential variable alone is not proof of a valid provider relationship or production access.
+
+## Current activation status
+
+- Queue schema and worker code: implemented in repository; database migration has not been applied in a live environment here.
+- Worker process: independently runnable; no worker process has been deployed or started.
+- Service identities: registration code is present; no production tokens have been provisioned.
+- Provider adapters: secure generic boundary exists; no production provider is verified.
+- Health visibility: operator endpoint exposes queue counts and worker heartbeats once migrations are applied.
+- Deployment and end-to-end proof: blocked until a verified hosting target, production database, approved secret store, provider accounts and safe test environment are connected.
