@@ -162,6 +162,7 @@ export async function heartbeat({workerId,teamId,serviceId,status,activeJobId=nu
  await query(`INSERT INTO avcu_worker_heartbeats(worker_id,team_id,service_id,status,active_job_id,last_seen_at)
  VALUES($1,$2,$3,$4,$5,now()) ON CONFLICT(worker_id) DO UPDATE SET status=EXCLUDED.status,active_job_id=EXCLUDED.active_job_id,last_seen_at=now()`,[workerId,teamId,serviceId,status,activeJobId]);
  await query(`UPDATE avcu_team_runtime SET lifecycle_state=CASE
+   WHEN desired_state='READY' AND $2 IN ('healthy','degraded') THEN 'READY'
    WHEN desired_state='ACTIVE' AND $2 IN ('healthy','degraded') THEN CASE WHEN $2='healthy' THEN 'ACTIVE' ELSE 'DEGRADED' END
    WHEN desired_state='PAUSED' THEN 'PAUSED'
    WHEN desired_state='DRAINING' THEN 'DRAINING'
