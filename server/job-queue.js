@@ -82,7 +82,8 @@ export async function validateWorkerIdentity({teamId,serviceId,token}) {
  const a=Buffer.from(row.token_sha256,'hex'),b=Buffer.from(hash,'hex');
  return a.length===b.length&&timingSafeEqual(a,b);
 }
-\nexport async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKey,maxAttempts=8,delaySeconds=0}) {
+
+export async function enqueueJob({teamId,serviceId,jobType,payload,idempotencyKey,maxAttempts=8,delaySeconds=0}) {
   const policy=JOB_POLICY[jobType];
   if(!jobAllowedForTeam(teamId,jobType)) throw new Error('Job type is not permitted for this team.');
   const serialized=JSON.stringify(payload ?? {});
@@ -171,7 +172,8 @@ export async function heartbeat({workerId,teamId,serviceId,status,activeJobId=nu
    last_heartbeat_at=now(),health=jsonb_build_object('workerId',$3,'status',$2,'activeJobId',$4),updated_at=now()
    WHERE team_id=$1`,[teamId,status,workerId,activeJobId]);
 }
-\nexport async function teamQueueHealth() {
+
+export async function teamQueueHealth() {
  const result=await query(
   `SELECT t.team_id,t.lifecycle_state,t.desired_state,t.last_heartbeat_at,
     count(DISTINCT j.id) FILTER (WHERE j.status IN ('queued','retry_wait'))::int AS queued,
