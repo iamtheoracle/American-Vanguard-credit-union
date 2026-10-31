@@ -13,7 +13,6 @@ const TEAM_CAPABILITIES = Object.freeze({
  'operations':['runtime.monitor','runtime.control']
 });
 const JOB_POLICY = Object.freeze({
- 'notification.deliver':{team:'communications',capability:'notifications.send'},
  'travel.search':{team:'travel',capability:'travel.search'},
  'ai.respond':{team:'ai-orchestration',capability:'ai.respond'},
  'risk.evaluate':{team:'risk-compliance',capability:'policy.evaluate'},
@@ -101,7 +100,7 @@ export async function validateWorkerIdentity({teamId,serviceId,token}) {
   return result.rows[0];
 }
 
-export async function claimJob({teamId,workerId,leaseSeconds=60}) {
+export async function claimJob({teamId,serviceId,workerId,leaseSeconds=60}) {
  return withTx(async client=>{
   const expired=await client.query(
    `UPDATE avcu_jobs SET status=CASE WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'retry_wait' END,
@@ -117,9 +116,9 @@ export async function claimJob({teamId,workerId,leaseSeconds=60}) {
   }
   const {rows}=await client.query(
    `SELECT j.* FROM avcu_jobs j JOIN avcu_team_runtime t ON t.team_id=j.team_id
-    WHERE j.team_id=$1 AND j.status IN ('queued','retry_wait') AND j.available_at<=now()
+    WHERE j.team_id=$1 AND j.service_id=$2 AND j.status IN ('queued','retry_wait') AND j.available_at<=now()
       AND t.desired_state='ACTIVE' AND t.lifecycle_state IN ('ACTIVE','DEGRADED')
-    ORDER BY j.available_at,j.created_at LIMIT 1 FOR UPDATE OF j SKIP LOCKED`,[teamId]);
+    ORDER BY j.available_at,j.created_at LIMIT 1 FOR UPDATE OF j SKIP LOCKED`,[teamId,serviceId]);
   if(!rows[0]) return null;
   const row=rows[0],token=randomUUID();
   const updated=await client.query(
