@@ -13,6 +13,29 @@ alter table public.avcu_provider_events
   add column if not exists last_error_code text,
   add column if not exists updated_at timestamptz not null default now();
 
+-- Backfill deterministic hashes for pre-existing inbox rows. Legacy rows marked
+-- verified without a verification timestamp are quarantined rather than trusted.
+update public.avcu_provider_events
+set payload_sha256 = encode(digest(payload::text,'sha256'),'hex')
+where payload_sha256 is null;
+
+update public.avcu_provider_events
+set signature_verified = false,
+    processing_status = 'quarantined',
+    last_error_code = 'legacy_verification_unproven',
+    updated_at = now()
+where signature_verified = true
+  and signature_verified_at is null;
+
+update public.avcu_provider_events
+set processing_status = 'retry',
+    next_attempt_at = now(),
+    lease_token = null,
+    lease_expires_at = null,
+    updated_at = now()
+where processing_status = 'processing'
+  and lease_expires_at is null;
+
 create index if not exists avcu_provider_events_claim_idx
   on public.avcu_provider_events(processing_status,next_attempt_at,received_at)
   where signature_verified = true;
