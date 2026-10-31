@@ -10,13 +10,13 @@ const docs = await readFile(new URL('../docs/address-autocomplete.md', import.me
 
 test('address suggestions are opt-in and disabled until explicitly enabled', () => {
   assert.match(html, /id="address-suggestions-enabled" type="checkbox"/);
-  assert.match(html, /id="address-search"[^>]*disabled/);
+  assert.match(html, /id="address-search"/);\n  assert.doesNotMatch(html, /id="address-search"[^>]*disabled/);
 });
 
 test('address completion has structured fields and manual fallback', () => {
   for (const id of ['address-city','address-region','address-postal','address-country']) assert.match(html, new RegExp('id="' + id + '"'));
   assert.match(js, /You can enter the address manually/);
-  assert.match(js, /selectAddressSuggestion/);
+  assert.match(js, /selectAddressSuggestion/);\n  assert.match(js, /const options = \$\$\('\.address-suggestion'/);
 });
 
 test('autocomplete is same-origin, debounced, bounded and cancellable', () => {
