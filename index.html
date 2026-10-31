@@ -2,51 +2,58 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#142342">
-  <meta name="description" content="AVCU — America Vanguard. Secure digital financial services platform.">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#10213d">
+  <meta name="description" content="AVCU — America Vanguard. Explore member services, compare card options and begin a secure application.">
   <title>AVCU | America Vanguard</title>
-  <style>
-    :root{color-scheme:light;--navy:#142342;--cream:#f5f1e7;--muted:#b9c3d2;--gold:#c7a45d;--green:#285b47}
-    *{box-sizing:border-box}html{min-height:100%;background:var(--navy)}body{margin:0;background:var(--navy);color:var(--cream);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-    a{color:inherit}.shell{max-width:1160px;min-height:100svh;margin:auto;padding:30px clamp(22px,5vw,68px) 34px;display:flex;flex-direction:column}
-    header{display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:14px;text-decoration:none}.mark{width:52px;height:52px;border:2px solid var(--cream);border-radius:15px;display:grid;place-items:center;font-family:Georgia,serif;font-size:22px}.brand-name{font:600 22px Georgia,serif;letter-spacing:.04em}.brand-sub{display:block;margin-top:4px;color:var(--muted);font-size:10px;letter-spacing:.2em}.header-note{color:var(--muted);font-size:13px;letter-spacing:.04em}
-    main{width:100%;max-width:920px;margin:auto;padding:76px 0 88px}.eyebrow{color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase}.headline{max-width:850px;margin:22px 0 26px;font:500 clamp(48px,8vw,94px)/.99 Georgia,"Times New Roman",serif;letter-spacing:-.045em}.intro{max-width:700px;color:#c3ccda;font-size:clamp(17px,2.2vw,22px);line-height:1.7}.actions{display:flex;flex-wrap:wrap;gap:14px;margin-top:38px}.button{min-height:58px;min-width:210px;padding:0 27px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:700}.primary{background:var(--cream);color:var(--navy)}.secondary{border:1px solid #66738b;color:var(--cream)}.status{margin-top:56px;padding:22px 24px;border:1px solid #344461;border-radius:16px;background:#1a2b4b}.status strong{display:block;margin-bottom:8px;font-size:14px}.status p{margin:0;color:#bdc7d5;font-size:13px;line-height:1.7}.services{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}.service{padding:18px;border:1px solid #344461;border-radius:14px}.service strong{display:block;font-size:14px}.service span{display:block;margin-top:7px;color:var(--muted);font-size:12px;line-height:1.5}
-    footer{display:flex;justify-content:space-between;gap:18px;padding-top:22px;border-top:1px solid #344461;color:#aeb9ca;font-size:11px;line-height:1.6}footer span:last-child{text-align:right}
-    @media(max-width:640px){.shell{padding:24px 22px 24px}header{align-items:flex-start}.header-note{max-width:130px;text-align:right;font-size:11px}.mark{width:46px;height:46px}.brand-name{font-size:19px}main{padding:72px 0 64px}.headline{font-size:clamp(48px,12vw,68px);line-height:1.02}.intro{font-size:16px}.actions{flex-direction:column}.button{width:100%}.status{margin-top:42px;padding:18px}.services{grid-template-columns:1fr}footer{flex-direction:column}footer span:last-child{text-align:left}}
-  </style>
+  <link rel="preload" as="image" href="/assets/avcu-card-collection.webp" fetchpriority="high">
+  <link rel="stylesheet" href="/home.css">
 </head>
 <body>
-  <div class="shell">
-    <header>
-      <a class="brand" href="/" aria-label="AVCU America Vanguard home">
-        <span class="mark" aria-hidden="true">AV</span>
-        <span><span class="brand-name">AVCU</span><span class="brand-sub">AMERICA VANGUARD CREDIT UNION</span></span>
-      </a>
-      <span class="header-note">Digital financial services</span>
-    </header>
-    <main>
-      <p class="eyebrow">Built around clarity, control and trust</p>
-      <h1 class="headline">Your financial life, with greater clarity.</h1>
-      <p class="intro">AVCU is building a secure digital financial-services experience for individuals and businesses, with transparent account information, responsible money movement and clear controls.</p>
-      <div class="actions">
-        <a class="button primary" href="/member-portal.html">Secure member portal</a>
-        <a class="button secondary" href="#service-status">View service status</a>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="AVCU home"><span class="brand-mark">AV</span><span class="brand-copy"><strong>AVCU</strong><small>AMERICA VANGUARD</small></span></a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="#cards">Cards</a><a href="#loans">Loans</a><a href="#member-services">Member services</a>
+    </nav>
+    <div class="header-actions"><a class="sign-in" href="/member-portal.html">Sign in</a><a class="button button-gold" href="/member-portal.html?join=1">Become a member <span>↗</span></a></div>
+  </header>
+  <main id="main-content">
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow"><i></i> AMERICA VANGUARD · MEMBER FINANCIAL SERVICES</span>
+        <h1>Make your money moves with <em>more clarity.</em></h1>
+        <p>Explore cards, lending pathways and member services in one considered experience. Choose what you need and start with a clear next step.</p>
+        <div class="hero-actions"><a class="button button-gold" href="#cards">Explore AVCU cards <span>→</span></a><a class="button button-outline" href="/member-portal.html?join=1">Start membership application</a></div>
+        <div class="hero-proof"><span><b>01</b> Choose a product</span><span><b>02</b> Apply securely</span><span><b>03</b> Track your request</span></div>
       </div>
-      <section class="status" id="service-status" aria-labelledby="status-title">
-        <strong id="status-title">Institutional activation status</strong>
-        <p>AVCU is not currently accepting deposits, issuing insured accounts, or processing real-money payments. Those services will remain unavailable until the required charter or authorized financial-institution arrangement, provider approvals, compliance controls and production testing are complete. No balances, account details, rates or branch locations are invented on this page.</p>
-      </section>
-      <div class="services" aria-label="Planned service areas">
-        <div class="service"><strong>Personal financial services</strong><span>Account access and member controls are being prepared.</span></div>
-        <div class="service"><strong>Business financial services</strong><span>Business ownership, permissions and approvals are being prepared.</span></div>
-        <div class="service"><strong>Payments and digital assets</strong><span>ACH, domestic wires and supported stablecoin rails require separate provider authorization.</span></div>
+      <div class="hero-art"><img src="/assets/avcu-card-collection.webp" alt="Three premium AVCU-style payment card concepts in navy, forest green and champagne finishes"><div class="hero-art-caption"><span class="art-dot"></span> Designed around your everyday</div></div>
+    </section>
+    <section class="trust-bar" aria-label="AVCU service principles"><div><span class="trust-icon">◇</span><span><strong>Clear product choices</strong><small>Know what you are requesting</small></span></div><div><span class="trust-icon">⌑</span><span><strong>Secure member access</strong><small>Private, account-bound requests</small></span></div><div><span class="trust-icon">↗</span><span><strong>Visible application status</strong><small>Follow each review step</small></span></div></section>
+    <section class="section cards-section" id="cards">
+      <div class="section-heading"><div><span class="eyebrow">FIND YOUR CARD</span><h2>One card for the way you move.</h2><p>Compare the available card request pathways. Issuance, limits, fees and eligibility depend on final issuer and compliance approval.</p></div><span class="section-index">01 / CARDS</span></div>
+      <div class="card-grid">
+        <article class="product-card">
+          <div class="product-image"><img src="/assets/avcu-debit-card.webp" alt="Navy metal-finish debit card concept" loading="lazy"><span class="product-type">EVERYDAY</span></div>
+          <div class="product-content"><div class="product-title"><h3>AVCU Debit</h3><span class="product-code">01</span></div><p>For everyday purchases and spending linked to an eligible account.</p><ul><li>Everyday spending pathway</li><li>Account eligibility review</li><li>Issuer approval required</li></ul><a class="button button-dark" href="/member-portal.html?card=debit_card#card-applications">Request this card <span>→</span></a></div>
+        </article>
+        <article class="product-card featured-card">
+          <div class="product-image"><img src="/assets/avcu-premium-card.webp" alt="Forest green premium credit card concept" loading="lazy"><span class="product-type">PREMIUM CREDIT</span></div>
+          <div class="product-content"><div class="product-title"><h3>AVCU Premium</h3><span class="product-code">02</span></div><p>A premium credit request pathway subject to underwriting and issuer assessment.</p><ul><li>Credit application review</li><li>Eligibility and affordability checks</li><li>Terms disclosed before acceptance</li></ul><a class="button button-dark" href="/member-portal.html?card=premium_credit_card#card-applications">Request this card <span>→</span></a></div>
+        </article>
+        <article class="product-card">
+          <div class="product-image"><img src="/assets/avcu-business-card.webp" alt="Champagne ivory business payment card concept" loading="lazy"><span class="product-type">BUSINESS</span></div>
+          <div class="product-content"><div class="product-title"><h3>AVCU Business</h3><span class="product-code">03</span></div><p>Card services for eligible business members and authorized card users.</p><ul><li>Business profile review</li><li>Authorized-user controls</li><li>Issuer approval required</li></ul><a class="button button-dark" href="/member-portal.html?card=business_card#card-applications">Request this card <span>→</span></a></div>
+        </article>
       </div>
-    </main>
-    <footer>
-      <span>© 2026 AVCU · America Vanguard</span>
-      <span>AVCU is not currently a chartered or insured credit union. No deposit or payment service is represented as active.</span>
-    </footer>
-  </div>
+      <p class="section-footnote">Card visuals are original product concepts, not proof of an issued card or active payment-network connection.</p>
+    </section>
+    <section class="loans-section" id="loans">
+      <div class="loans-copy"><span class="eyebrow">BORROW WITH CLARITY</span><h2>Make room for your next move.</h2><p>Start a loan application and keep track of the review. No loan is approved, priced or funded until underwriting and an authorized lending partner complete their checks.</p><a class="button button-gold" href="/member-portal.html?join=1#loan-form">Explore loan applications <span>→</span></a></div>
+      <div class="loan-options"><a href="/member-portal.html?join=1#loan-form"><span class="loan-icon">⌂</span><span><strong>Personal finance</strong><small>Planned purchases and personal needs</small></span><b>↗</b></a><a href="/member-portal.html?join=1#loan-form"><span class="loan-icon">⌁</span><span><strong>Auto finance</strong><small>Vehicle purchase and refinancing</small></span><b>↗</b></a><a href="/member-portal.html?join=1#loan-form"><span class="loan-icon">▤</span><span><strong>Home and education</strong><small>Housing, study and skills development</small></span><b>↗</b></a><a href="/member-portal.html?join=1#loan-form"><span class="loan-icon">◇</span><span><strong>Business finance</strong><small>Eligible business funding requests</small></span><b>↗</b></a></div>
+    </section>
+    <section class="member-section" id="member-services"><div><span class="eyebrow">YOUR AVCU SPACE</span><h2>More than a product application.</h2><p>One member portal for account records, application progress, secure notifications, support and financial education.</p></div><div class="member-feature-grid"><article><span>01</span><strong>Member dashboard</strong><p>See verified account records and your current membership status.</p></article><article><span>02</span><strong>Application tracking</strong><p>Follow card and loan requests with clear review updates.</p></article><article><span>03</span><strong>Credit readiness</strong><p>Understand the factors that influence credit health without inventing a bureau score.</p></article><article><span>04</span><strong>Member support</strong><p>Reach support and keep important conversations connected to your account.</p></article></div></section>
+  </main>
+  <footer class="site-footer"><div class="footer-brand"><span class="brand-mark">AV</span><span><strong>AVCU</strong><small>AMERICA VANGUARD</small></span></div><p>AVCU is a financial-services platform in development. It is not represented as a chartered or insured credit union. No deposits, real-money transfers, card issuance or lending disbursements are enabled by this page. Product requests are not approvals or commitments.</p><div class="footer-links"><a href="/member-portal.html">Member sign in</a><a href="/operator-portal.html">Staff access</a></div><small>© 2026 AVCU · America Vanguard</small></footer>
 </body>
 </html>
