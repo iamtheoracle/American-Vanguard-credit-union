@@ -108,7 +108,7 @@ export async function claimJob({teamId,serviceId,workerId,leaseSeconds=60}) {
    `UPDATE avcu_jobs SET status=CASE WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'retry_wait' END,
     lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,available_at=now()+interval '5 seconds',updated_at=now(),
     last_error_code='worker_lease_expired'
-    WHERE team_id=$1 AND status='leased' AND lease_expires_at<now()
+    WHERE team_id=$1 AND service_id=$2 AND status='leased' AND lease_expires_at<now()
     RETURNING id,team_id,job_type,attempts,status`,[teamId,serviceId]);
   for(const job of expired.rows) {
    await client.query(`INSERT INTO avcu_job_events(job_id,event_type,attempt,detail) VALUES($1,'job.lease_expired',$2,'{"recovered":true}'::jsonb)`,[job.id,job.attempts]);
