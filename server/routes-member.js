@@ -1,6 +1,7 @@
 import express from 'express';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { query, withTx, audit } from './db.js';
+import * as memberRepo from './repositories/member.js';
 import {
   memberAuth, operatorAuth, applySessionCookie, clearAuthCookie,
   createMemberSession, createOperatorSession, destroySession, hashPassword, verifyPassword,
@@ -652,16 +653,14 @@ router.post('/funding-pools/:id/contributions', memberAuth, async (req, res) => 
 // ---- notifications ----------------------------------------------------------
 router.get('/notifications', memberAuth, async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT id, title, body, read, created_at AS "createdAt" FROM notifications
-       WHERE member_id = $1 ORDER BY created_at DESC LIMIT 30`, [req.member.id]);
+    const { rows } = await memberRepo.listNotifications(req.member.id);
     res.json({ notifications: rows });
   } catch (error) { next(error); }
 });
 
 router.post('/notifications/mark-read', memberAuth, async (req, res, next) => {
   try {
-    await query('UPDATE notifications SET read = TRUE WHERE member_id = $1', [req.member.id]);
+    await memberRepo.markNotificationsRead(req.member.id);
     res.json({ ok: true });
   } catch (error) { next(error); }
 });
@@ -669,10 +668,7 @@ router.post('/notifications/mark-read', memberAuth, async (req, res, next) => {
 // ---- support cases ----------------------------------------------------------
 router.get('/support/cases', memberAuth, async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT c.id, c.subject, c.status, c.priority, c.created_at AS "createdAt",
-              (SELECT count(*) FROM case_messages m WHERE m.case_id = c.id) AS message_count
-       FROM support_cases c WHERE c.member_id = $1 ORDER BY c.created_at DESC`, [req.member.id]);
+    const { rows } = await memberRepo.listSupportCases(req.member.id);
     res.json({ cases: rows });
   } catch (error) { next(error); }
 });
@@ -690,12 +686,9 @@ router.post('/support/cases', memberAuth, async (req, res, next) => {
 
 router.get('/support/cases/:id', memberAuth, async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT c.* FROM support_cases c WHERE c.id = $1 AND c.member_id = $2`, [req.params.id, req.member.id]);
+    const { rows } = await memberRepo.getSupportCase(req.params.id, req.member.id);
     if (!rows[0]) return res.status(404).json({ error: 'Case not found' });
-    const { rows: messages } = await query(
-      `SELECT m.id, m.author_type AS "authorType", m.body, m.created_at AS "createdAt"
-       FROM case_messages m WHERE m.case_id = $1 ORDER BY m.id`, [req.params.id]);
+    const { rows: messages } = await memberRepo.listCaseMessages(req.params.id);
     res.json({ case: rows[0], messages });
   } catch (error) { next(error); }
 });
@@ -704,12 +697,9 @@ router.post('/support/cases/:id/messages', memberAuth, async (req, res, next) =>
   try {
     const body = String(req.body?.body || '').trim().slice(0, 2000);
     if (!body) return res.status(400).json({ error: 'Message cannot be empty' });
-    const { rows } = await query(
-      `SELECT id FROM support_cases WHERE id = $1 AND member_id = $2`, [req.params.id, req.member.id]);
+    const { rows } = await memberRepo.getSupportCaseIdentity(req.params.id, req.member.id);
     if (!rows[0]) return res.status(404).json({ error: 'Case not found' });
-    const { rows: inserted } = await query(
-      `INSERT INTO case_messages (case_id, author_type, author_id, body) VALUES ($1,'member',$2,$3) RETURNING *`,
-      [req.params.id, req.member.id, body]);
+    const { rows: inserted } = await memberRepo.createCaseMessage(req.params.id, req.member.id, body);
     res.status(201).json({ message: inserted[0] });
   } catch (error) { next(error); }
 });
