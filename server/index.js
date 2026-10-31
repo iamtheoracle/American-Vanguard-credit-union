@@ -24,16 +24,28 @@ export function createApp() {
   app.use('/api', memberRoutes);
   app.use('/api', operatorRoutes);
 
-  app.get('/api/health', async (req, res) => {
+  // Liveness is process-only: dependency outages must not trigger restart loops.
+  app.get('/api/health/live', (req, res) => {
+    res.status(200).json({ ok: true, service: 'avcu-api', time: new Date().toISOString() });
+  });
+
+  // Readiness checks dependencies and returns 503 when this instance cannot serve.
+  const readinessHandler = async (req, res) => {
     try {
       await query('SELECT 1');
       const integrations = await integrationHealth();
       const teams = await listTeams();
-      res.json({ ok: true, service: 'avcu-api', time: new Date().toISOString(), integrations, teams });
+      const degraded = Array.isArray(integrations) && integrations.some(item => item.required && item.status !== 'healthy');
+      res.status(degraded ? 503 : 200).json({
+        ok: !degraded, service: 'avcu-api', time: new Date().toISOString(), integrations, teams
+      });
     } catch (error) {
-      res.status(500).json({ ok: false, error: 'Database unavailable' });
+      res.status(503).json({ ok: false, error: 'Dependencies unavailable' });
     }
-  });
+  };
+  app.get('/api/health/ready', readinessHandler);
+  // Backwards-compatible alias; orchestrators should use /live and /ready explicitly.
+  app.get('/api/health', readinessHandler);
 
   // Static front end (existing AVCU experience + operator portal + login).
   app.use(express.static(ROOT, { index: 'index.html', extensions: ['html'] }));
