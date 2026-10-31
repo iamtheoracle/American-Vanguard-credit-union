@@ -20,7 +20,7 @@ test('all seeded countries remain closed by default', () => {
 });
 
 test('authorization is scoped by entity, country, customer type and capability', () => {
-  for (const field of ['operating_entity_code','country_code','customer_type','capability_code','evidence_reference','approved_by','effective_from']) {
+  for (const field of ['operating_entity_code','where a.operating_entity_code = p_operating_entity_code','country_code','customer_type','capability_code','evidence_reference','approved_by','effective_from']) {
     assert.match(sql, new RegExp(field));
   }
   assert.match(sql, /customer_type in \('individual','business'\)/);
