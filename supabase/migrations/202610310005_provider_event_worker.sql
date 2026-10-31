@@ -93,13 +93,22 @@ begin
   for update;
 
   if v_inserted = 0 and v_event.payload_sha256 is distinct from v_hash then
+    -- Persist the conflict evidence and quarantine the existing inbox row.
+    -- Do not raise here: an exception would roll back this audit evidence.
     insert into public.avcu_provider_event_conflicts(
       provider_code,provider_event_id,existing_payload_sha256,incoming_payload_sha256
     ) values (
       trim(p_provider_code),trim(p_provider_event_id),v_event.payload_sha256,v_hash
     );
-    raise exception 'Provider event ID was replayed with a different payload'
-      using errcode = '23505';
+
+    update public.avcu_provider_events
+    set processing_status = 'quarantined',
+        last_error_code = 'payload_hash_conflict',
+        lease_token = null,
+        lease_expires_at = null,
+        updated_at = now()
+    where id = v_event.id
+    returning * into v_event;
   end if;
 
   return v_event;
@@ -296,13 +305,23 @@ grant select on public.avcu_provider_events to service_role;
 
 revoke all on function public.avcu_ingest_provider_event(text,text,text,jsonb) from public, anon, authenticated, service_role;
 revoke all on function public.avcu_mark_provider_event_verified(uuid,text) from public, anon, authenticated, service_role;
+-- Only the isolated provider-signature verifier identity may attest verification.
+-- Provision this NOLOGIN role through the controlled deployment identity process.
+DO $grant_verifier$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'avcu_provider_verifier') THEN
+    GRANT EXECUTE ON FUNCTION public.avcu_mark_provider_event_verified(uuid,text) TO avcu_provider_verifier;
+  END IF;
+END
+$grant_verifier$;
 revoke all on function public.avcu_claim_provider_event(text,integer) from public, anon, authenticated, service_role;
 revoke all on function public.avcu_complete_provider_event(uuid,uuid) from public, anon, authenticated, service_role;
 revoke all on function public.avcu_retry_provider_event(uuid,uuid,text,integer) from public, anon, authenticated, service_role;
 revoke all on function public.avcu_quarantine_provider_event(uuid,uuid,text) from public, anon, authenticated, service_role;
 
 grant execute on function public.avcu_ingest_provider_event(text,text,text,jsonb) to service_role;
-grant execute on function public.avcu_mark_provider_event_verified(uuid,text) to service_role;
+-- Intentionally no EXECUTE grant to the shared service_role. The provider verifier
+-- must use the separately provisioned avcu_provider_verifier identity.
 grant execute on function public.avcu_claim_provider_event(text,integer) to service_role;
 grant execute on function public.avcu_complete_provider_event(uuid,uuid) to service_role;
 grant execute on function public.avcu_retry_provider_event(uuid,uuid,text,integer) to service_role;
