@@ -39,3 +39,26 @@ test('posting and reversal create audit events', () => {
 test('journal audit records are protected from browser and service-role direct writes', () => {
   assert.match(sql, /revoke all on public\.avcu_ledger_audit_events from public, anon, authenticated, service_role/);
 });
+
+test('draft journals are created only through an idempotent server function', () => {
+  assert.match(migration, /create or replace function public\.avcu_create_draft_ledger_transaction/);
+  assert.match(migration, /request_fingerprint text/);
+  assert.match(migration, /digest\(jsonb_build_object/);
+  assert.match(migration, /Idempotency key was already used for a different journal request/);
+  assert.match(migration, /between 2 and 500 entries/);
+  assert.match(migration, /grant execute on function public\.avcu_create_draft_ledger_transaction/);
+});
+
+test('service role cannot bypass controlled journal writes', () => {
+  assert.match(migration, /revoke insert, update, delete on public\.avcu_ledger_transactions from service_role/);
+  assert.match(migration, /revoke insert, update, delete on public\.avcu_ledger_entries from service_role/);
+  assert.match(migration, /grant select on public\.avcu_ledger_transactions, public\.avcu_ledger_entries to service_role/);
+});
+
+test('transaction state changes require function-local operation markers', () => {
+  assert.match(migration, /before insert or update on public\.avcu_ledger_transactions/);
+  assert.match(migration, /v_operation is distinct from 'post'/);
+  assert.match(migration, /v_operation is distinct from 'reverse'/);
+  assert.match(migration, /set_config\('avcu\.ledger_operation','post',true\)/);
+  assert.match(migration, /set_config\('avcu\.ledger_operation','reverse',true\)/);
+});
