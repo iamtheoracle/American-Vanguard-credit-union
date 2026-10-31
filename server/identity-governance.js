@@ -90,10 +90,19 @@ router.get('/identity/disclosures', memberAuth, async(req,res,next)=>{
     const profile=await profileForMember(req.member.id);
     if(!profile)return res.json({disclosures:[]});
     const result=await query(
-      `SELECT id,recipient_legal_entity AS "recipientLegalEntity",recipient_person AS "recipientPerson",
-       recipient_role AS "recipientRole",purpose,legal_basis AS "legalBasis",channel,status,
-       created_at AS "createdAt",approved_at AS "approvedAt",released_at AS "releasedAt",expires_at AS "expiresAt"
-       FROM avcu_data_disclosure_requests WHERE identity_profile_id=$1 ORDER BY created_at DESC LIMIT 100`,
+      `SELECT d.id,d.recipient_legal_entity AS "recipientLegalEntity",d.recipient_person AS "recipientPerson",
+       d.recipient_role AS "recipientRole",d.recipient_identifier AS "recipientIdentifier",d.purpose,
+       d.legal_basis AS "legalBasis",d.authority_reference AS "authorityReference",d.channel,d.status,
+       d.created_at AS "createdAt",d.approved_at AS "approvedAt",d.released_at AS "releasedAt",d.expires_at AS "expiresAt",
+       requester.name AS "requestedBy",approver.name AS "approvedBy",
+       COALESCE((SELECT json_agg(json_build_object('field',f.field_key,'category',f.data_category) ORDER BY f.field_key)
+         FROM avcu_data_disclosure_fields f WHERE f.disclosure_request_id=d.id),'[]'::json) AS fields,
+       COALESCE((SELECT json_agg(json_build_object('event',e.event_type,'actorType',e.actor_type,'actorId',e.actor_id,'reason',e.reason,'occurredAt',e.occurred_at) ORDER BY e.occurred_at)
+         FROM avcu_data_disclosure_events e WHERE e.disclosure_request_id=d.id),'[]'::json) AS events
+       FROM avcu_data_disclosure_requests d
+       LEFT JOIN operators requester ON requester.id=d.requested_by
+       LEFT JOIN operators approver ON approver.id=d.approved_by
+       WHERE d.identity_profile_id=$1 ORDER BY d.created_at DESC LIMIT 100`,
       [profile.id]);
     res.json({disclosures:result.rows});
   }catch(error){next(error);}
