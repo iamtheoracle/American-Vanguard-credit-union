@@ -399,7 +399,7 @@ router.post('/operator/operators', requireOperatorRole('super_admin'), async (re
 router.patch('/operator/operators/:id', requireOperatorRole('super_admin'), async (req, res, next) => {
   try {
     const { role, active } = req.body || {};
-    if (role && !['super_admin', 'management', 'operator'].includes(role)) return res.status(400).json({ error: 'Unknown role' });
+    if (role && !['super_admin', 'management', 'operator', 'auditor'].includes(role)) return res.status(400).json({ error: 'Unknown role' });
     if (typeof active !== 'boolean' && !role) return res.status(400).json({ error: 'Provide a role or active state' });
     const result = await operatorRepo.updateOperator({ targetId: req.params.id, role, active, actor: req.operator });
     if (result.kind === 'not_found') return res.status(404).json({ error: 'Operator not found' });
@@ -473,7 +473,7 @@ router.post('/operator/migrations/validate', ...guard('management', 'operator'),
     });
     res.status(201).json({
       batch: { ...batch, sourceSystem, sourceFileName, sourcePayloadSha256: payloadHash,
-        status, sourceCount: result.sourceCount, acceptedCount: result.acceptedCount,
+        status: batch.status, sourceCount: result.sourceCount, acceptedCount: result.acceptedCount,
         exceptionCount: result.exceptionCount, totals: result.totals, exceptions: result.exceptions },
       cutoverAllowed: false,
       message: 'Records are staged only. Reconciliation, authorized approval, and a verified source export are still required before any import or cutover.'
