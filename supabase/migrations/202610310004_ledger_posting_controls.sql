@@ -164,7 +164,7 @@ begin
   if p_transaction_type is null or length(trim(p_transaction_type)) = 0 then
     raise exception 'Transaction type is required' using errcode = '22023';
   end if;
-  if jsonb_typeof(p_entries) <> 'array' then
+  if p_entries is null or jsonb_typeof(p_entries) is distinct from 'array' then
     raise exception 'Journal entries must be supplied as a JSON array' using errcode = '22023';
   end if;
 
@@ -175,7 +175,8 @@ begin
 
   for v_entry in select value from jsonb_array_elements(p_entries)
   loop
-    if not (v_entry ? 'ledger_account_id')
+    if jsonb_typeof(v_entry) is distinct from 'object'
+       or not (v_entry ? 'ledger_account_id')
        or not (v_entry ? 'currency_code')
        or not (v_entry ? 'debit_amount')
        or not (v_entry ? 'credit_amount') then
