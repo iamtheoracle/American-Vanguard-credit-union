@@ -48,7 +48,7 @@ jobs:
           SQL
       - name: Apply every PR #20 migration in order
         run: |
-          for migration in supabase/migrations/202610310001_member_identity_foundation.sql supabase/migrations/202610310002_banking_foundation.sql supabase/migrations/202610310003_jurisdiction_controls.sql supabase/migrations/202610310004_ledger_posting_controls.sql supabase/migrations/202610310005_provider_event_worker.sql; do
+          for migration in supabase/migrations/202610310001_member_identity_foundation.sql supabase/migrations/202610310002_banking_foundation.sql supabase/migrations/202610310003_jurisdiction_controls.sql supabase/migrations/202610310004_ledger_posting_controls.sql supabase/migrations/202610310005_provider_event_worker.sql supabase/migrations/202610310006_privilege_hardening.sql; do
             echo "Applying $migration"
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -59,6 +59,8 @@ jobs:
           DECLARE
             table_count integer;
             missing_rls integer;
+            missing_force_rls integer;
+            bad_acl integer;
             function_body text;
           BEGIN
             SELECT count(*) INTO table_count
@@ -81,9 +83,40 @@ jobs:
                 'avcu_jurisdictions','avcu_product_authorizations','avcu_provider_routes',
                 'avcu_ledger_audit_events','avcu_provider_event_conflicts'
               )
-              AND NOT c.relrowsecurity;
+              AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity);
             IF missing_rls <> 0 THEN
-              RAISE EXCEPTION 'RLS missing from % canonical AVCU tables', missing_rls;
+              RAISE EXCEPTION 'RLS or FORCE RLS missing from % canonical AVCU tables', missing_rls;
+            END IF;
+            SELECT count(*) INTO bad_acl
+            FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+            CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a
+            WHERE n.nspname='public'
+              AND c.relname LIKE 'avcu_%' OR (n.nspname='public' AND c.relname='member_profiles')
+              AND a.grantee IN (0, (SELECT oid FROM pg_roles WHERE rolname='anon'),
+                (SELECT oid FROM pg_roles WHERE rolname='authenticated'));
+            IF bad_acl <> 0 THEN
+              RAISE EXCEPTION 'PUBLIC/anon/authenticated table ACL entries remain: %', bad_acl;
+            END IF;
+            SELECT count(*) INTO bad_acl
+            FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+            CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl,acldefault('f',p.proowner))) a
+            WHERE n.nspname='public' AND p.proname LIKE 'avcu_%'
+              AND a.grantee IN (0, (SELECT oid FROM pg_roles WHERE rolname='anon'),
+                (SELECT oid FROM pg_roles WHERE rolname='authenticated'))
+              AND a.privilege_type='EXECUTE';
+            IF bad_acl <> 0 THEN
+              RAISE EXCEPTION 'PUBLIC/browser function EXECUTE grants remain: %', bad_acl;
+            END IF;
+            SELECT count(*) INTO bad_acl
+            FROM information_schema.column_privileges
+            WHERE table_schema='public' AND table_name LIKE 'avcu_%'
+              AND grantee IN ('PUBLIC','anon','authenticated');
+            IF bad_acl <> 0 THEN
+              RAISE EXCEPTION 'Unexpected browser column grants remain: %', bad_acl;
+            END IF;
+            IF has_schema_privilege('anon','public','CREATE')
+               OR has_schema_privilege('authenticated','public','CREATE') THEN
+              RAISE EXCEPTION 'Browser roles must not create objects in public schema';
             END IF;
             SELECT pg_get_functiondef('public.avcu_create_draft_ledger_transaction(text,text,text,text,timestamptz,jsonb,jsonb)'::regprocedure)
             INTO function_body;
