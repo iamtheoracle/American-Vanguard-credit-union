@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { startServer, shutdown } from '../../server/index.js';
+import { migrate } from '../../server/db.js';
 import { seed, MEMBER_PASSWORD, OPERATOR_PASSWORD } from '../../server/seed.js';
 
 const ADMIN_URL = process.env.AVCU_TEST_ADMIN_URL || 'postgres://avcu:avcu@127.0.0.1:5432/avcu';
@@ -19,7 +20,9 @@ export async function startTestServer({ aiProvider, sandboxFail } = {}) {
   if (aiProvider) process.env.AVCU_AI_PROVIDER = aiProvider; else delete process.env.AVCU_AI_PROVIDER;
   if (sandboxFail) process.env.AVCU_SANDBOX_FAIL = sandboxFail; else delete process.env.AVCU_SANDBOX_FAIL;
 
-  const server = await startServer({ port: 0 }); // runs migrations
+  // Tests explicitly provision their isolated database; production app startup never runs DDL.
+  await migrate();
+  const server = await startServer({ port: 0 });
   await seed({ log: () => {} });
   const base = `http://127.0.0.1:${server.address().port}`;
 
