@@ -36,3 +36,14 @@ test('service role uses narrow worker functions rather than direct event writes'
     assert.match(sql, new RegExp('grant execute on function public\\.' + fn));
   }
 });
+
+test('legacy unproven verification is quarantined and payload hashes are backfilled', () => {
+  assert.match(sql, /where payload_sha256 is null/);
+  assert.match(sql, /legacy_verification_unproven/);
+  assert.match(sql, /where signature_verified = true\s+and signature_verified_at is null/);
+});
+
+test('worker timing inputs reject null and out-of-range values', () => {
+  assert.match(sql, /p_lease_seconds is null or p_lease_seconds < 10 or p_lease_seconds > 300/);
+  assert.match(sql, /p_retry_after_seconds is null or p_retry_after_seconds < 5 or p_retry_after_seconds > 86400/);
+});
