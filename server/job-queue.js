@@ -129,6 +129,13 @@ export async function claimJob({teamId,workerId,leaseSeconds=60}) {
   return updated.rows[0];
  });
 }
+export async function renewJobLease({jobId,leaseToken,workerId,leaseSeconds=60}) {
+ const result=await query(
+  `UPDATE avcu_jobs SET lease_expires_at=now()+($4*interval '1 second'),updated_at=now()
+   WHERE id=$1 AND status='leased' AND lease_token=$2 AND lease_owner=$3 RETURNING id`,
+  [jobId,leaseToken,workerId,leaseSeconds]);
+ return result.rowCount===1;
+}
 export async function acknowledgeJob({jobId,leaseToken,workerId,result}) {
  return withTx(async client=>{
   const row=await client.query(`SELECT * FROM avcu_jobs WHERE id=$1 AND status='leased' AND lease_token=$2 AND lease_owner=$3 FOR UPDATE`,[jobId,leaseToken,workerId]);
