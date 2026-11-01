@@ -27,7 +27,7 @@ test('liveness policy never reports unvalidated controls as executable',async()=
   assert.equal(policy.status,200);
   assert.equal(policy.data.executionState,'blocked_unvalidated');
   assert.equal(policy.data.configuredControlCount,0);
-  assert.equal(policy.data.requiredControlCount,11);
+  assert.equal(policy.data.requiredControlCount,17);
   assert.ok(policy.data.controls.every(item=>item.required===true));
   assert.ok(policy.data.controls.every(item=>item.configured===false));
   assert.ok(policy.data.controls.every(item=>item.executable===false));
@@ -61,7 +61,7 @@ test('unvalidated liveness is blocked and records every required control as not 
   assert.equal(response.status,409);
   assert.equal(response.data.executionState,'blocked_unvalidated');
   assert.equal(response.data.noBiometricCaptureStarted,true);
-  assert.equal(response.data.requiredControls.length,11);
+  assert.equal(response.data.requiredControls.length,17);
   assert.ok(response.data.sessionId);
 
   const session=await db.pool.query(
@@ -74,7 +74,7 @@ test('unvalidated liveness is blocked and records every required control as not 
     'SELECT check_key,result,details_redacted FROM avcu_liveness_check_events WHERE session_id=$1',
     [response.data.sessionId]
   );
-  assert.equal(checks.rowCount,11);
+  assert.equal(checks.rowCount,17);
   assert.ok(checks.rows.every(item=>item.result==='not_run'));
   assert.ok(checks.rows.every(item=>item.details_redacted.captureStarted===false));
 });
@@ -86,9 +86,10 @@ test('declared provider coverage still cannot execute without a validated adapte
   const operator=await db.pool.query('SELECT id FROM operators WHERE email=$1',['manager@avcu.demo']);
   assert.equal(operator.rowCount,1);
   const checks=[
-    'active_challenge','passive_liveness','presentation_attack_detection',
-    'replay_detection','camera_injection_detection','device_integrity',
-    'session_binding','face_match','document_face_consistency','capture_quality','risk_fusion'
+    'active_challenge','randomized_motion_challenge','blink_eye_movement','passive_liveness',
+    'presentation_attack_detection','photo_screen_spoof_detection','deepfake_detection',
+    'replay_detection','camera_injection_detection','device_integrity','session_binding',
+    'face_match','document_face_consistency','document_authenticity','capture_quality','risk_fusion','manual_review'
   ];
   await db.pool.query(
     `INSERT INTO avcu_identity_sources
