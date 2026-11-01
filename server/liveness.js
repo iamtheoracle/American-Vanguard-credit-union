@@ -3,7 +3,7 @@ import { query, audit, withTx } from './db.js';
 import { memberAuth } from './auth.js';
 
 const router = express.Router();
-const POLICY_VERSION = 'avcu-liveness-2026-10-v2';
+const POLICY_VERSION = 'avcu-liveness-2026-11-v1';
 
 // These are policy requirements, not claims that a browser or this API can perform
 // the checks. A provider must explicitly attest to each capability for the country.
