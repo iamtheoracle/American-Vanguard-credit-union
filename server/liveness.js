@@ -45,20 +45,27 @@ async function capabilitySnapshot(countryCode) {
           ORDER BY effective_from DESC LIMIT 1`, [countryCode])
   ]);
   const policy = policyResult.rows[0] || null;
-  const source = sourceResult.rows.find(item =>
-    REQUIRED_CHECKS.every(check => item.supportedChecks.includes(check))
-  ) || null;
+  const sourcesByCheck = Object.fromEntries(REQUIRED_CHECKS.map(check => [
+    check,
+    sourceResult.rows.find(source => source.supportedChecks.includes(check)) || null
+  ]));
   const enabled = new Set(policy?.enabledChecks || []);
-  const controls = LIVENESS_CONTROLS.map(control => ({
-    ...control,
-    required: true,
-    configured: Boolean(source && policy && enabled.has(control.key)),
-    executable: false,
-    status: source && policy && enabled.has(control.key)
-      ? 'component_attestation_present_adapter_not_validated'
-      : 'blocked_unvalidated'
-  }));
-  return { policy, source, controls };
+  const controls = LIVENESS_CONTROLS.map(control => {
+    const source = sourcesByCheck[control.key];
+    const configured = Boolean(source && policy && enabled.has(control.key));
+    return {
+      ...control,
+      required: true,
+      configured,
+      executable: false,
+      sourceKey: source?.sourceKey || null,
+      status: configured
+        ? 'component_attestation_present_adapter_not_validated'
+        : 'blocked_unvalidated'
+    };
+  });
+  const sources = [...new Map(Object.values(sourcesByCheck).filter(Boolean).map(source => [source.id,source])).values()];
+  return { policy, sources, sourcesByCheck, controls };
 }
 
 router.get('/liveness/policy', memberAuth, async (req,res,next) => {
@@ -75,7 +82,7 @@ router.get('/liveness/policy', memberAuth, async (req,res,next) => {
       countryCode: profile.rows[0].country_code,
       controls: snapshot.controls,
       countryPolicy: snapshot.policy,
-      approvedSource: snapshot.source ? { sourceKey:snapshot.source.sourceKey } : null,
+      approvedSources: snapshot.sources.map(source => ({ sourceKey:source.sourceKey })),
       executionState: readyCount === REQUIRED_CHECKS.length
         ? 'adapter_validation_required'
         : 'blocked_unvalidated',
@@ -113,7 +120,7 @@ router.post('/kyc/cases/:caseId/liveness', memberAuth, async (req,res,next) => {
         `INSERT INTO avcu_liveness_sessions
           (identity_profile_id,kyc_case_id,country_code,policy_version,status,source_id)
          VALUES($1,$2,$3,$4,'blocked_unvalidated',$5) RETURNING id`,
-        [item.identity_profile_id,item.id,item.country_code,POLICY_VERSION,snapshot.source?.id || null]
+        [item.identity_profile_id,item.id,item.country_code,POLICY_VERSION,null]
       );
       const sessionId = inserted.rows[0].id;
       for (const control of LIVENESS_CONTROLS) {
@@ -121,7 +128,7 @@ router.post('/kyc/cases/:caseId/liveness', memberAuth, async (req,res,next) => {
           `INSERT INTO avcu_liveness_check_events
             (session_id,check_key,result,source_id,method,assurance_level,reason_code,details_redacted)
            VALUES($1,$2,'not_run',$3,'not_started_no_validated_adapter','unassessed',$4,$5::jsonb)`,
-          [sessionId,control.key,snapshot.source?.id || null,
+          [sessionId,control.key,snapshot.sourcesByCheck[control.key]?.id || null,
             missing.includes(control.key) ? 'capability_or_policy_not_approved' : 'adapter_not_validated',
             JSON.stringify({captureStarted:false,policyVersion:POLICY_VERSION})]
         );
@@ -145,7 +152,7 @@ router.post('/kyc/cases/:caseId/liveness', memberAuth, async (req,res,next) => {
     return res.status(409).json({
       error:'The country policy and source declare coverage, but the secure challenge adapter, session binding and evidence pipeline have not passed validation.',
       executionState:'adapter_not_validated',sessionId:session,
-      sourceKey:snapshot.source.sourceKey,
+      sourceKeys:snapshot.sources.map(source => source.sourceKey),
       requiredControls:REQUIRED_CHECKS,
       missing:['validated provider SDK/API adapter','nonce and transaction-bound session implementation','independent security and biometric privacy sign-off'],
       noBiometricCaptureStarted:true
