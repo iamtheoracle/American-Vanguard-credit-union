@@ -94,8 +94,10 @@ test('declared provider coverage still cannot execute without a validated adapte
   await db.pool.query(
     `INSERT INTO avcu_identity_sources
       (source_key,source_kind,display_name,country_codes,supported_checks,status,approval_reference,approved_by,approved_at)
-     VALUES('test-liveness-source','biometric_attestation','Test liveness source',ARRAY['US']::char(2[]),$1,'approved','TEST-APPROVAL-1',$2,now())`,
-    [checks,operator.rows[0].id]
+     VALUES
+       ('test-liveness-source-a','biometric_attestation','Test liveness source A',ARRAY['US']::char(2[]),$1,'approved','TEST-APPROVAL-A',$2,now()),
+       ('test-liveness-source-b','document_technology','Test liveness source B',ARRAY['US']::char(2[]),$3,'approved','TEST-APPROVAL-B',$2,now())`,
+    [checks.slice(0,8),operator.rows[0].id,checks.slice(8)]
   );
   await db.pool.query(
     `INSERT INTO avcu_liveness_policy_versions
@@ -107,6 +109,7 @@ test('declared provider coverage still cannot execute without a validated adapte
   const policy=await api(app.base,'/api/liveness/policy',{cookie:member.cookie});
   assert.equal(policy.status,200);
   assert.equal(policy.data.configuredControlCount,17);
+  assert.equal(policy.data.approvedSources.length,2);
   assert.equal(policy.data.executionState,'adapter_validation_required');
   assert.ok(policy.data.controls.every(item=>item.configured===true && item.executable===false));
 
@@ -120,5 +123,6 @@ test('declared provider coverage still cannot execute without a validated adapte
   });
   assert.equal(response.status,409);
   assert.equal(response.data.executionState,'adapter_not_validated');
+  assert.equal(response.data.sourceKeys.length,2);
   assert.equal(response.data.noBiometricCaptureStarted,true);
 });
