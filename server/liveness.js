@@ -1,6 +1,7 @@
 import express from 'express';
 import { query, audit, withTx } from './db.js';
 import { memberAuth } from './auth.js';
+import { getLivenessAdapter } from './liveness-adapters.js';
 
 const router = express.Router();
 const POLICY_VERSION = 'avcu-liveness-2026-11-v1';
@@ -53,15 +54,18 @@ async function capabilitySnapshot(countryCode) {
   const controls = LIVENESS_CONTROLS.map(control => {
     const source = sourcesByCheck[control.key];
     const configured = Boolean(source && policy && enabled.has(control.key));
+    const adapter = source ? getLivenessAdapter(source.sourceKey) : null;
     return {
       ...control,
       required: true,
       configured,
+      adapterRegistered: Boolean(adapter),
+      adapterMode: adapter?.mode || null,
       executable: false,
       sourceKey: source?.sourceKey || null,
-      status: configured
-        ? 'component_attestation_present_adapter_not_validated'
-        : 'blocked_unvalidated'
+      status: !configured ? 'blocked_unvalidated'
+        : adapter ? 'adapter_registered_requires_independent_validation'
+        : 'provider_adapter_not_installed'
     };
   });
   const sources = [...new Map(Object.values(sourcesByCheck).filter(Boolean).map(source => [source.id,source])).values()];
@@ -88,7 +92,7 @@ router.get('/liveness/policy', memberAuth, async (req,res,next) => {
         : 'blocked_unvalidated',
       configuredControlCount: readyCount,
       requiredControlCount: REQUIRED_CHECKS.length,
-      note: 'Configured means an approved country source and effective policy declare support. It does not mean the check can execute. Every check remains non-executable until its adapter and evidence path are independently validated.'
+      note: 'Configured means an approved country source and effective policy declare support. Adapter registration is not provider validation. Every check remains non-executable until the real provider adapter, signature verification, evidence path and country approvals are independently validated.'
     });
   } catch(error) { next(error); }
 });
