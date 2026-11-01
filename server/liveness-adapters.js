@@ -33,13 +33,12 @@ export function registerLivenessAdapter(sourceKey, adapter) {
     throw new LivenessAdapterError('Invalid adapter source key.');
   }
   const required=['health','createSession','fetchResult','verifyWebhook','verifyAttestation'];
-c  = c;
   for (const method of required) {
     if (typeof adapter?.[method]!=='function') {
       throw new LivenessAdapterError(`Adapter is missing required method: ${method}`);
     }
   }
-  if (typeof adapter.version!=='string' || !/^\\d+\\.\\d+\\.\\d+(?:[-+][a-zA-Z0-9.-]+)?$/.test(adapter.version)) {
+  if (typeof adapter.version!=='string' || !/^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?$/.test(adapter.version)) {
     throw new LivenessAdapterError('Adapter must declare a pinned semantic version.');
   }
   if (!Array.isArray(adapter.capabilities) || adapter.capabilities.length===0 ||
