@@ -31,7 +31,7 @@ export const LIVENESS_CONTROLS = Object.freeze([
 const REQUIRED_CHECKS = LIVENESS_CONTROLS.map(item => item.key);
 
 async function capabilitySnapshot(countryCode) {
-  const [sourceResult, policyResult] = await Promise.all([
+  const [sourceResult, policyResult, validationResult] = await Promise.all([
     query(`SELECT id,source_key AS "sourceKey",supported_checks AS "supportedChecks",
              approval_reference AS "approvalReference",approved_by AS "approvedBy"
           FROM avcu_identity_sources
@@ -43,7 +43,14 @@ async function capabilitySnapshot(countryCode) {
           FROM avcu_liveness_policy_versions
           WHERE country_code=$1 AND effective_from IS NOT NULL AND effective_from<=now()
             AND approved_by IS NOT NULL AND approval_reference IS NOT NULL
-          ORDER BY effective_from DESC LIMIT 1`, [countryCode])
+          ORDER BY effective_from DESC LIMIT 1`, [countryCode]),
+    query(`SELECT source_id AS "sourceId",adapter_key AS "adapterKey",adapter_version AS "adapterVersion",
+             environment,validation_status AS "validationStatus",validated_capabilities AS "validatedCapabilities",
+             expires_at AS "expiresAt"
+          FROM avcu_liveness_adapter_validations
+          WHERE country_code=$1 AND validation_status IN ('sandbox_validated','production_validated')
+            AND expires_at>now() AND suspended_at IS NULL
+          ORDER BY validated_at DESC`, [countryCode])
   ]);
   const policy = policyResult.rows[0] || null;
   const sourcesByCheck = Object.fromEntries(REQUIRED_CHECKS.map(check => [
@@ -55,21 +62,30 @@ async function capabilitySnapshot(countryCode) {
     const source = sourcesByCheck[control.key];
     const configured = Boolean(source && policy && enabled.has(control.key));
     const adapter = source ? getLivenessAdapter(source.sourceKey) : null;
+    const validation = source ? validationResult.rows.find(row => row.sourceId===source.id) : null;
+    const adapterSupportsCheck = Boolean(adapter && adapter.capabilities.includes(control.key));
+    const validationSupportsCheck = Boolean(validation && validation.validatedCapabilities.includes(control.key));
     return {
       ...control,
       required: true,
       configured,
       adapterRegistered: Boolean(adapter),
       adapterMode: adapter?.mode || null,
+      adapterSupportsCheck,
+      validationStatus: validation?.validationStatus || 'not_validated',
+      validationEnvironment: validation?.environment || null,
+      validationSupportsCheck,
       executable: false,
       sourceKey: source?.sourceKey || null,
       status: !configured ? 'blocked_unvalidated'
-        : adapter ? 'adapter_registered_requires_independent_validation'
-        : 'provider_adapter_not_installed'
+        : !adapter ? 'provider_adapter_not_installed'
+        : !adapterSupportsCheck ? 'adapter_missing_required_capability'
+        : !validationSupportsCheck ? 'adapter_validation_missing_or_incomplete'
+        : 'validated_components_present_execution_pipeline_not_enabled'
     };
   });
   const sources = [...new Map(Object.values(sourcesByCheck).filter(Boolean).map(source => [source.id,source])).values()];
-  return { policy, sources, sourcesByCheck, controls };
+  return { policy, sources, sourcesByCheck, controls, validations:validationResult.rows };
 }
 
 router.get('/liveness/policy', memberAuth, async (req,res,next) => {
@@ -87,12 +103,17 @@ router.get('/liveness/policy', memberAuth, async (req,res,next) => {
       controls: snapshot.controls,
       countryPolicy: snapshot.policy,
       approvedSources: snapshot.sources.map(source => ({ sourceKey:source.sourceKey })),
+      adapterValidations: snapshot.validations.map(item => ({
+        adapterKey:item.adapterKey,adapterVersion:item.adapterVersion,
+        environment:item.environment,validationStatus:item.validationStatus,
+        expiresAt:item.expiresAt
+      })),
       executionState: readyCount === REQUIRED_CHECKS.length
         ? 'adapter_validation_required'
         : 'blocked_unvalidated',
       configuredControlCount: readyCount,
       requiredControlCount: REQUIRED_CHECKS.length,
-      note: 'Configured means an approved country source and effective policy declare support. Adapter registration is not provider validation. Every check remains non-executable until the real provider adapter, signature verification, evidence path and country approvals are independently validated.'
+      note: 'Configured means an approved country source and effective policy declare support. Adapter registration and two-person validation records are separate controls. Even validated components remain non-executable until the end-to-end capture, signature verification, evidence pipeline and operational approvals are implemented and independently tested.'
     });
   } catch(error) { next(error); }
 });
