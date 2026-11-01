@@ -1,6 +1,6 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTestServer, api, loginMember } from './helpers.mjs';
+import { startTestServer, api, loginMember, loginOperator } from './helpers.mjs';
 import db from '../../server/db.js';
 
 let app;
@@ -77,4 +77,47 @@ test('unvalidated liveness is blocked and records every required control as not 
   assert.equal(checks.rowCount,11);
   assert.ok(checks.rows.every(item=>item.result==='not_run'));
   assert.ok(checks.rows.every(item=>item.details_redacted.captureStarted===false));
+});
+
+test('declared provider coverage still cannot execute without a validated adapter',async()=>{
+  const caseId=await createCase();
+  const manager=await loginOperator(app.base);
+  assert.equal(manager.response.status,200);
+  const operator=await db.pool.query('SELECT id FROM operators WHERE email=$1',['manager@avcu.demo']);
+  assert.equal(operator.rowCount,1);
+  const checks=[
+    'active_challenge','passive_liveness','presentation_attack_detection',
+    'replay_detection','camera_injection_detection','device_integrity',
+    'session_binding','face_match','document_face_consistency','capture_quality','risk_fusion'
+  ];
+  await db.pool.query(
+    `INSERT INTO avcu_identity_sources
+      (source_key,source_kind,display_name,country_codes,supported_checks,status,approval_reference,approved_by,approved_at)
+     VALUES('test-liveness-source','biometric_attestation','Test liveness source',ARRAY['US']::char(2[]),$1,'approved','TEST-APPROVAL-1',$2,now())`,
+    [checks,operator.rows[0].id]
+  );
+  await db.pool.query(
+    `INSERT INTO avcu_liveness_policy_versions
+      (version,country_code,enabled_checks,minimum_assurance,approved_by,approval_reference,effective_from)
+     VALUES('test-policy-v1','US',$1,'high',$2,'TEST-POLICY-1',now())`,
+    [checks,operator.rows[0].id]
+  );
+
+  const policy=await api(app.base,'/api/liveness/policy',{cookie:member.cookie});
+  assert.equal(policy.status,200);
+  assert.equal(policy.data.configuredControlCount,11);
+  assert.equal(policy.data.executionState,'adapter_validation_required');
+  assert.ok(policy.data.controls.every(item=>item.configured===true && item.executable===false));
+
+  const consent=await api(app.base,`/api/kyc/cases/${caseId}/consent`,{
+    method:'POST',cookie:member.cookie,
+    body:{noticeAcknowledged:true,locale:'en',consents:[{purpose:'biometric_liveness',consented:true}]}
+  });
+  assert.equal(consent.status,200);
+  const response=await api(app.base,`/api/kyc/cases/${caseId}/liveness`,{
+    method:'POST',cookie:member.cookie,body:{}
+  });
+  assert.equal(response.status,409);
+  assert.equal(response.data.executionState,'adapter_not_validated');
+  assert.equal(response.data.noBiometricCaptureStarted,true);
 });
