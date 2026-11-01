@@ -2,18 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createChallengeBinding,registerLivenessAdapter,getLivenessAdapter,
-  listLivenessAdapters,validateProviderAttestation,LivenessAdapterError
+  listLivenessAdapters,validateProviderAttestation,verifyAndNormalizeProviderAttestation,LivenessAdapterError
 } from '../../server/liveness-adapters.js';
 
 const controls=['active_challenge','passive_liveness','replay_detection'];
 
 function adapter(){
   return {
-    mode:'sandbox',capabilities:controls,
+    mode:'sandbox',version:'1.0.0',capabilities:controls,
     async health(){return {status:'healthy'};},
     async createSession(){return {providerReference:'sandbox-ref'};},
     async fetchResult(){return null;},
-    async verifyWebhook(){return false;}
+    async verifyWebhook(){return false;},
+    async verifyAttestation(){return true;}
   };
 }
 
@@ -66,4 +67,19 @@ test('missing, unverified and adverse provider results never become a pass',()=>
   assert.equal(validateProviderAttestation(attestation(binding,{active_challenge:'pass',passive_liveness:'fail',replay_detection:'pass'}),binding,controls).decision,'failed');
   assert.equal(validateProviderAttestation(attestation(binding,{active_challenge:'pass',passive_liveness:'inconclusive',replay_detection:'pass'}),binding,controls).decision,'review_required');
   assert.equal(validateProviderAttestation(attestation(binding,{active_challenge:'pass',passive_liveness:'not_run',replay_detection:'pass'}),binding,controls).decision,'incomplete');
+});
+
+test('provider signature verification is delegated to the registered adapter',async()=>{
+  const key='verified-provider-adapter';
+  const configured=adapter();
+  const unregister=registerLivenessAdapter(key,configured);
+  const binding=createChallengeBinding({sessionId:'s2',caseId:'c2',countryCode:'US',policyVersion:'p1'});
+  const good=await verifyAndNormalizeProviderAttestation(key,attestation(binding),binding,controls);
+  assert.equal(good.decision,'passed');
+  configured.verifyAttestation=async()=>false;
+  await assert.rejects(
+    verifyAndNormalizeProviderAttestation(key,attestation(binding),binding,controls),
+    error=>error.code==='provider_signature_unverified'
+  );
+  unregister();
 });
