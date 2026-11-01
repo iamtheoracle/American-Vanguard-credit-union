@@ -129,3 +129,40 @@ test('declared provider coverage still cannot execute without a validated adapte
   assert.equal(response.data.sourceKeys.length,3);
   assert.equal(response.data.noBiometricCaptureStarted,true);
 });
+
+test('adapter validation registry requires two distinct approvers and expires',async()=>{
+  await createCase();
+  const manager=await db.pool.query('SELECT id FROM operators WHERE email=$1',['manager@avcu.demo']);
+  const superAdmin=await db.pool.query('SELECT id FROM operators WHERE email=$1',['super@avcu.demo']);
+  assert.equal(manager.rowCount,1);
+  assert.equal(superAdmin.rowCount,1);
+  const source=await db.pool.query(
+    `INSERT INTO avcu_identity_sources
+      (source_key,source_kind,display_name,country_codes,supported_checks,status,approval_reference,approved_by,approved_at)
+     VALUES('validation-test-source','biometric_attestation','Validation test source',ARRAY['US']::char(2[]),ARRAY['active_challenge'],'approved','TEST-SOURCE-APPROVAL',$1,now())
+     RETURNING id`,[manager.rows[0].id]
+  );
+  const validation=await db.pool.query(
+    `INSERT INTO avcu_liveness_adapter_validations
+      (source_id,adapter_key,adapter_version,country_code,environment,validation_status,
+       validated_capabilities,validation_suite_version,test_report_sha256,evidence_reference,
+       approval_reference,validated_by,reviewed_by,validated_at,expires_at)
+     VALUES($1,'test-provider-adapter','1.0.0','US','production','production_validated',
+       ARRAY['active_challenge'],'suite-1',$2,'test-report-ref','TEST-ADAPTER-APPROVAL',
+       $3,$4,now(),now()+interval '30 days') RETURNING id`,
+    [source.rows[0].id,'a'.repeat(64),manager.rows[0].id,superAdmin.rows[0].id]
+  );
+  assert.equal(validation.rowCount,1);
+  await assert.rejects(
+    db.pool.query(
+      `INSERT INTO avcu_liveness_adapter_validations
+        (source_id,adapter_key,adapter_version,country_code,environment,validation_status,
+         validated_capabilities,validation_suite_version,test_report_sha256,approval_reference,
+         validated_by,reviewed_by,validated_at,expires_at)
+       VALUES($1,'same-approver-test','1.0.0','US','production','production_validated',
+         ARRAY['active_challenge'],'suite-1',$2,'TEST-SAME-APPROVER',$3,$3,now(),now()+interval '30 days')`,
+      [source.rows[0].id,'b'.repeat(64),manager.rows[0].id]
+    ),
+    error=>error.code==='23514'
+  );
+});
