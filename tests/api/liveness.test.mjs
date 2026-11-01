@@ -106,7 +106,7 @@ test('declared provider coverage still cannot execute without a validated adapte
 
   const policy=await api(app.base,'/api/liveness/policy',{cookie:member.cookie});
   assert.equal(policy.status,200);
-  assert.equal(policy.data.configuredControlCount,11);
+  assert.equal(policy.data.configuredControlCount,17);
   assert.equal(policy.data.executionState,'adapter_validation_required');
   assert.ok(policy.data.controls.every(item=>item.configured===true && item.executable===false));
 
