@@ -62,9 +62,15 @@ async function capabilitySnapshot(countryCode) {
     const source = sourcesByCheck[control.key];
     const configured = Boolean(source && policy && enabled.has(control.key));
     const adapter = source ? getLivenessAdapter(source.sourceKey) : null;
-    const validation = source ? validationResult.rows.find(row => row.sourceId===source.id) : null;
+    const validation = source ? validationResult.rows.find(row =>
+      row.sourceId===source.id && row.adapterKey===source.sourceKey &&
+      adapter && row.adapterVersion===adapter.version
+    ) : null;
     const adapterSupportsCheck = Boolean(adapter && adapter.capabilities.includes(control.key));
-    const validationSupportsCheck = Boolean(validation && validation.validatedCapabilities.includes(control.key));
+    const validationSupportsCheck = Boolean(validation &&
+      validation.validationStatus==='production_validated' &&
+      validation.environment==='production' &&
+      validation.validatedCapabilities.includes(control.key));
     return {
       ...control,
       required: true,
@@ -80,7 +86,7 @@ async function capabilitySnapshot(countryCode) {
       status: !configured ? 'blocked_unvalidated'
         : !adapter ? 'provider_adapter_not_installed'
         : !adapterSupportsCheck ? 'adapter_missing_required_capability'
-        : !validationSupportsCheck ? 'adapter_validation_missing_or_incomplete'
+        : !validationSupportsCheck ? 'adapter_validation_missing_or_incomplete_or_not_production'
         : 'validated_components_present_execution_pipeline_not_enabled'
     };
   });
