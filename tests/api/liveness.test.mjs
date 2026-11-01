@@ -31,6 +31,8 @@ test('liveness policy never reports unvalidated controls as executable',async()=
   assert.ok(policy.data.controls.every(item=>item.required===true));
   assert.ok(policy.data.controls.every(item=>item.configured===false));
   assert.ok(policy.data.controls.every(item=>item.executable===false));
+  assert.ok(policy.data.controls.every(item=>item.adapterRegistered===false));
+  assert.ok(policy.data.controls.every(item=>item.validationStatus==='not_validated'));
 });
 
 test('liveness cannot start without biometric authorization',async()=>{
