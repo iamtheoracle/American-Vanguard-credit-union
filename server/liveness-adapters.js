@@ -32,11 +32,15 @@ export function registerLivenessAdapter(sourceKey, adapter) {
   if (typeof sourceKey!=='string' || !/^[a-z0-9][a-z0-9._-]{2,79}$/.test(sourceKey)) {
     throw new LivenessAdapterError('Invalid adapter source key.');
   }
-  const required=['health','createSession','fetchResult','verifyWebhook'];
+  const required=['health','createSession','fetchResult','verifyWebhook','verifyAttestation'];
+c  = c;
   for (const method of required) {
     if (typeof adapter?.[method]!=='function') {
       throw new LivenessAdapterError(`Adapter is missing required method: ${method}`);
     }
+  }
+  if (typeof adapter.version!=='string' || !/^\\d+\\.\\d+\\.\\d+(?:[-+][a-zA-Z0-9.-]+)?$/.test(adapter.version)) {
+    throw new LivenessAdapterError('Adapter must declare a pinned semantic version.');
   }
   if (!Array.isArray(adapter.capabilities) || adapter.capabilities.length===0 ||
       adapter.capabilities.some(key=>typeof key!=='string')) {
@@ -56,7 +60,7 @@ export function getLivenessAdapter(sourceKey) {
 
 export function listLivenessAdapters() {
   return [...adapters.values()].map(adapter=>({
-    sourceKey:adapter.sourceKey,mode:adapter.mode,
+    sourceKey:adapter.sourceKey,version:adapter.version,mode:adapter.mode,
     capabilities:[...adapter.capabilities],
     executable:false,
     status:'adapter_contract_only_requires_provider_validation'
@@ -117,4 +121,14 @@ export function validateProviderAttestation(attestation, binding, requiredChecks
     issuedAt:new Date(issued).toISOString(),
     expiresAt:new Date(expires).toISOString()
   });
+}
+
+export async function verifyAndNormalizeProviderAttestation(sourceKey, attestation, binding, requiredChecks) {
+  const adapter=getLivenessAdapter(sourceKey);
+  if (!adapter) throw new LivenessAdapterError('No approved provider adapter is registered.', 'adapter_not_installed');
+  if (typeof adapter.verifyAttestation!=='function' ||
+      await adapter.verifyAttestation(attestation,binding)!==true) {
+    throw new LivenessAdapterError('Provider attestation signature or transaction binding could not be verified.', 'provider_signature_unverified');
+  }
+  return validateProviderAttestation({...attestation,signatureVerified:true},binding,requiredChecks);
 }
