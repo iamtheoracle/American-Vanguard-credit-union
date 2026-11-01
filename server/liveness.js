@@ -9,16 +9,22 @@ const POLICY_VERSION = 'avcu-liveness-2026-10-v2';
 // the checks. A provider must explicitly attest to each capability for the country.
 export const LIVENESS_CONTROLS = Object.freeze([
   { key:'active_challenge', label:'Randomized active challenge', mode:'active' },
+  { key:'randomized_motion_challenge', label:'Randomized head and face movement', mode:'active' },
+  { key:'blink_eye_movement', label:'Blink and eye-movement challenge', mode:'active' },
   { key:'passive_liveness', label:'Passive liveness signals', mode:'passive' },
   { key:'presentation_attack_detection', label:'Presentation-attack detection', mode:'active_and_passive' },
+  { key:'photo_screen_spoof_detection', label:'Printed-photo and screen-replay spoof detection', mode:'passive' },
+  { key:'deepfake_detection', label:'Deepfake and synthetic-media detection', mode:'passive' },
   { key:'replay_detection', label:'Replay and recapture detection', mode:'passive' },
-  { key:'camera_injection_detection', label:'Virtual-camera and injection detection', mode:'passive' },
+  { key:'camera_injection_detection', label:'Virtual-camera and video-injection detection', mode:'passive' },
   { key:'device_integrity', label:'Device and capture-session integrity', mode:'passive' },
   { key:'session_binding', label:'Session, nonce and transaction binding', mode:'protocol' },
   { key:'face_match', label:'Selfie-to-document face comparison', mode:'biometric_match' },
   { key:'document_face_consistency', label:'Document portrait consistency', mode:'biometric_match' },
+  { key:'document_authenticity', label:'Document authenticity and tamper checks', mode:'document' },
   { key:'capture_quality', label:'Capture quality and obstruction checks', mode:'passive' },
-  { key:'risk_fusion', label:'Cross-signal risk assessment', mode:'policy' }
+  { key:'risk_fusion', label:'Cross-signal risk assessment', mode:'policy' },
+  { key:'manual_review', label:'Trained human review for uncertain or high-risk cases', mode:'human_review' }
 ]);
 
 const REQUIRED_CHECKS = LIVENESS_CONTROLS.map(item => item.key);
