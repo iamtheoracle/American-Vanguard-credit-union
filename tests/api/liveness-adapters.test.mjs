@@ -7,14 +7,14 @@ import {
 
 const controls=['active_challenge','passive_liveness','replay_detection'];
 
-function adapter(){
+function adapter(verify=()=>true){
   return {
     mode:'sandbox',version:'1.0.0',capabilities:controls,
     async health(){return {status:'healthy'};},
     async createSession(){return {providerReference:'sandbox-ref'};},
     async fetchResult(){return null;},
     async verifyWebhook(){return false;},
-    async verifyAttestation(){return true;}
+    async verifyAttestation(){return verify();}
   };
 }
 
@@ -71,12 +71,13 @@ test('missing, unverified and adverse provider results never become a pass',()=>
 
 test('provider signature verification is delegated to the registered adapter',async()=>{
   const key='verified-provider-adapter';
-  const configured=adapter();
+  let signaturePass=true;
+  const configured=adapter(()=>signaturePass);
   const unregister=registerLivenessAdapter(key,configured);
   const binding=createChallengeBinding({sessionId:'s2',caseId:'c2',countryCode:'US',policyVersion:'p1'});
   const good=await verifyAndNormalizeProviderAttestation(key,attestation(binding),binding,controls);
   assert.equal(good.decision,'passed');
-  configured.verifyAttestation=async()=>false;
+  signaturePass=false;
   await assert.rejects(
     verifyAndNormalizeProviderAttestation(key,attestation(binding),binding,controls),
     error=>error.code==='provider_signature_unverified'
