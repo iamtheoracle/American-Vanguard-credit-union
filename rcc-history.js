@@ -1,0 +1,23 @@
+(() => {
+'use strict';
+const annual = [
+ {year:2018,close:2627567500},{year:2019,close:2904502500},{year:2020,close:3131387500},{year:2021,close:3383975500},
+ {year:2022,close:3042698500},{year:2023,close:3157198500},{year:2024,close:3374848500},{year:2025,close:3696873500}
+];
+const assumptions=[['January 2026','+0.60%'],['February 2026','+0.30%'],['March 2026','−1.20%'],['April 2026','+1.50%'],['May 2026','+0.80%'],['June 2026','+0.40%'],['July 2026','+1.10%'],['August 2026','+0.20%'],['September 2026','+0.70%'],['October 1–28, 2026','+0.50%']];
+const fmt=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
+const $=id=>document.getElementById(id);
+function csv(rows){return rows.map(row=>row.map(v=>{const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(',')).join('\r\n')}
+function download(name,content,type='text/csv;charset=utf-8'){const blob=new Blob(['\ufeff',content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url)}
+function annualRows(){return annual.map((r,i)=>[r.year+'-12-31',i?fmt(annual[i-1].close):'Pending source records','Pending source records','Pending source records','Pending source records','Pending source records',fmt(r.close),'Supplied input · unreconciled'])}
+function drawAnnual(){const chart=$('annual-chart');if(!chart)return;const max=Math.max(...annual.map(x=>x.close));chart.innerHTML='';annual.forEach(r=>{const col=document.createElement('div');col.className='bar-col';const value=document.createElement('span');value.textContent=(r.close/100/1000000).toFixed(1)+'m';const bar=document.createElement('div');bar.className='bar';bar.style.height=Math.max(5,r.close/max*125)+'px';bar.title=r.year+': '+fmt(r.close);const label=document.createElement('b');label.textContent=String(r.year).slice(2);col.append(value,bar,label);chart.append(col)})}
+function drawAnnualTable(){const body=$('annual-rows');body.innerHTML='';annualRows().forEach(row=>{const tr=document.createElement('tr');row.forEach((v,i)=>{const td=document.createElement('td');td.textContent=v;if(i===7)td.className='pending';tr.append(td)});body.append(tr)})}
+function drawAssumptions(){const body=$('scenario-rows');assumptions.forEach(([period,rate])=>{const tr=document.createElement('tr');[period,rate,'Unverified assumption'].forEach((v,i)=>{const td=document.createElement('td');td.textContent=v;if(i===2)td.className='pending';tr.append(td)});body.append(tr)})}
+function downloadAnnual(){download('RCC-annual-history-unreconciled.csv',csv([['Year ended','Opening balance USD','Contributions USD','Withdrawals USD','Income and gains USD','Fees and taxes USD','Closing balance USD','Status'],...annualRows()]))}
+function ledgerTemplate(){download('RCC-ledger-import-template.csv',csv([['Transaction date','Posting date','Description','Category','Subcategory','Source reference','Opening balance USD','Credit USD','Debit USD','Investment income USD','Realized gain loss USD','Valuation adjustment USD','Fee USD','Tax USD','Other adjustment USD','Net effect USD','Running balance USD','Source document','Reconciliation status']]))}
+function feeTemplate(){download('RCC-fee-import-template.csv',csv([['Date charged','Description','Fee category','Amount USD','Related transaction or period','Source reference','Source document','Status (posted/reversed/disputed/pending)']]))}
+document.querySelectorAll('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b===btn);b.setAttribute('aria-selected',String(b===btn))});document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+btn.dataset.tab))}));
+$('download-annual')?.addEventListener('click',downloadAnnual);$('download-annual-2')?.addEventListener('click',downloadAnnual);$('download-ledger')?.addEventListener('click',ledgerTemplate);$('download-template')?.addEventListener('click',ledgerTemplate);$('download-fee-template')?.addEventListener('click',feeTemplate);
+$('ledger-search')?.addEventListener('input',()=>{$('ledger-count').textContent='0 source transactions · filters do not create or infer missing records'});$('ledger-year')?.addEventListener('change',()=>{$('ledger-count').textContent='0 source transactions · selected year: '+($('ledger-year').value||'all years')});$('ledger-category')?.addEventListener('change',()=>{$('ledger-count').textContent='0 source transactions · category: '+($('ledger-category').value||'all categories')});
+drawAnnual();drawAnnualTable();drawAssumptions();
+})();

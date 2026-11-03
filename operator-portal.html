@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light"><title>AVCU Operator Console</title>
+  <link rel="stylesheet" href="/portal.css"><script src="/operator-portal.js" defer></script>
+</head>
+<body>
+  <header class="portal-header"><a class="portal-brand" href="/">AV<span>CU</span></a><div><strong>American Vantoris Credit Union</strong><small>Operator console · restricted access</small></div><a class="quiet-link" href="/">Home</a></header>
+  <main class="portal-shell">
+    <section id="operator-auth" class="panel auth-panel"><p class="eyebrow">STAFF ACCESS</p><h1>Operator sign in</h1><p class="muted">Access is enforced by server-side role permissions. This console is for authorized development operators only.</p>
+      <form id="operator-login-form" class="stack top-gap"><label for="operator-email">Work email</label><input id="operator-email" type="email" autocomplete="username" required><label for="operator-password">Password</label><input id="operator-password" type="password" autocomplete="current-password" required><button class="primary" type="submit">Sign in</button></form><p id="operator-auth-message" class="notice" role="status" aria-live="polite"></p>
+    </section>
+    <section id="operator-dashboard" class="hidden">
+      <div class="welcome-row"><div><p class="eyebrow">OPERATIONS</p><h1>Admin console</h1><p id="operator-identity" class="muted"></p></div><button id="operator-logout" class="secondary" type="button">Sign out</button></div>
+      <p class="disclaimer"><strong>Development environment:</strong> Staff actions are authenticated, role-checked and audited. Financial balances and ledger activity are simulated; no external deposit or payment provider is connected. This interface is not a claim of banking authorization, deposit insurance, or independent security certification. Use synthetic test data only.</p>
+      <div id="operator-message" class="notice" role="status" aria-live="polite"></div>
+      <div class="stat-grid"><article class="stat-card"><small>Pending approvals</small><strong id="queue-approvals">—</strong><span>Awaiting decision</span></article><article class="stat-card"><small>Pending members</small><strong id="queue-members">—</strong><span>Membership applications</span></article><article class="stat-card"><small>Open support cases</small><strong id="queue-cases">—</strong><span>Support workflow</span></article></div>
+      <div class="content-grid">
+        <section class="panel wide"><div class="section-head"><h2>Approval queue</h2><button class="text-button" id="refresh-operator" type="button">Refresh all</button></div><div id="approval-list" class="table-wrap"></div></section>
+        <section class="panel wide"><div class="section-head"><h2>Member review history</h2><span class="tag">AUDITED ACCESS</span></div><p class="muted small">Enter a member UUID to inspect recorded identity, accounts, ledger entries, transactions and period summaries. Daily activity is shown only where source records exist; missing periods are not reconstructed.</p><form id="history-form" class="filter-row"><label class="sr-only" for="history-member-id">Member ID</label><input id="history-member-id" placeholder="Member UUID" required><label class="sr-only" for="history-from">From date</label><input id="history-from" type="date" value="2018-03-25"><label class="sr-only" for="history-to">To date</label><input id="history-to" type="date" value="2026-10-31"><button class="secondary" type="submit">Load full history</button></form><div id="member-history" class="table-wrap"><p class="muted">Select a member from the approval queue to review their history.</p></div></section>
+        <section class="panel wide"><div class="section-head"><h2>Membership tiers</h2><span class="tag">AUTOMATIC + AUDITED OVERRIDES</span></div><form id="tier-filter" class="filter-row"><input id="tier-search" placeholder="Search name or email" aria-label="Search members"><select id="tier-filter-value" aria-label="Filter by tier"><option value="">All tiers</option><option value="new_member">New Member</option><option value="active_member">Active Member</option><option value="established_member">Established Member</option><option value="priority_service">Priority Service</option><option value="review_required">Review Required</option></select><button class="secondary" type="submit">Filter</button></form><div id="tier-list" class="table-wrap"></div></section>
+        <section class="panel wide"><div class="section-head"><h2>Email delivery history</h2><span id="gmail-config-status" class="tag">Checking Gmail setup…</span></div><p class="muted small">Delivery records distinguish sent, skipped (not configured), and failed attempts.</p><div id="email-log" class="table-wrap"></div></section>
+      </div>
+    </section>
+  </main>
+  <footer class="portal-footer">American Vantoris Credit Union · Restricted operations console · <a href="/member-portal.html">Member portal</a></footer>
+</body>
+</html>

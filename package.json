@@ -1,12 +1,23 @@
 {
-  "name": "american-vanguard-credit-union-demo",
-  "version": "0.1.0",
+  "name": "american-vantoris-credit-union",
+  "version": "0.2.0",
   "private": true,
-  "description": "Local-only fictional member banking demo",
+  "type": "module",
+  "description": "AVCU full-stack digital banking platform (development)",
   "scripts": {
-    "check": "node --check app.js && node --test tests/*.test.mjs"
+    "start": "node server/index.js",
+    "migrate": "node server/migrate.js",
+    "seed": "node server/seed.js",
+    "check": "node --check app.js && node --check member-portal.js && node --check operator-portal.js && node --check server/index.js && node --check rcc-history.js && node --check server/auth.js && node --check server/db.js && node --check server/migrate.js && node --check server/seed.js && node --check server/approvals.js && node --check server/ledger.js && node --check server/policy.js && node --check server/routes-member.js && node --check server/routes-operator.js && node --check server/services-member.js && node --check server/util.js && node --check server/notifications.js && node --check server/membership-tiers.js && node --check server/integrations/index.js && node --check server/ai/index.js",
+    "test": "node --test tests/demo-smoke.test.mjs tests/membership-tiers.test.mjs tests/rcc-history.test.mjs",
+    "test:api": "node --test tests/api/*.test.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
   }
 }

@@ -1,35 +1,71 @@
-# American Vanguard Credit Union — Member Banking Demo
+# American Vantoris Credit Union (AVCU) — Banking Prototype
 
-A responsive, interactive **front-end demonstration** of a fictional credit-union member experience. This repository is intentionally self-contained: HTML, CSS, and browser JavaScript only.
+AVCU is a software prototype with a responsive browser demo and a separate Express/PostgreSQL API. It is **not a real or chartered credit union**.
 
-> **Demo-only notice:** American Vanguard Credit Union is represented here as a product concept, not a real or chartered credit union. The prototype is not insured, does not hold deposits, and cannot move real money. Jordan Hale, all account balances, transactions, rates, branch details, and the debit card are fictional sample data.
+> **Demo-only financial notice:** No deposits are held, no real money moves, and no deposit insurance or banking license is represented. Demo balances, members, cards, rates, and transactions are fictional. Do not enter real financial or identity information.
 
-## Preview features
+## What is in this repository
 
-- Member overview with four demo shares: Share Draft, Primary Share, Money Market, and Holiday Club.
-- Local share-to-share transfers and simulated bill payments from Share Draft.
-- Simulated check deposits into a selected demo share.
-- Debit-card freeze/unfreeze and a test purchase that declines while frozen.
-- Illustrative share rates, fictional branch cards, recent activity, and a resettable demo ledger.
-- Responsive desktop/mobile navigation, accessible form labels and focus states, and a visible demo disclosure.
-- Local browser persistence only. No sign-in, API, bank connection, payment rail, or external font dependency.
+- Responsive member-facing demo interface with simulated shares, transfers, bill payments, deposits, card freeze/unfreeze, activity, and a clear demo disclosure.
+- Separate authenticated API-connected member portal at `/member-portal.html` for registration, sign-in, accounts, transactions, transfers, deposits, sandbox card controls, membership tier, and notifications.
+- Separate role-checked operator console at `/operator-portal.html` for approval queue, membership tiers and audited overrides, and email delivery history.
+- Express API for member registration/login, unique 10-digit numeric member IDs (separate from email), sessions, account and transaction endpoints, operator workflows, server-enforced roles, approval separation of duties, ledger entries, audit events, idempotency, and sandbox integrations.
+- PostgreSQL migrations and seed data for API development.
+- Activity-based membership tiers: New Member, Active Member, Established Member, Priority Service, and Review Required; tier changes are recorded in history and manual overrides are audited.
+- Gmail API notification adapter for membership and transaction status events, with delivery history. Gmail delivery is skipped until OAuth environment variables are configured.
+- Automated syntax, demo smoke, and PostgreSQL-backed API tests in GitHub Actions.
 
-## Run locally
+**Important integration boundary:** The original demo at `/` still uses local browser storage and simulated data. The API-connected member and operator portals are separate pages that use the authenticated API. This remains a development prototype, not a production-ready banking system.
 
-No install or build step is required for the app itself. Serve the repository root with any static HTTP server, or open `index.html` directly in a modern browser.
+## Requirements and local setup
 
-For code checks, use Node.js 20 or newer:
+- Node.js 22+
+- PostgreSQL 16+ (or a compatible PostgreSQL release)
+
+Install and configure the database:
 
 ```sh
+npm ci
+export DATABASE_URL="postgres://avcu:avcu@127.0.0.1:5432/avcu"
+npm run migrate
+npm run seed
 npm run check
+npm test
+npm run test:api
+npm start
 ```
 
-The check validates JavaScript syntax and runs the repository's built-in smoke tests.
+The API and static demo are served from the same process. The default database URL is for local development only; use your own local database credentials. Seeded demo credentials are development-only and must never be reused in production.
 
-## Data and privacy
+## Gmail notifications
 
-The demo stores its sample ledger in this browser's `localStorage` under `avcu.member-demo.v1`. Data is not synchronized between devices. Resetting the demo restores the original sample data in this browser. Avoid entering real personal or financial information.
+The server sends email using the Gmail API with OAuth refresh-token authorization. It does **not** use or store a Gmail account password. Configure these values as deployment secrets/environment variables:
 
-## Not production banking software
+- `AVCU_GMAIL_CLIENT_ID`
+- `AVCU_GMAIL_CLIENT_SECRET`
+- `AVCU_GMAIL_REFRESH_TOKEN`
+- `AVCU_GMAIL_FROM` — for this project, `esslerlazaroski@gmail.com`, provided that this address belongs to the Google account authorized by the refresh token or is a verified Gmail sending alias.
 
-This preview has no authentication, backend, ledger authority, fraud monitoring, compliance controls, deposit insurance, or payment integrations. It must not be used to accept deposits, process payments, issue cards, or represent real financial products. Any future production build requires a separate, security-reviewed architecture and appropriately authorized financial-institution relationships.
+Create OAuth credentials in Google Cloud, enable the Gmail API, authorize the account through Google's consent flow, and grant only the Gmail send scope needed by the app. Never commit OAuth secrets, refresh tokens, passwords, or verification codes. If configuration is absent, delivery is recorded as `skipped`; provider errors are recorded as `failed`, not falsely marked as sent.
+
+Operator endpoints (authenticated and role-checked):
+
+- `GET /api/operator/membership-tiers` — list and filter tier assignments.
+- `PUT /api/operator/members/:id/tier` — audited manual tier override; requires a reason.
+- `DELETE /api/operator/members/:id/tier/override` — clear override and recalculate.
+- `GET /api/operator/members/:id/tier/history` — tier history.
+- `GET /api/operator/email-deliveries` — delivery status history.
+
+Member endpoint: `GET /api/membership-tier`.
+
+## Testing
+
+`npm run check` validates the JavaScript syntax for the frontend and API.
+`npm test` runs the browser-demo smoke tests and pure membership-tier policy tests.
+`npm run test:api` runs API integration tests against PostgreSQL and creates temporary test databases; the configured test database user must have permission to create and drop databases.
+
+## Security and production boundary
+
+Members receive a unique 10-digit numeric member ID at registration. They can sign in with that ID or their email address; neither is a substitute for the password. Google sign-in is not configured in this prototype.
+
+The API uses password hashing, expiring server-side sessions, role checks, audit events, approval workflows, integer cents, and a PostgreSQL ledger. These controls are useful development foundations, not a production security certification. Before any real use, the system still needs an independent security review, threat modeling, end-to-end frontend/API integration, operational monitoring, backups, privacy/legal review, fraud/AML controls as applicable, authorized banking/payment partners, and required licenses and regulatory approvals. No production deployment is included by this implementation branch.
